@@ -75,11 +75,36 @@ func main() {
 
 func startHTTPServer() {
 	http.HandleFunc("/", handleRoot)
+	http.HandleFunc("/guild/", handleTranscript)
 	logger.Info("Starting HTTP server", "port", Port)
 	err := http.ListenAndServe(":"+Port, nil)
 	if err != nil {
 		logger.Error("HTTP server error", "error", err.Error())
 	}
+}
+
+func handleTranscript(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(r.URL.Path, "/")
+	if len(parts) != 6 || parts[1] != "guild" || parts[3] != "channel" || parts[5] != "transcript.txt" {
+		http.Error(w, "Invalid URL", http.StatusBadRequest)
+		return
+	}
+
+	guildID := parts[2]
+	channelID := parts[4]
+
+	transcriptsMu.RLock()
+	defer transcriptsMu.RUnlock()
+
+	channelKey := fmt.Sprintf("%s-%s", guildID, channelID)
+	transcript, exists := transcripts[channelKey]
+	if !exists {
+		http.Error(w, "Transcript not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.Write([]byte(strings.Join(transcript, "\n")))
 }
 
 func handleRoot(w http.ResponseWriter, r *http.Request) {
