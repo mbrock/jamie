@@ -169,8 +169,12 @@ func (c MyCallback) Message(mr *api.MessageResponse) error {
 		c.sb.WriteString(" ")
 
 		if mr.SpeechFinal {
-			transcript := c.sb.String()
+			transcript := strings.TrimSpace(c.sb.String())
 			logger.Info("Transcript", "text", transcript)
+			_, err := c.s.ChannelMessageSend(c.channelID, transcript)
+			if err != nil {
+				logger.Error("Failed to send message to Discord", "error", err.Error())
+			}
 			c.sb.Reset()
 		}
 	}
@@ -191,15 +195,6 @@ func (c MyCallback) SpeechStarted(ssr *api.SpeechStartedResponse) error {
 }
 
 func (c MyCallback) UtteranceEnd(ur *api.UtteranceEndResponse) error {
-	utterance := strings.TrimSpace(c.sb.String())
-	if len(utterance) > 0 {
-		logger.Info("Utterance End", "text", utterance)
-		_, err := c.s.ChannelMessageSend(c.channelID, utterance)
-		if err != nil {
-			logger.Error("Failed to send message to Discord", "error", err.Error())
-		}
-		c.sb.Reset()
-	}
 	return nil
 }
 
