@@ -169,11 +169,11 @@ func (c MyCallback) Message(mr *api.MessageResponse) error {
 		c.sb.WriteString(" ")
 
 		if mr.SpeechFinal {
-			logger.Info("[Final Transcript]", "text", c.sb.String())
+			logger.Info("final transcript", "text", c.sb.String())
 			c.sb.Reset()
 		}
 	} else {
-		logger.Info("[Interim Transcript]", "text", sentence)
+		logger.Info("interim transcript", "text", sentence)
 	}
 
 	return nil
