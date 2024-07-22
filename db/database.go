@@ -64,9 +64,12 @@ func GetNewTranscripts(guildID, channelID string, lastTimestamp time.Time) ([]st
 }
 
 func GetLastTimestamp(guildID, channelID string) (time.Time, error) {
-	var lastTimestamp time.Time
-	err := db.QueryRow("SELECT COALESCE(MAX(timestamp), '1970-01-01') FROM transcripts WHERE guild_id = ? AND channel_id = ?", guildID, channelID).Scan(&lastTimestamp)
-	return lastTimestamp, err
+	var lastTimestampStr string
+	err := db.QueryRow("SELECT COALESCE(MAX(timestamp), '1970-01-01') FROM transcripts WHERE guild_id = ? AND channel_id = ?", guildID, channelID).Scan(&lastTimestampStr)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return time.Parse("2006-01-02 15:04:05.999999999-07:00", lastTimestampStr)
 }
 
 func Close() {
