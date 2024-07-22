@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"html/template"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/bwmarrin/discordgo"
@@ -20,6 +23,8 @@ var (
 	Token         string
 	logger        *log.Logger
 	DeepgramToken string
+	transcripts   = make(map[string][]string)
+	transcriptsMu sync.RWMutex
 )
 
 func init() {
@@ -51,12 +56,55 @@ func main() {
 		logger.Fatal("Error opening connection", "error", err.Error())
 	}
 
+	// Start HTTP server
+	go startHTTPServer()
+
 	logger.Info("Bot is now running. Press CTRL-C to exit.")
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
 
 	dg.Close()
+}
+
+func startHTTPServer() {
+	http.HandleFunc("/", handleRoot)
+	logger.Info("Starting HTTP server on :8080")
+	err := http.ListenAndServe(":8080", nil)
+	if err != nil {
+		logger.Error("HTTP server error", "error", err.Error())
+	}
+}
+
+func handleRoot(w http.ResponseWriter, r *http.Request) {
+	transcriptsMu.RLock()
+	defer transcriptsMu.RUnlock()
+
+	tmpl := template.Must(template.New("root").Parse(`
+		<!DOCTYPE html>
+		<html>
+		<head>
+			<title>Voice Channel Transcripts</title>
+		</head>
+		<body>
+			<h1>Voice Channel Transcripts</h1>
+			{{range $channel, $msgs := .}}
+				<h2>{{$channel}}</h2>
+				<ul>
+				{{range $msg := $msgs}}
+					<li>{{$msg}}</li>
+				{{end}}
+				</ul>
+			{{end}}
+		</body>
+		</html>
+	`))
+
+	err := tmpl.Execute(w, transcripts)
+	if err != nil {
+		logger.Error("Template execution error", "error", err.Error())
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
 }
 
 func startDeepgramStream(s *discordgo.Session, v *discordgo.VoiceConnection, guildID, channelID string) {
@@ -85,6 +133,7 @@ func startDeepgramStream(s *discordgo.Session, v *discordgo.VoiceConnection, gui
 		sb:        &strings.Builder{},
 		s:         s,
 		channelID: channelID,
+		guildID:   guildID,
 	}
 
 	dgClient, err := client.NewWebSocket(ctx, DeepgramToken, cOptions, tOptions, callback)
@@ -157,6 +206,7 @@ type MyCallback struct {
 	sb        *strings.Builder
 	s         *discordgo.Session
 	channelID string
+	guildID   string
 }
 
 func (c MyCallback) Message(mr *api.MessageResponse) error {
@@ -177,6 +227,13 @@ func (c MyCallback) Message(mr *api.MessageResponse) error {
 			if err != nil {
 				logger.Error("Failed to send message to Discord", "error", err.Error())
 			}
+
+			// Store the transcript
+			transcriptsMu.Lock()
+			channelKey := fmt.Sprintf("%s-%s", c.guildID, c.channelID)
+			transcripts[channelKey] = append(transcripts[channelKey], transcript)
+			transcriptsMu.Unlock()
+
 			c.sb.Reset()
 		}
 	}
