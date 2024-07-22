@@ -29,7 +29,7 @@ type channelInfo struct {
 type model struct {
 	channels     []channelInfo
 	activeTab    int
-	transcripts  map[string]list.Model
+	transcripts  map[string]*list.Model
 	textarea     textarea.Model
 	err          error
 	quitting     bool
@@ -100,7 +100,7 @@ func initialModel() model {
 	return model{
 		channels:    []channelInfo{},
 		activeTab:   0,
-		transcripts: make(map[string]list.Model),
+		transcripts: make(map[string]*list.Model),
 		textarea:    ta,
 	}
 }
@@ -191,7 +191,8 @@ func joinAllVoiceChannels(s *discordgo.Session, guildID string, m *model) error 
 			} else {
 				logger.Info("Joined voice channel", "channel", channel.Name)
 				m.channels = append(m.channels, channelInfo{ID: channel.ID, Name: channel.Name})
-				m.transcripts[channel.ID] = list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
+				newList := list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
+				m.transcripts[channel.ID] = &newList
 				go startDeepgramStream(vc, guildID, channel.ID, m)
 			}
 
@@ -313,7 +314,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.channelMutex.Lock()
 		activeList := m.transcripts[m.channels[m.activeTab].ID]
 		updatedList, cmd := activeList.Update(msg)
-		m.transcripts[m.channels[m.activeTab].ID] = updatedList
+		*m.transcripts[m.channels[m.activeTab].ID] = *updatedList
 		m.channelMutex.Unlock()
 		cmds = append(cmds, cmd)
 	}
