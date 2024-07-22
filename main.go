@@ -77,6 +77,8 @@ func startDeepgramStream(s *discordgo.Session, v *discordgo.VoiceConnection, gui
 		SmartFormat:    true,
 		InterimResults: true,
 		UtteranceEndMs: "1000",
+		VadEvents:      true,
+		Diarize:        true,
 	}
 
 	callback := MyCallback{
@@ -183,30 +185,36 @@ func (c MyCallback) Message(mr *api.MessageResponse) error {
 }
 
 func (c MyCallback) Open(ocr *api.OpenResponse) error {
+	logger.Info("Deepgram connection opened")
 	return nil
 }
 
 func (c MyCallback) Metadata(md *api.MetadataResponse) error {
+	logger.Info("Received metadata", "metadata", md)
 	return nil
 }
 
 func (c MyCallback) SpeechStarted(ssr *api.SpeechStartedResponse) error {
+	logger.Info("Speech started", "timestamp", ssr.Timestamp)
 	return nil
 }
 
 func (c MyCallback) UtteranceEnd(ur *api.UtteranceEndResponse) error {
+	logger.Info("Utterance ended", "timestamp", ur.LastWordEnd)
 	return nil
 }
 
 func (c MyCallback) Close(ocr *api.CloseResponse) error {
+	logger.Info("Deepgram connection closed", "reason", ocr.Type)
 	return nil
 }
 
 func (c MyCallback) Error(er *api.ErrorResponse) error {
-	logger.Error("Deepgram error", "description", er.Description)
+	logger.Error("Deepgram error", "type", er.Type, "description", er.Description)
 	return nil
 }
 
 func (c MyCallback) UnhandledEvent(byData []byte) error {
+	logger.Warn("Unhandled Deepgram event", "data", string(byData))
 	return nil
 }
