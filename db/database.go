@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"log"
+	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -33,18 +34,18 @@ func InitDB() {
 }
 
 func SaveTranscript(guildID, channelID, transcript string) error {
-	stmt, err := db.Prepare("INSERT INTO transcripts(guild_id, channel_id, transcript) VALUES(?, ?, ?)")
+	stmt, err := db.Prepare("INSERT INTO transcripts(guild_id, channel_id, transcript, timestamp) VALUES(?, ?, ?, ?)")
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(guildID, channelID, transcript)
+	_, err = stmt.Exec(guildID, channelID, transcript, time.Now())
 	return err
 }
 
-func GetTranscripts(guildID, channelID string) ([]string, error) {
-	rows, err := db.Query("SELECT transcript FROM transcripts WHERE guild_id = ? AND channel_id = ? ORDER BY timestamp DESC LIMIT 100", guildID, channelID)
+func GetNewTranscripts(guildID, channelID string, lastTimestamp time.Time) ([]string, error) {
+	rows, err := db.Query("SELECT transcript FROM transcripts WHERE guild_id = ? AND channel_id = ? AND timestamp > ? ORDER BY timestamp", guildID, channelID, lastTimestamp)
 	if err != nil {
 		return nil, err
 	}
@@ -60,6 +61,12 @@ func GetTranscripts(guildID, channelID string) ([]string, error) {
 	}
 
 	return transcripts, nil
+}
+
+func GetLastTimestamp(guildID, channelID string) (time.Time, error) {
+	var lastTimestamp time.Time
+	err := db.QueryRow("SELECT COALESCE(MAX(timestamp), '1970-01-01') FROM transcripts WHERE guild_id = ? AND channel_id = ?", guildID, channelID).Scan(&lastTimestamp)
+	return lastTimestamp, err
 }
 
 func Close() {
