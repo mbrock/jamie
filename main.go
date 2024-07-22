@@ -54,6 +54,8 @@ func main() {
 	db.InitDB()
 	defer db.Close()
 
+	go startHTTPServer()
+
 	dg, err := discordgo.New("Bot " + DiscordToken)
 	if err != nil {
 		logger.Fatal("Error creating Discord session", "error", err.Error())
@@ -65,9 +67,6 @@ func main() {
 	if err != nil {
 		logger.Fatal("Error opening connection", "error", err.Error())
 	}
-
-	// Start HTTP server
-	go startHTTPServer()
 
 	logger.Info("Bot is now running. Press CTRL-C to exit.")
 	sc := make(chan os.Signal, 1)
@@ -257,6 +256,8 @@ func startDeepgramStream(s *discordgo.Session, v *discordgo.VoiceConnection, gui
 		if err != nil {
 			logger.Error("Failed to save Opus packet to database", "error", err.Error())
 		}
+
+		logger.Info("opus", "seq", opus.Sequence, "len", pcmDuration)
 	}
 
 	dgClient.Stop()
