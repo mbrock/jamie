@@ -15,8 +15,11 @@ var (
 	logger             *log.Logger
 	transcriptChannels sync.Map
 	discordToken       string
-	ssrcToUserID       sync.Map
 )
+
+type VoiceState struct {
+	ssrcToUserID sync.Map
+}
 
 func SetLogger(l *log.Logger) {
 	logger = l
@@ -76,13 +79,18 @@ func joinAllVoiceChannels(s *discordgo.Session, guildID, deepgramToken string) e
 	return nil
 }
 
-func voiceStateUpdate(s *discordgo.VoiceConnection, v *discordgo.VoiceSpeakingUpdate) {
+func voiceStateUpdate(state *VoiceState, s *discordgo.VoiceConnection, v *discordgo.VoiceSpeakingUpdate) {
 	logger.Info("Voice state update", "userID", v.UserID, "speaking", v.Speaking, "SSRC", v.SSRC)
-	ssrcToUserID.Store(v.SSRC, v.UserID)
+	state.ssrcToUserID.Store(v.SSRC, v.UserID)
 }
 
 func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID, deepgramToken string) {
 	logger.Info("Starting Deepgram stream", "guild", guildID, "channel", channelID)
+
+	state := &VoiceState{}
+	v.AddHandler(func(vc *discordgo.VoiceConnection, vs *discordgo.VoiceSpeakingUpdate) {
+		voiceStateUpdate(state, vc, vs)
+	})
 
 	dgClient, err := deepgram.NewDeepgramClient(deepgramToken, guildID, channelID, handleTranscript)
 	if err != nil {
@@ -95,10 +103,6 @@ func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID, deepg
 		logger.Error("Failed to connect to Deepgram")
 		return
 	}
-
-	// // Start receiving audio
-	// v.Speaking(true)
-	// defer v.Speaking(false)
 
 	for {
 		opus, ok := <-v.OpusRecv
@@ -160,8 +164,8 @@ func GetTranscriptChannel(guildID, channelID string) chan string {
 	return ch.(chan string)
 }
 
-func GetUserIDFromSSRC(ssrc uint32) (string, bool) {
-	userID, ok := ssrcToUserID.Load(ssrc)
+func (state *VoiceState) GetUserIDFromSSRC(ssrc uint32) (string, bool) {
+	userID, ok := state.ssrcToUserID.Load(ssrc)
 	if !ok {
 		return "", false
 	}
