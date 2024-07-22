@@ -140,12 +140,13 @@ func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID, deepg
 		}
 
 		// Get the stream ID for this SSRC
-		streamIDInterface, exists := state.ssrcToStreamID.Load(opus.SSRC)
+		streamInterface, exists := state.ssrcToStream.Load(opus.SSRC)
 		if !exists {
-			logger.Error("Failed to find stream ID for SSRC", "SSRC", opus.SSRC)
+			logger.Error("Failed to find stream for SSRC", "SSRC", opus.SSRC)
 			continue
 		}
-		streamID := streamIDInterface.(string)
+		stream := streamInterface.(VoiceStream)
+		streamID := stream.StreamID
 
 		// Save the Discord voice packet to the database
 		err = db.SaveDiscordVoicePacket(streamID, opus.Opus, opus.Sequence)
