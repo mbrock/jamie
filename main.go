@@ -169,11 +169,11 @@ func (c MyCallback) Message(mr *api.MessageResponse) error {
 		c.sb.WriteString(" ")
 
 		if mr.SpeechFinal {
-			fmt.Printf("[------- Is Final]: %s\n", c.sb.String())
+			logger.Info("[Final Transcript]", "text", c.sb.String())
 			c.sb.Reset()
 		}
 	} else {
-		fmt.Printf("[Interm Result]: %s\n", sentence)
+		logger.Info("[Interim Transcript]", "text", sentence)
 	}
 
 	return nil
@@ -202,10 +202,10 @@ func (c MyCallback) SpeechStarted(ssr *api.SpeechStartedResponse) error {
 func (c MyCallback) UtteranceEnd(ur *api.UtteranceEndResponse) error {
 	utterance := strings.TrimSpace(c.sb.String())
 	if len(utterance) > 0 {
-		fmt.Printf("[------- UtteranceEnd]: %s\n", utterance)
+		logger.Info("[Utterance End]", "text", utterance)
 		c.sb.Reset()
 	} else {
-		fmt.Printf("\n[UtteranceEnd] Received\n")
+		logger.Info("[Utterance End] Received")
 	}
 
 	return nil
