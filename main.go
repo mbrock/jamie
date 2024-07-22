@@ -70,36 +70,75 @@ func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 	if strings.HasPrefix(m.Content, "!join") {
 		channelName := strings.TrimSpace(strings.TrimPrefix(m.Content, "!join"))
-		voiceChannel, err := findVoiceChannel(s, m.GuildID, channelName)
-		if err != nil {
-			logger.Error("Error finding voice channel", "error", err)
-			s.ChannelMessageSend(m.ChannelID, "Error: "+err.Error())
-			return
-		}
-
-		_, err = s.ChannelVoiceJoin(m.GuildID, voiceChannel.ID, false, false)
+		err := joinVoiceChannel(s, m.GuildID, m.ChannelID, channelName)
 		if err != nil {
 			logger.Error("Error joining voice channel", "error", err)
-			s.ChannelMessageSend(m.ChannelID, "Failed to join voice channel.")
-			return
+			s.ChannelMessageSend(m.ChannelID, "Error: "+err.Error())
 		}
-
-		logger.Info("Joined voice channel", "channel", voiceChannel.Name)
-		s.ChannelMessageSend(m.ChannelID, "Joined voice channel: "+voiceChannel.Name)
+	} else if m.Content == "!listvoice" {
+		err := listVoiceChannels(s, m.GuildID, m.ChannelID)
+		if err != nil {
+			logger.Error("Error listing voice channels", "error", err)
+			s.ChannelMessageSend(m.ChannelID, "Error: "+err.Error())
+		}
+	} else if m.Content == "!invite" {
+		sendInviteLink(s, m.ChannelID)
 	}
 }
 
-func findVoiceChannel(s *discordgo.Session, guildID, channelName string) (*discordgo.Channel, error) {
+func joinVoiceChannel(s *discordgo.Session, guildID, textChannelID, channelName string) error {
 	channels, err := s.GuildChannels(guildID)
 	if err != nil {
-		return nil, fmt.Errorf("error getting guild channels: %w", err)
+		return fmt.Errorf("error getting guild channels: %w", err)
 	}
 
+	var voiceChannel *discordgo.Channel
 	for _, channel := range channels {
 		if channel.Type == discordgo.ChannelTypeGuildVoice && strings.EqualFold(channel.Name, channelName) {
-			return channel, nil
+			voiceChannel = channel
+			break
 		}
 	}
 
-	return nil, fmt.Errorf("voice channel '%s' not found", channelName)
+	if voiceChannel == nil {
+		return fmt.Errorf("voice channel '%s' not found", channelName)
+	}
+
+	_, err = s.ChannelVoiceJoin(guildID, voiceChannel.ID, false, false)
+	if err != nil {
+		return fmt.Errorf("failed to join voice channel: %w", err)
+	}
+
+	logger.Info("Joined voice channel", "channel", voiceChannel.Name)
+	s.ChannelMessageSend(textChannelID, "Joined voice channel: "+voiceChannel.Name)
+	return nil
+}
+
+func listVoiceChannels(s *discordgo.Session, guildID, textChannelID string) error {
+	channels, err := s.GuildChannels(guildID)
+	if err != nil {
+		return fmt.Errorf("error getting guild channels: %w", err)
+	}
+
+	var voiceChannels []string
+	for _, channel := range channels {
+		if channel.Type == discordgo.ChannelTypeGuildVoice {
+			voiceChannels = append(voiceChannels, channel.Name)
+		}
+	}
+
+	if len(voiceChannels) == 0 {
+		s.ChannelMessageSend(textChannelID, "No voice channels found in this server.")
+		return nil
+	}
+
+	message := "Available voice channels:\n" + strings.Join(voiceChannels, "\n")
+	s.ChannelMessageSend(textChannelID, message)
+	return nil
+}
+
+func sendInviteLink(s *discordgo.Session, channelID string) {
+	inviteLink := fmt.Sprintf("https://discord.com/api/oauth2/authorize?client_id=%s&permissions=3145728&scope=bot", s.State.User.ID)
+	message := fmt.Sprintf("To invite me to your server, use this link:\n%s", inviteLink)
+	s.ChannelMessageSend(channelID, message)
 }
