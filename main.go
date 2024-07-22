@@ -222,7 +222,8 @@ func joinAllVoiceChannels(s *discordgo.Session, guildID string) error {
 			if err != nil {
 				logger.Error("Failed to join voice channel", "channel", channel.Name, "error", err.Error())
 			} else {
-				logger.Info("Joined voice channel", "channel", channel.Name)
+				transcriptURL := fmt.Sprintf("http://localhost:%s/guild/%s/channel/%s/transcript.txt", Port, guildID, channel.ID)
+				logger.Info("Joined voice channel", "channel", channel.Name, "transcriptURL", transcriptURL)
 				go startDeepgramStream(s, vc, guildID, channel.ID)
 			}
 
