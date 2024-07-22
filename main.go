@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"sync"
 	"syscall"
 
 	"github.com/bwmarrin/discordgo"
@@ -313,10 +312,8 @@ func (m *model) View() string {
 
 	var content string
 	if len(m.channels) > 0 {
-		m.channelMutex.Lock()
 		activeList := m.transcripts[m.channels[m.activeTab].ID]
 		content = activeList.View()
-		m.channelMutex.Unlock()
 	} else {
 		content = "No channels available"
 	}
