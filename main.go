@@ -18,7 +18,7 @@ import (
 	interfaces "github.com/deepgram/deepgram-go-sdk/pkg/client/interfaces"
 	client "github.com/deepgram/deepgram-go-sdk/pkg/client/listen"
 
-	"discord-bot/database"
+	"jamie/db"
 )
 
 var (
@@ -50,8 +50,8 @@ func init() {
 }
 
 func main() {
-	database.InitDB()
-	defer database.Close()
+	db.InitDB()
+	defer db.Close()
 
 	dg, err := discordgo.New("Bot " + Token)
 	if err != nil {
@@ -105,7 +105,7 @@ func handleTranscript(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for {
-		transcripts, err := database.GetTranscripts(guildID, channelID)
+		transcripts, err := db.GetTranscripts(guildID, channelID)
 		if err != nil {
 			logger.Error("Failed to get transcripts", "error", err.Error())
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -122,7 +122,6 @@ func handleTranscript(w http.ResponseWriter, r *http.Request) {
 			return
 		default:
 			time.Sleep(1 * time.Second)
-			lastTimestamp = time.Now()
 		}
 	}
 }
@@ -271,7 +270,7 @@ func (c MyCallback) Message(mr *api.MessageResponse) error {
 			}
 
 			// Store the transcript in the database
-			err = database.SaveTranscript(c.guildID, c.channelID, transcript)
+			err = db.SaveTranscript(c.guildID, c.channelID, transcript)
 			if err != nil {
 				logger.Error("Failed to save transcript to database", "error", err.Error())
 			}
