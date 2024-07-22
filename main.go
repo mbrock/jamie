@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"strings"
-	"sync"
 	"syscall"
 	"time"
 
@@ -25,8 +24,6 @@ var (
 	logger        *log.Logger
 	DeepgramToken string
 	Port          string
-	transcripts   = make(map[string][]string)
-	transcriptsMu sync.RWMutex
 )
 
 func init() {
@@ -51,6 +48,9 @@ func init() {
 }
 
 func main() {
+	initDB()
+	defer db.Close()
+
 	dg, err := discordgo.New("Bot " + Token)
 	if err != nil {
 		logger.Fatal("Error creating Discord session", "error", err.Error())
@@ -93,7 +93,6 @@ func handleTranscript(w http.ResponseWriter, r *http.Request) {
 
 	guildID := parts[2]
 	channelID := parts[4]
-	channelKey := fmt.Sprintf("%s-%s", guildID, channelID)
 
 	w.Header().Set("Content-Type", "text/plain")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -103,38 +102,31 @@ func handleTranscript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	lastIndex := 0
+	lastTimestamp := time.Now()
 	for {
-		transcriptsMu.RLock()
-		transcript, exists := transcripts[channelKey]
-		if !exists {
-			transcriptsMu.RUnlock()
-			http.Error(w, "Transcript not found", http.StatusNotFound)
+		transcripts, err := getTranscripts(guildID, channelID)
+		if err != nil {
+			logger.Error("Failed to get transcripts", "error", err.Error())
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
 
-		if lastIndex < len(transcript) {
-			for _, line := range transcript[lastIndex:] {
-				fmt.Fprintln(w, line)
-			}
-			lastIndex = len(transcript)
-			flusher.Flush()
+		for _, transcript := range transcripts {
+			fmt.Fprintln(w, transcript)
 		}
-		transcriptsMu.RUnlock()
+		flusher.Flush()
 
 		select {
 		case <-r.Context().Done():
 			return
 		default:
 			time.Sleep(1 * time.Second)
+			lastTimestamp = time.Now()
 		}
 	}
 }
 
 func handleRoot(w http.ResponseWriter, r *http.Request) {
-	transcriptsMu.RLock()
-	defer transcriptsMu.RUnlock()
-
 	tmpl := template.Must(template.New("root").Parse(`
 		<!DOCTYPE html>
 		<html>
@@ -143,19 +135,12 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 		</head>
 		<body>
 			<h1>Voice Channel Transcripts</h1>
-			{{range $channel, $msgs := .}}
-				<h2>{{$channel}}</h2>
-				<ul>
-				{{range $msg := $msgs}}
-					<li>{{$msg}}</li>
-				{{end}}
-				</ul>
-			{{end}}
+			<p>Access transcripts at: /guild/{guild_id}/channel/{channel_id}/transcript.txt</p>
 		</body>
 		</html>
 	`))
 
-	err := tmpl.Execute(w, transcripts)
+	err := tmpl.Execute(w, nil)
 	if err != nil {
 		logger.Error("Template execution error", "error", err.Error())
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -284,11 +269,11 @@ func (c MyCallback) Message(mr *api.MessageResponse) error {
 				logger.Error("Failed to send message to Discord", "error", err.Error())
 			}
 
-			// Store the transcript
-			transcriptsMu.Lock()
-			channelKey := fmt.Sprintf("%s-%s", c.guildID, c.channelID)
-			transcripts[channelKey] = append(transcripts[channelKey], transcript)
-			transcriptsMu.Unlock()
+			// Store the transcript in the database
+			err = saveTranscript(c.guildID, c.channelID, transcript)
+			if err != nil {
+				logger.Error("Failed to save transcript to database", "error", err.Error())
+			}
 
 			c.sb.Reset()
 		}

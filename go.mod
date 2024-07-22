@@ -6,6 +6,7 @@ require (
 	github.com/bwmarrin/discordgo v0.28.1
 	github.com/charmbracelet/log v0.4.0
 	github.com/deepgram/deepgram-go-sdk v1.4.0
+	github.com/mattn/go-sqlite3 v1.14.17
 )
 
 require (
