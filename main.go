@@ -19,6 +19,7 @@ import (
 	client "github.com/deepgram/deepgram-go-sdk/pkg/client/listen"
 
 	"jamie/db"
+	"unsafe"
 )
 
 var (
