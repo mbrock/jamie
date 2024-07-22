@@ -1,4 +1,4 @@
-package main
+package database
 
 import (
 	"database/sql"
@@ -9,7 +9,7 @@ import (
 
 var db *sql.DB
 
-func initDB() {
+func InitDB() {
 	var err error
 	db, err = sql.Open("sqlite3", "./transcripts.db")
 	if err != nil {
@@ -32,7 +32,7 @@ func initDB() {
 	}
 }
 
-func saveTranscript(guildID, channelID, transcript string) error {
+func SaveTranscript(guildID, channelID, transcript string) error {
 	stmt, err := db.Prepare("INSERT INTO transcripts(guild_id, channel_id, transcript) VALUES(?, ?, ?)")
 	if err != nil {
 		return err
@@ -43,7 +43,7 @@ func saveTranscript(guildID, channelID, transcript string) error {
 	return err
 }
 
-func getTranscripts(guildID, channelID string) ([]string, error) {
+func GetTranscripts(guildID, channelID string) ([]string, error) {
 	rows, err := db.Query("SELECT transcript FROM transcripts WHERE guild_id = ? AND channel_id = ? ORDER BY timestamp DESC LIMIT 100", guildID, channelID)
 	if err != nil {
 		return nil, err
@@ -60,4 +60,10 @@ func getTranscripts(guildID, channelID string) ([]string, error) {
 	}
 
 	return transcripts, nil
+}
+
+func Close() {
+	if db != nil {
+		db.Close()
+	}
 }
