@@ -97,7 +97,7 @@ func voiceStateUpdate(state *VoiceState, _ *discordgo.VoiceConnection, v *discor
 			logger.Error("Failed to create voice stream", "error", err.Error())
 		} else {
 			logger.Info("Created new voice stream", "streamID", streamID, "userID", v.UserID, "SSRC", v.SSRC)
-			state.ssrcToStream.Store(v.SSRC, VoiceStream{
+			state.ssrcToStream.Store(uint32(v.SSRC), VoiceStream{
 				UserID:   v.UserID,
 				StreamID: streamID,
 			})
@@ -181,11 +181,6 @@ func handleTranscript(guildID, channelID, transcript string) {
 	if ch, ok := transcriptChannels.Load(key); ok {
 		ch.(chan string) <- transcript
 	}
-}
-
-func calculatePCMDuration(pcm []int16) float64 {
-	sampleRate := 48000 // Discord uses 48kHz sample rate
-	return float64(len(pcm)) / float64(sampleRate)
 }
 
 func GetTranscriptChannel(guildID, channelID string) chan string {
