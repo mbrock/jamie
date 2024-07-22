@@ -104,6 +104,20 @@ func handleTranscript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get all previous transcripts
+	allTranscripts, err := db.GetAllTranscripts(guildID, channelID)
+	if err != nil {
+		logger.Error("Failed to get all transcripts", "error", err.Error())
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	// Send all previous transcripts
+	for _, transcript := range allTranscripts {
+		fmt.Fprintln(w, transcript)
+	}
+	flusher.Flush()
+
 	lastTimestamp, err := db.GetLastTimestamp(guildID, channelID)
 	if err != nil {
 		logger.Error("Failed to get last timestamp", "error", err.Error())
@@ -111,6 +125,7 @@ func handleTranscript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Start streaming new transcripts
 	for {
 		transcripts, err := db.GetNewTranscripts(guildID, channelID, lastTimestamp)
 		if err != nil {

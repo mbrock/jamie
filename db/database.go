@@ -77,3 +77,21 @@ func Close() {
 		db.Close()
 	}
 }
+func GetAllTranscripts(guildID, channelID string) ([]string, error) {
+	rows, err := db.Query("SELECT transcript FROM transcripts WHERE guild_id = ? AND channel_id = ? ORDER BY timestamp", guildID, channelID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var transcripts []string
+	for rows.Next() {
+		var transcript string
+		if err := rows.Scan(&transcript); err != nil {
+			return nil, err
+		}
+		transcripts = append(transcripts, transcript)
+	}
+
+	return transcripts, nil
+}
