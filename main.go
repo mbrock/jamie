@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
@@ -92,19 +93,42 @@ func handleTranscript(w http.ResponseWriter, r *http.Request) {
 
 	guildID := parts[2]
 	channelID := parts[4]
-
-	transcriptsMu.RLock()
-	defer transcriptsMu.RUnlock()
-
 	channelKey := fmt.Sprintf("%s-%s", guildID, channelID)
-	transcript, exists := transcripts[channelKey]
-	if !exists {
-		http.Error(w, "Transcript not found", http.StatusNotFound)
+
+	w.Header().Set("Content-Type", "text/plain")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
 		return
 	}
 
-	w.Header().Set("Content-Type", "text/plain")
-	w.Write([]byte(strings.Join(transcript, "\n")))
+	lastIndex := 0
+	for {
+		transcriptsMu.RLock()
+		transcript, exists := transcripts[channelKey]
+		if !exists {
+			transcriptsMu.RUnlock()
+			http.Error(w, "Transcript not found", http.StatusNotFound)
+			return
+		}
+
+		if lastIndex < len(transcript) {
+			for _, line := range transcript[lastIndex:] {
+				fmt.Fprintln(w, line)
+			}
+			lastIndex = len(transcript)
+			flusher.Flush()
+		}
+		transcriptsMu.RUnlock()
+
+		select {
+		case <-r.Context().Done():
+			return
+		default:
+			time.Sleep(1 * time.Second)
+		}
+	}
 }
 
 func handleRoot(w http.ResponseWriter, r *http.Request) {
