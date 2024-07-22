@@ -6,6 +6,7 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
+	"github.com/google/uuid"
 
 	"jamie/db"
 	"jamie/deepgram"
@@ -19,6 +20,8 @@ var (
 
 type VoiceState struct {
 	ssrcToUserID sync.Map
+	guildID      string
+	channelID    string
 }
 
 func SetLogger(l *log.Logger) {
@@ -80,13 +83,28 @@ func joinAllVoiceChannels(s *discordgo.Session, guildID, deepgramToken string) e
 
 func voiceStateUpdate(state *VoiceState, _ *discordgo.VoiceConnection, v *discordgo.VoiceSpeakingUpdate) {
 	logger.Info("Voice state update", "userID", v.UserID, "speaking", v.Speaking, "SSRC", v.SSRC)
+	
+	_, exists := state.ssrcToUserID.Load(v.SSRC)
+	if !exists {
+		streamID := uuid.New().String()
+		err := db.CreateVoiceStream(state.guildID, state.channelID, streamID, v.UserID, v.SSRC)
+		if err != nil {
+			logger.Error("Failed to create voice stream", "error", err.Error())
+		} else {
+			logger.Info("Created new voice stream", "streamID", streamID, "userID", v.UserID, "SSRC", v.SSRC)
+		}
+	}
+	
 	state.ssrcToUserID.Store(v.SSRC, v.UserID)
 }
 
 func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID, deepgramToken string) {
 	logger.Info("Starting Deepgram stream", "guild", guildID, "channel", channelID)
 
-	state := &VoiceState{}
+	state := &VoiceState{
+		guildID:   guildID,
+		channelID: channelID,
+	}
 	v.AddHandler(func(vc *discordgo.VoiceConnection, vs *discordgo.VoiceSpeakingUpdate) {
 		voiceStateUpdate(state, vc, vs)
 	})

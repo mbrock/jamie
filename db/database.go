@@ -39,6 +39,18 @@ func InitDB() {
 	);
 	`
 
+	createVoiceStreamTable := `
+	CREATE TABLE IF NOT EXISTS discord_voice_stream (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		guild_id TEXT,
+		channel_id TEXT,
+		stream_id TEXT UNIQUE,
+		ssrc INTEGER,
+		user_id TEXT,
+		first_timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+	`
+
 	_, err = db.Exec(createTranscriptsTable)
 	if err != nil {
 		log.Fatal(err)
@@ -48,6 +60,31 @@ func InitDB() {
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	_, err = db.Exec(createVoiceStreamTable)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func CreateVoiceStream(guildID, channelID, streamID, userID string, ssrc uint32) error {
+	stmt, err := db.Prepare("INSERT INTO discord_voice_stream(guild_id, channel_id, stream_id, ssrc, user_id) VALUES(?, ?, ?, ?, ?)")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(guildID, channelID, streamID, ssrc, userID)
+	return err
+}
+
+func GetVoiceStream(ssrc uint32) (string, error) {
+	var streamID string
+	err := db.QueryRow("SELECT stream_id FROM discord_voice_stream WHERE ssrc = ?", ssrc).Scan(&streamID)
+	if err != nil {
+		return "", err
+	}
+	return streamID, nil
 }
 
 func SaveOpusPacket(guildID, channelID string, packet []byte, sequence uint16, duration float64) error {
