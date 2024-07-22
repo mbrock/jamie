@@ -154,9 +154,10 @@ func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID, deepg
 			logger.Error("Failed to save Discord voice packet to database", "error", err.Error())
 		}
 
-		// Print timestamps in seconds
+		// Print timestamps in seconds and user ID
 		timestampSeconds := float64(opus.Timestamp) / 48000.0
-		logger.Info("opus", "seq", opus.Sequence, "t", timestampSeconds)
+		userID, _ := state.GetUserIDFromSSRC(opus.SSRC)
+		logger.Info("opus", "seq", opus.Sequence, "t", timestampSeconds, "userID", userID)
 	}
 
 	dgClient.Stop()
