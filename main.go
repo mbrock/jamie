@@ -2,10 +2,13 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
@@ -105,14 +108,56 @@ func joinVoiceChannel(s *discordgo.Session, guildID, textChannelID, channelName 
 		return fmt.Errorf("voice channel '%s' not found", channelName)
 	}
 
-	_, err = s.ChannelVoiceJoin(guildID, voiceChannel.ID, false, false)
+	vc, err := s.ChannelVoiceJoin(guildID, voiceChannel.ID, false, false)
 	if err != nil {
 		return fmt.Errorf("failed to join voice channel: %w", err)
 	}
 
 	logger.Info("Joined voice channel", "channel", voiceChannel.Name)
 	s.ChannelMessageSend(textChannelID, "Joined voice channel: "+voiceChannel.Name)
+
+	go startRecording(vc, guildID, voiceChannel.ID)
+
 	return nil
+}
+
+func startRecording(v *discordgo.VoiceConnection, guildID, channelID string) {
+	logger.Info("Starting recording", "guild", guildID, "channel", channelID)
+
+	// Create directory structure
+	dirPath := filepath.Join("voice", guildID, channelID)
+	err := os.MkdirAll(dirPath, 0755)
+	if err != nil {
+		logger.Error("Failed to create directory", "error", err)
+		return
+	}
+
+	// Create file with timestamp
+	timestamp := time.Now().Format("20060102-150405")
+	filePath := filepath.Join(dirPath, timestamp+".opus")
+	file, err := os.Create(filePath)
+	if err != nil {
+		logger.Error("Failed to create file", "error", err)
+		return
+	}
+	defer file.Close()
+
+	// Start receiving audio
+	v.Speaking(true)
+	defer v.Speaking(false)
+
+	for {
+		opus, ok := <-v.OpusRecv
+		if !ok {
+			logger.Info("Voice channel closed")
+			return
+		}
+		_, err = file.Write(opus)
+		if err != nil {
+			logger.Error("Failed to write to file", "error", err)
+			return
+		}
+	}
 }
 
 func listVoiceChannels(s *discordgo.Session, guildID, textChannelID string) error {
@@ -164,14 +209,15 @@ func joinAllVoiceChannels(s *discordgo.Session, guildID string) error {
 
 	for _, channel := range channels {
 		if channel.Type == discordgo.ChannelTypeGuildVoice {
-			voice, err := s.ChannelVoiceJoin(guildID, channel.ID, false, false)
+			vc, err := s.ChannelVoiceJoin(guildID, channel.ID, false, false)
 			if err != nil {
 				logger.Error("Failed to join voice channel", "channel", channel.Name, "error", err)
 			} else {
 				logger.Info("Joined voice channel", "channel", channel.Name)
+				go startRecording(vc, guildID, channel.ID)
 			}
 
-			voice.AddHandler(voiceStateUpdate)
+			vc.AddHandler(voiceStateUpdate)
 		}
 	}
 
