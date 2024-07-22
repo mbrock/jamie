@@ -251,8 +251,11 @@ func startDeepgramStream(s *discordgo.Session, v *discordgo.VoiceConnection, gui
 			logger.Error("Failed to send audio to Deepgram", "error", err.Error())
 		}
 		
+		// Calculate packet duration
+		pcmDuration := calculatePCMDuration(opus.PCM)
+
 		// Save the Opus packet to the database
-		err = db.SaveOpusPacket(guildID, channelID, opus.Opus, opus.Sequence)
+		err = db.SaveOpusPacket(guildID, channelID, opus.Opus, opus.Sequence, pcmDuration)
 		if err != nil {
 			logger.Error("Failed to save Opus packet to database", "error", err.Error())
 		}
@@ -375,4 +378,14 @@ func (c MyCallback) Error(er *api.ErrorResponse) error {
 func (c MyCallback) UnhandledEvent(byData []byte) error {
 	logger.Warn("Unhandled Deepgram event", "data", string(byData))
 	return nil
+}
+
+func calculatePCMDuration(pcm []int16) float64 {
+	sampleRate := 48000 // Discord uses 48kHz sample rate
+	return float64(len(pcm)) / float64(sampleRate)
+}
+
+// Helper function to convert []int16 to []byte
+func int16ToBytes(pcm []int16) []byte {
+	return (*[1 << 31]byte)(unsafe.Pointer(&pcm[0]))[:len(pcm)*2:len(pcm)*2]
 }
