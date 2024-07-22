@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/bwmarrin/discordgo"
@@ -35,6 +36,7 @@ func main() {
 	}
 
 	dg.AddHandler(messageCreate)
+	dg.AddHandler(commandHandler)
 
 	err = dg.Open()
 	if err != nil {
@@ -59,4 +61,45 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		"author", m.Author.Username,
 		"channel", m.ChannelID,
 	)
+}
+
+func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
+	if m.Author.ID == s.State.User.ID {
+		return
+	}
+
+	if strings.HasPrefix(m.Content, "!join") {
+		channelName := strings.TrimSpace(strings.TrimPrefix(m.Content, "!join"))
+		voiceChannel, err := findVoiceChannel(s, m.GuildID, channelName)
+		if err != nil {
+			logger.Error("Error finding voice channel", "error", err)
+			s.ChannelMessageSend(m.ChannelID, "Error: "+err.Error())
+			return
+		}
+
+		_, err = s.ChannelVoiceJoin(m.GuildID, voiceChannel.ID, false, false)
+		if err != nil {
+			logger.Error("Error joining voice channel", "error", err)
+			s.ChannelMessageSend(m.ChannelID, "Failed to join voice channel.")
+			return
+		}
+
+		logger.Info("Joined voice channel", "channel", voiceChannel.Name)
+		s.ChannelMessageSend(m.ChannelID, "Joined voice channel: "+voiceChannel.Name)
+	}
+}
+
+func findVoiceChannel(s *discordgo.Session, guildID, channelName string) (*discordgo.Channel, error) {
+	channels, err := s.GuildChannels(guildID)
+	if err != nil {
+		return nil, fmt.Errorf("error getting guild channels: %w", err)
+	}
+
+	for _, channel := range channels {
+		if channel.Type == discordgo.ChannelTypeGuildVoice && strings.EqualFold(channel.Name, channelName) {
+			return channel, nil
+		}
+	}
+
+	return nil, fmt.Errorf("voice channel '%s' not found", channelName)
 }
