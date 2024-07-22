@@ -19,20 +19,19 @@ import (
 	client "github.com/deepgram/deepgram-go-sdk/pkg/client/listen"
 
 	"jamie/db"
-	"unsafe"
 )
 
 var (
-	Token              string
-	logger             *log.Logger
+	DiscordToken       string
 	DeepgramToken      string
-	Port               string
+	HttpPort           string
+	logger             *log.Logger
 	transcriptChannels sync.Map
 )
 
 func init() {
-	Token = os.Getenv("DISCORD_TOKEN")
-	if Token == "" {
+	DiscordToken = os.Getenv("DISCORD_TOKEN")
+	if DiscordToken == "" {
 		fmt.Println("No Discord token provided. Please set the DISCORD_TOKEN environment variable.")
 		os.Exit(1)
 	}
@@ -43,9 +42,9 @@ func init() {
 		os.Exit(1)
 	}
 
-	Port = os.Getenv("PORT")
-	if Port == "" {
-		Port = "8080" // Default port if not specified
+	HttpPort = os.Getenv("PORT")
+	if HttpPort == "" {
+		HttpPort = "8080" // Default port if not specified
 	}
 
 	logger = log.New(os.Stdout)
@@ -55,7 +54,7 @@ func main() {
 	db.InitDB()
 	defer db.Close()
 
-	dg, err := discordgo.New("Bot " + Token)
+	dg, err := discordgo.New("Bot " + DiscordToken)
 	if err != nil {
 		logger.Fatal("Error creating Discord session", "error", err.Error())
 	}
@@ -79,26 +78,24 @@ func main() {
 }
 
 func startHTTPServer() {
-	http.HandleFunc("/", handleRoot)
-	http.HandleFunc("/guild/", handleGuildRequest)
-	logger.Info("Starting HTTP server", "port", Port)
-	err := http.ListenAndServe(":"+Port, nil)
+	mux := http.NewServeMux()
+
+	mux.HandleFunc("GET /", handleRoot)
+	mux.HandleFunc("GET /guild/{guildID}/channel/{channelID}/{format}", handleGuildRequest)
+
+	logger.Info("Starting HTTP server", "port", HttpPort)
+	err := http.ListenAndServe(":"+HttpPort, mux)
 	if err != nil {
 		logger.Error("HTTP server error", "error", err.Error())
 	}
 }
 
 func handleGuildRequest(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(r.URL.Path, "/")
-	if len(parts) != 6 || parts[1] != "guild" || parts[3] != "channel" {
-		http.Error(w, "Invalid URL", http.StatusBadRequest)
-		return
-	}
+	guildID := r.PathValue("guildID")
+	channelID := r.PathValue("channelID")
+	format := r.PathValue("format")
 
-	guildID := parts[2]
-	channelID := parts[4]
-
-	switch parts[5] {
+	switch format {
 	case "transcript.txt":
 		handleTranscript(w, r, guildID, channelID)
 	case "transcript.html":
@@ -251,7 +248,7 @@ func startDeepgramStream(s *discordgo.Session, v *discordgo.VoiceConnection, gui
 		if err != nil {
 			logger.Error("Failed to send audio to Deepgram", "error", err.Error())
 		}
-		
+
 		// Calculate packet duration
 		pcmDuration := calculatePCMDuration(opus.PCM)
 
@@ -289,7 +286,7 @@ func joinAllVoiceChannels(s *discordgo.Session, guildID string) error {
 			if err != nil {
 				logger.Error("Failed to join voice channel", "channel", channel.Name, "error", err.Error())
 			} else {
-				transcriptURL := fmt.Sprintf("http://localhost:%s/guild/%s/channel/%s/transcript.txt", Port, guildID, channel.ID)
+				transcriptURL := fmt.Sprintf("http://localhost:%s/guild/%s/channel/%s/transcript.txt", HttpPort, guildID, channel.ID)
 				logger.Info("Joined voice channel", "channel", channel.Name, "transcriptURL", transcriptURL)
 				go startDeepgramStream(s, vc, guildID, channel.ID)
 			}
@@ -384,9 +381,4 @@ func (c MyCallback) UnhandledEvent(byData []byte) error {
 func calculatePCMDuration(pcm []int16) float64 {
 	sampleRate := 48000 // Discord uses 48kHz sample rate
 	return float64(len(pcm)) / float64(sampleRate)
-}
-
-// Helper function to convert []int16 to []byte
-func int16ToBytes(pcm []int16) []byte {
-	return (*[1 << 31]byte)(unsafe.Pointer(&pcm[0]))[:len(pcm)*2:len(pcm)*2]
 }
