@@ -7,8 +7,8 @@ import (
 
 	"github.com/charmbracelet/log"
 	api "github.com/deepgram/deepgram-go-sdk/pkg/api/listen/v1/websocket/interfaces"
-	deepgramInterfaces "github.com/deepgram/deepgram-go-sdk/pkg/client/interfaces"
-	client "github.com/deepgram/deepgram-go-sdk/pkg/client/listen"
+	interfaces "github.com/deepgram/deepgram-go-sdk/pkg/client/interfaces"
+	"github.com/deepgram/deepgram-go-sdk/pkg/client/listen"
 
 	"jamie/db"
 )
@@ -22,10 +22,10 @@ func SetLogger(l *log.Logger) {
 type TranscriptionCallback func(guildID, channelID, transcript string)
 
 type DeepgramClient struct {
-	client   deepgramInterfaces.LiveTranscriptionClient
-	callback TranscriptionCallback
-	sb       strings.Builder
-	guildID  string
+	client    *listen.WebSocketClient
+	callback  TranscriptionCallback
+	sb        strings.Builder
+	guildID   string
 	channelID string
 }
 
@@ -54,7 +54,7 @@ func NewDeepgramClient(token string, guildID, channelID string, callback Transcr
 		channelID: channelID,
 	}
 
-	client, err := client.NewWebSocket(ctx, token, cOptions, tOptions, dgClient)
+	client, err := listen.NewWebSocket(ctx, token, cOptions, tOptions, dgClient)
 	if err != nil {
 		return nil, fmt.Errorf("error creating LiveTranscription connection: %w", err)
 	}
