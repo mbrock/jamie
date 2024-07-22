@@ -23,6 +23,7 @@ var (
 	Token         string
 	logger        *log.Logger
 	DeepgramToken string
+	Port          string
 	transcripts   = make(map[string][]string)
 	transcriptsMu sync.RWMutex
 )
@@ -38,6 +39,11 @@ func init() {
 	if DeepgramToken == "" {
 		fmt.Println("No Deepgram token provided. Please set the DEEPGRAM_API_KEY environment variable.")
 		os.Exit(1)
+	}
+
+	Port = os.Getenv("PORT")
+	if Port == "" {
+		Port = "8080" // Default port if not specified
 	}
 
 	logger = log.New(os.Stdout)
@@ -69,8 +75,8 @@ func main() {
 
 func startHTTPServer() {
 	http.HandleFunc("/", handleRoot)
-	logger.Info("Starting HTTP server on :8080")
-	err := http.ListenAndServe(":8080", nil)
+	logger.Info("Starting HTTP server", "port", Port)
+	err := http.ListenAndServe(":"+Port, nil)
 	if err != nil {
 		logger.Error("HTTP server error", "error", err.Error())
 	}
