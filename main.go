@@ -6,15 +6,35 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/textarea"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
 
 	api "github.com/deepgram/deepgram-go-sdk/pkg/api/listen/v1/websocket/interfaces"
 	interfaces "github.com/deepgram/deepgram-go-sdk/pkg/client/interfaces"
 	client "github.com/deepgram/deepgram-go-sdk/pkg/client/listen"
 )
+
+type channelInfo struct {
+	ID   string
+	Name string
+}
+
+type model struct {
+	channels     []channelInfo
+	activeTab    int
+	transcripts  map[string]list.Model
+	textarea     textarea.Model
+	err          error
+	quitting     bool
+	channelMutex sync.Mutex
+}
 
 var (
 	Token         string
@@ -47,14 +67,24 @@ func main() {
 		logger.Fatal("Error creating Discord session", "error", err.Error())
 	}
 
-	dg.AddHandler(guildCreate)
+	m := initialModel()
+	dg.AddHandler(func(s *discordgo.Session, event *discordgo.GuildCreate) {
+		guildCreate(s, event, &m)
+	})
 
 	err = dg.Open()
 	if err != nil {
 		logger.Fatal("Error opening connection", "error", err.Error())
 	}
 
-	logger.Info("Bot is now running. Press CTRL-C to exit.")
+	p := tea.NewProgram(m, tea.WithAltScreen())
+
+	go func() {
+		if err := p.Start(); err != nil {
+			logger.Fatal("Error running program", "error", err.Error())
+		}
+	}()
+
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
@@ -62,7 +92,20 @@ func main() {
 	dg.Close()
 }
 
-func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID string) {
+func initialModel() model {
+	ta := textarea.New()
+	ta.Placeholder = "Type a message..."
+	ta.Focus()
+
+	return model{
+		channels:    []channelInfo{},
+		activeTab:   0,
+		transcripts: make(map[string]list.Model),
+		textarea:    ta,
+	}
+}
+
+func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID string, m *model) {
 	logger.Info("Starting Deepgram stream", "guild", guildID, "channel", channelID)
 
 	// Initialize Deepgram client
@@ -83,7 +126,9 @@ func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID string
 	}
 
 	callback := MyCallback{
-		sb: &strings.Builder{},
+		sb:        &strings.Builder{},
+		model:     m,
+		channelID: channelID,
 	}
 
 	dgClient, err := client.NewWebSocket(ctx, DeepgramToken, cOptions, tOptions, callback)
@@ -121,19 +166,22 @@ func voiceStateUpdate(s *discordgo.VoiceConnection, v *discordgo.VoiceSpeakingUp
 	logger.Info("Voice state update", "userID", v.UserID, "speaking", v.Speaking)
 }
 
-func guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
+func guildCreate(s *discordgo.Session, event *discordgo.GuildCreate, m *model) {
 	logger.Info("Joined new guild", "guild", event.Guild.Name)
-	err := joinAllVoiceChannels(s, event.Guild.ID)
+	err := joinAllVoiceChannels(s, event.Guild.ID, m)
 	if err != nil {
 		logger.Error("Error joining voice channels", "error", err.Error())
 	}
 }
 
-func joinAllVoiceChannels(s *discordgo.Session, guildID string) error {
+func joinAllVoiceChannels(s *discordgo.Session, guildID string, m *model) error {
 	channels, err := s.GuildChannels(guildID)
 	if err != nil {
 		return fmt.Errorf("error getting guild channels: %w", err)
 	}
+
+	m.channelMutex.Lock()
+	defer m.channelMutex.Unlock()
 
 	for _, channel := range channels {
 		if channel.Type == discordgo.ChannelTypeGuildVoice {
@@ -142,7 +190,9 @@ func joinAllVoiceChannels(s *discordgo.Session, guildID string) error {
 				logger.Error("Failed to join voice channel", "channel", channel.Name, "error", err.Error())
 			} else {
 				logger.Info("Joined voice channel", "channel", channel.Name)
-				go startDeepgramStream(vc, guildID, channel.ID)
+				m.channels = append(m.channels, channelInfo{ID: channel.ID, Name: channel.Name})
+				m.transcripts[channel.ID] = list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
+				go startDeepgramStream(vc, guildID, channel.ID, m)
 			}
 
 			vc.AddHandler(voiceStateUpdate)
@@ -153,11 +203,12 @@ func joinAllVoiceChannels(s *discordgo.Session, guildID string) error {
 }
 
 type MyCallback struct {
-	sb *strings.Builder
+	sb        *strings.Builder
+	model     *model
+	channelID string
 }
 
 func (c MyCallback) Message(mr *api.MessageResponse) error {
-	// handle the message
 	sentence := strings.TrimSpace(mr.Channel.Alternatives[0].Transcript)
 
 	if len(mr.Channel.Alternatives) == 0 || len(sentence) == 0 {
@@ -169,68 +220,135 @@ func (c MyCallback) Message(mr *api.MessageResponse) error {
 		c.sb.WriteString(" ")
 
 		if mr.SpeechFinal {
-			logger.Info("final transcript", "text", c.sb.String())
+			c.model.channelMutex.Lock()
+			transcript := c.sb.String()
+			c.model.transcripts[c.channelID].InsertItem(0, item{title: transcript, description: ""})
+			c.model.channelMutex.Unlock()
 			c.sb.Reset()
 		}
-	} else {
-		logger.Info("interim transcript", "text", sentence)
 	}
 
 	return nil
 }
 
 func (c MyCallback) Open(ocr *api.OpenResponse) error {
-	// handle the open
-	fmt.Printf("\n[Open] Received\n")
 	return nil
 }
 
 func (c MyCallback) Metadata(md *api.MetadataResponse) error {
-	// handle the metadata
-	fmt.Printf("\n[Metadata] Received\n")
-	fmt.Printf("Metadata.RequestID: %s\n", strings.TrimSpace(md.RequestID))
-	fmt.Printf("Metadata.Channels: %d\n", md.Channels)
-	fmt.Printf("Metadata.Created: %s\n\n", strings.TrimSpace(md.Created))
 	return nil
 }
 
 func (c MyCallback) SpeechStarted(ssr *api.SpeechStartedResponse) error {
-	fmt.Printf("\n[SpeechStarted] Received\n")
 	return nil
 }
 
 func (c MyCallback) UtteranceEnd(ur *api.UtteranceEndResponse) error {
 	utterance := strings.TrimSpace(c.sb.String())
 	if len(utterance) > 0 {
-		logger.Info("[Utterance End]", "text", utterance)
+		c.model.channelMutex.Lock()
+		c.model.transcripts[c.channelID].InsertItem(0, item{title: utterance, description: "[Utterance End]"})
+		c.model.channelMutex.Unlock()
 		c.sb.Reset()
-	} else {
-		logger.Info("[Utterance End] Received")
 	}
-
 	return nil
 }
 
 func (c MyCallback) Close(ocr *api.CloseResponse) error {
-	// handle the close
-	fmt.Printf("\n[Close] Received\n")
 	return nil
 }
 
 func (c MyCallback) Error(er *api.ErrorResponse) error {
-	// handle the error
-	fmt.Printf("\n[Error] Received\n")
-	fmt.Printf("Error.Type: %s\n", er.Type)
-	fmt.Printf("Error.ErrCode: %s\n", er.ErrCode)
-	fmt.Printf("Error.Description: %s\n\n", er.Description)
+	c.model.channelMutex.Lock()
+	c.model.transcripts[c.channelID].InsertItem(0, item{title: "Error", description: er.Description})
+	c.model.channelMutex.Unlock()
 	return nil
 }
 
 func (c MyCallback) UnhandledEvent(byData []byte) error {
-	// handle the unhandled event
-	fmt.Printf("\n[UnhandledEvent] Received\n")
-	fmt.Printf("UnhandledEvent: %s\n\n", string(byData))
 	return nil
 }
 
-// Remove the foo() function as it's no longer needed
+type item struct {
+	title, description string
+}
+
+func (i item) Title() string       { return i.title }
+func (i item) Description() string { return i.description }
+func (i item) FilterValue() string { return i.title }
+
+func (m model) Init() tea.Cmd {
+	return nil
+}
+
+func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+	var cmds []tea.Cmd
+
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q":
+			m.quitting = true
+			return m, tea.Quit
+		case "tab":
+			m.activeTab = (m.activeTab + 1) % len(m.channels)
+		case "shift+tab":
+			m.activeTab = (m.activeTab - 1 + len(m.channels)) % len(m.channels)
+		}
+
+	case tea.WindowSizeMsg:
+		h, v := lipgloss.NewStyle().Margin(1, 2).GetFrameSize()
+		m.textarea.SetWidth(msg.Width - h)
+		m.textarea.SetHeight(3)
+		for _, list := range m.transcripts {
+			list.SetSize(msg.Width-h, msg.Height-v-m.textarea.Height()-4)
+		}
+	}
+
+	m.textarea, cmd = m.textarea.Update(msg)
+	cmds = append(cmds, cmd)
+
+	if len(m.channels) > 0 {
+		m.channelMutex.Lock()
+		activeList := m.transcripts[m.channels[m.activeTab].ID]
+		updatedList, cmd := activeList.Update(msg)
+		m.transcripts[m.channels[m.activeTab].ID] = updatedList
+		m.channelMutex.Unlock()
+		cmds = append(cmds, cmd)
+	}
+
+	return m, tea.Batch(cmds...)
+}
+
+func (m model) View() string {
+	if m.quitting {
+		return "Goodbye!\n"
+	}
+
+	var content string
+	if len(m.channels) > 0 {
+		m.channelMutex.Lock()
+		activeList := m.transcripts[m.channels[m.activeTab].ID]
+		content = activeList.View()
+		m.channelMutex.Unlock()
+	} else {
+		content = "No channels available"
+	}
+
+	tabs := ""
+	for i, channel := range m.channels {
+		style := lipgloss.NewStyle().Padding(0, 1)
+		if i == m.activeTab {
+			style = style.Background(lipgloss.Color("205")).Foreground(lipgloss.Color("0"))
+		}
+		tabs += style.Render(channel.Name) + " "
+	}
+
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
+		tabs,
+		content,
+		m.textarea.View(),
+	)
+}
