@@ -83,18 +83,18 @@ func joinAllVoiceChannels(s *discordgo.Session, guildID, deepgramToken string) e
 
 func voiceStateUpdate(state *VoiceState, _ *discordgo.VoiceConnection, v *discordgo.VoiceSpeakingUpdate) {
 	logger.Info("Voice state update", "userID", v.UserID, "speaking", v.Speaking, "SSRC", v.SSRC)
-	
+
 	_, exists := state.ssrcToUserID.Load(v.SSRC)
 	if !exists {
 		streamID := uuid.New().String()
-		err := db.CreateVoiceStream(state.guildID, state.channelID, streamID, v.UserID, v.SSRC)
+		err := db.CreateVoiceStream(state.guildID, state.channelID, streamID, v.UserID, uint32(v.SSRC))
 		if err != nil {
 			logger.Error("Failed to create voice stream", "error", err.Error())
 		} else {
 			logger.Info("Created new voice stream", "streamID", streamID, "userID", v.UserID, "SSRC", v.SSRC)
 		}
 	}
-	
+
 	state.ssrcToUserID.Store(v.SSRC, v.UserID)
 }
 
