@@ -15,6 +15,7 @@ var (
 	logger             *log.Logger
 	transcriptChannels sync.Map
 	discordToken       string
+	ssrcToUserID       sync.Map
 )
 
 func SetLogger(l *log.Logger) {
@@ -76,7 +77,8 @@ func joinAllVoiceChannels(s *discordgo.Session, guildID, deepgramToken string) e
 }
 
 func voiceStateUpdate(s *discordgo.VoiceConnection, v *discordgo.VoiceSpeakingUpdate) {
-	logger.Info("Voice state update", "userID", v.UserID, "speaking", v.Speaking)
+	logger.Info("Voice state update", "userID", v.UserID, "speaking", v.Speaking, "SSRC", v.SSRC)
+	ssrcToUserID.Store(v.SSRC, v.UserID)
 }
 
 func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID, deepgramToken string) {
@@ -156,4 +158,12 @@ func GetTranscriptChannel(guildID, channelID string) chan string {
 	key := fmt.Sprintf("%s:%s", guildID, channelID)
 	ch, _ := transcriptChannels.LoadOrStore(key, make(chan string))
 	return ch.(chan string)
+}
+
+func GetUserIDFromSSRC(ssrc uint32) (string, bool) {
+	userID, ok := ssrcToUserID.Load(ssrc)
+	if !ok {
+		return "", false
+	}
+	return userID.(string), true
 }
