@@ -44,7 +44,7 @@ func init() {
 func main() {
 	dg, err := discordgo.New("Bot " + Token)
 	if err != nil {
-		logger.Fatal("Error creating Discord session", "error", err)
+		logger.Fatal("Error creating Discord session", log.String("error", err.Error()))
 	}
 
 	dg.AddHandler(messageCreate)
@@ -53,7 +53,7 @@ func main() {
 
 	err = dg.Open()
 	if err != nil {
-		logger.Fatal("Error opening connection", "error", err)
+		logger.Fatal("Error opening connection", log.String("error", err.Error()))
 	}
 
 	logger.Info("Bot is now running. Press CTRL-C to exit.")
@@ -70,9 +70,9 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	}
 
 	logger.Info("Received message",
-		"content", m.Content,
-		"author", m.Author.Username,
-		"channel", m.ChannelID,
+		log.String("content", m.Content),
+		log.String("author", m.Author.Username),
+		log.String("channel", m.ChannelID),
 	)
 }
 
@@ -85,13 +85,13 @@ func commandHandler(s *discordgo.Session, m *discordgo.MessageCreate) {
 		channelName := strings.TrimSpace(strings.TrimPrefix(m.Content, "!join"))
 		err := joinVoiceChannel(s, m.GuildID, m.ChannelID, channelName)
 		if err != nil {
-			logger.Error("Error joining voice channel", "error", err)
+			logger.Error("Error joining voice channel", log.String("error", err.Error()))
 			s.ChannelMessageSend(m.ChannelID, "Error: "+err.Error())
 		}
 	} else if m.Content == "!listvoice" {
 		err := listVoiceChannels(s, m.GuildID, m.ChannelID)
 		if err != nil {
-			logger.Error("Error listing voice channels", "error", err)
+			logger.Error("Error listing voice channels", log.String("error", err.Error()))
 			s.ChannelMessageSend(m.ChannelID, "Error: "+err.Error())
 		}
 	} else if m.Content == "!invite" {
@@ -122,7 +122,7 @@ func joinVoiceChannel(s *discordgo.Session, guildID, textChannelID, channelName 
 		return fmt.Errorf("failed to join voice channel: %w", err)
 	}
 
-	logger.Info("Joined voice channel", "channel", voiceChannel.Name)
+	logger.Info("Joined voice channel", log.String("channel", voiceChannel.Name))
 	s.ChannelMessageSend(textChannelID, "Joined voice channel: "+voiceChannel.Name)
 
 	go startDeepgramStream(vc, guildID, voiceChannel.ID)
@@ -131,7 +131,7 @@ func joinVoiceChannel(s *discordgo.Session, guildID, textChannelID, channelName 
 }
 
 func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID string) {
-	logger.Info("Starting Deepgram stream", "guild", guildID, "channel", channelID)
+	logger.Info("Starting Deepgram stream", log.String("guild", guildID), log.String("channel", channelID))
 
 	// Initialize Deepgram client
 	ctx := context.Background()
@@ -156,7 +156,7 @@ func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID string
 
 	dgClient, err := client.NewWebSocket(ctx, DeepgramToken, cOptions, tOptions, callback)
 	if err != nil {
-		logger.Error("Error creating LiveTranscription connection", "error", err)
+		logger.Error("Error creating LiveTranscription connection", log.String("error", err.Error()))
 		return
 	}
 
@@ -178,7 +178,7 @@ func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID string
 		}
 		err := dgClient.WriteBinary(opus.Opus)
 		if err != nil {
-			logger.Error("Failed to send audio to Deepgram", "error", err)
+			logger.Error("Failed to send audio to Deepgram", log.String("error", err.Error()))
 		}
 	}
 
@@ -215,14 +215,14 @@ func sendInviteLink(s *discordgo.Session, channelID string) {
 }
 
 func voiceStateUpdate(s *discordgo.VoiceConnection, v *discordgo.VoiceSpeakingUpdate) {
-	logger.Info("Voice state update", "userID", v.UserID, "speaking", v.Speaking)
+	logger.Info("Voice state update", log.String("userID", v.UserID), log.Bool("speaking", v.Speaking))
 }
 
 func guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
-	logger.Info("Joined new guild", "guild", event.Guild.Name)
+	logger.Info("Joined new guild", log.String("guild", event.Guild.Name))
 	err := joinAllVoiceChannels(s, event.Guild.ID)
 	if err != nil {
-		logger.Error("Error joining voice channels", "error", err)
+		logger.Error("Error joining voice channels", log.String("error", err.Error()))
 	}
 }
 
@@ -236,9 +236,9 @@ func joinAllVoiceChannels(s *discordgo.Session, guildID string) error {
 		if channel.Type == discordgo.ChannelTypeGuildVoice {
 			vc, err := s.ChannelVoiceJoin(guildID, channel.ID, false, false)
 			if err != nil {
-				logger.Error("Failed to join voice channel", "channel", channel.Name, "error", err)
+				logger.Error("Failed to join voice channel", log.String("channel", channel.Name), log.String("error", err.Error()))
 			} else {
-				logger.Info("Joined voice channel", "channel", channel.Name)
+				logger.Info("Joined voice channel", log.String("channel", channel.Name))
 				go startDeepgramStream(vc, guildID, channel.ID)
 			}
 
