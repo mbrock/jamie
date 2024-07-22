@@ -27,11 +27,11 @@ type channelInfo struct {
 }
 
 type model struct {
-	channels     []channelInfo
-	activeTab    int
-	transcripts  map[string]*list.Model
-	quitting     bool
-	channelMutex sync.Mutex
+	channels        []channelInfo
+	activeTab       int
+	transcripts     map[string]*list.Model
+	quitting        bool
+	transcriptChans map[string]chan item
 }
 
 var (
@@ -92,13 +92,14 @@ func main() {
 
 func initialModel() model {
 	return model{
-		channels:    []channelInfo{},
-		activeTab:   0,
-		transcripts: make(map[string]*list.Model),
+		channels:        []channelInfo{},
+		activeTab:       0,
+		transcripts:     make(map[string]*list.Model),
+		transcriptChans: make(map[string]chan item),
 	}
 }
 
-func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID string, m *model) {
+func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID string, transcriptChan chan<- item) {
 	logger.Info("Starting Deepgram stream", "guild", guildID, "channel", channelID)
 
 	// Initialize Deepgram client
@@ -119,9 +120,8 @@ func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID string
 	}
 
 	callback := MyCallback{
-		sb:        &strings.Builder{},
-		model:     m,
-		channelID: channelID,
+		sb:             &strings.Builder{},
+		transcriptChan: transcriptChan,
 	}
 
 	dgClient, err := client.NewWebSocket(ctx, DeepgramToken, cOptions, tOptions, callback)
@@ -173,9 +173,6 @@ func joinAllVoiceChannels(s *discordgo.Session, guildID string, m *model) error 
 		return fmt.Errorf("error getting guild channels: %w", err)
 	}
 
-	m.channelMutex.Lock()
-	defer m.channelMutex.Unlock()
-
 	for _, channel := range channels {
 		if channel.Type == discordgo.ChannelTypeGuildVoice {
 			vc, err := s.ChannelVoiceJoin(guildID, channel.ID, false, false)
@@ -186,7 +183,10 @@ func joinAllVoiceChannels(s *discordgo.Session, guildID string, m *model) error 
 				m.channels = append(m.channels, channelInfo{ID: channel.ID, Name: channel.Name})
 				newList := list.New([]list.Item{}, list.NewDefaultDelegate(), 0, 0)
 				m.transcripts[channel.ID] = &newList
-				go startDeepgramStream(vc, guildID, channel.ID, m)
+				transcriptChan := make(chan item, 100)
+				m.transcriptChans[channel.ID] = transcriptChan
+				go startDeepgramStream(vc, guildID, channel.ID, transcriptChan)
+				go updateTranscripts(m, channel.ID, transcriptChan)
 			}
 
 			vc.AddHandler(voiceStateUpdate)
@@ -196,10 +196,15 @@ func joinAllVoiceChannels(s *discordgo.Session, guildID string, m *model) error 
 	return nil
 }
 
+func updateTranscripts(m *model, channelID string, transcriptChan <-chan item) {
+	for newItem := range transcriptChan {
+		m.transcripts[channelID].InsertItem(0, newItem)
+	}
+}
+
 type MyCallback struct {
-	sb        *strings.Builder
-	model     *model
-	channelID string
+	sb             *strings.Builder
+	transcriptChan chan<- item
 }
 
 func (c MyCallback) Message(mr *api.MessageResponse) error {
@@ -214,10 +219,8 @@ func (c MyCallback) Message(mr *api.MessageResponse) error {
 		c.sb.WriteString(" ")
 
 		if mr.SpeechFinal {
-			c.model.channelMutex.Lock()
 			transcript := c.sb.String()
-			c.model.transcripts[c.channelID].InsertItem(0, item{title: transcript, description: ""})
-			c.model.channelMutex.Unlock()
+			c.transcriptChan <- item{title: transcript, description: ""}
 			c.sb.Reset()
 		}
 	}
@@ -240,9 +243,7 @@ func (c MyCallback) SpeechStarted(ssr *api.SpeechStartedResponse) error {
 func (c MyCallback) UtteranceEnd(ur *api.UtteranceEndResponse) error {
 	utterance := strings.TrimSpace(c.sb.String())
 	if len(utterance) > 0 {
-		c.model.channelMutex.Lock()
-		c.model.transcripts[c.channelID].InsertItem(0, item{title: utterance, description: "[Utterance End]"})
-		c.model.channelMutex.Unlock()
+		c.transcriptChan <- item{title: utterance, description: "[Utterance End]"}
 		c.sb.Reset()
 	}
 	return nil
@@ -253,9 +254,7 @@ func (c MyCallback) Close(ocr *api.CloseResponse) error {
 }
 
 func (c MyCallback) Error(er *api.ErrorResponse) error {
-	c.model.channelMutex.Lock()
-	c.model.transcripts[c.channelID].InsertItem(0, item{title: "Error", description: er.Description})
-	c.model.channelMutex.Unlock()
+	c.transcriptChan <- item{title: "Error", description: er.Description}
 	return nil
 }
 
@@ -298,11 +297,9 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	if len(m.channels) > 0 {
-		m.channelMutex.Lock()
 		activeList := m.transcripts[m.channels[m.activeTab].ID]
 		updatedList, cmd := activeList.Update(msg)
 		*m.transcripts[m.channels[m.activeTab].ID] = updatedList
-		m.channelMutex.Unlock()
 		cmds = append(cmds, cmd)
 	}
 
