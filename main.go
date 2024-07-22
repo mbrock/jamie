@@ -12,7 +12,6 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/bubbles/list"
-	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
@@ -31,7 +30,6 @@ type model struct {
 	channels     []channelInfo
 	activeTab    int
 	transcripts  map[string]*list.Model
-	textarea     textarea.Model
 	quitting     bool
 	channelMutex sync.Mutex
 }
@@ -93,15 +91,10 @@ func main() {
 }
 
 func initialModel() model {
-	ta := textarea.New()
-	ta.Placeholder = "Type a message..."
-	ta.Focus()
-
 	return model{
 		channels:    []channelInfo{},
 		activeTab:   0,
 		transcripts: make(map[string]*list.Model),
-		textarea:    ta,
 	}
 }
 
@@ -300,15 +293,10 @@ func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		h, v := lipgloss.NewStyle().Margin(1, 2).GetFrameSize()
-		m.textarea.SetWidth(msg.Width - h)
-		m.textarea.SetHeight(3)
 		for _, list := range m.transcripts {
-			list.SetSize(msg.Width-h, msg.Height-v-m.textarea.Height()-4)
+			list.SetSize(msg.Width-h, msg.Height-v-4)
 		}
 	}
-
-	m.textarea, cmd = m.textarea.Update(msg)
-	cmds = append(cmds, cmd)
 
 	if len(m.channels) > 0 {
 		m.channelMutex.Lock()
@@ -350,6 +338,5 @@ func (m *model) View() string {
 		lipgloss.Left,
 		tabs,
 		content,
-		m.textarea.View(),
 	)
 }
