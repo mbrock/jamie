@@ -108,15 +108,7 @@ func handleGuildRequest(w http.ResponseWriter, r *http.Request) {
 }
 
 func handleTranscriptHTML(w http.ResponseWriter, r *http.Request, guildID, channelID string) {
-
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
-		return
-	}
-
 	fmt.Fprintf(w, `<!DOCTYPE html>
 <html>
 <head>
@@ -130,43 +122,20 @@ func handleTranscriptHTML(w http.ResponseWriter, r *http.Request, guildID, chann
 	<h1>Voice Channel Transcript</h1>
 	<div id="transcripts">
 `)
-	flusher.Flush()
-
-	// Get all previous transcripts
-	allTranscripts, err := db.GetAllTranscripts(guildID, channelID)
-	if err != nil {
-		logger.Error("Failed to get all transcripts", "error", err.Error())
-		fmt.Fprintf(w, "<p>Error: Failed to retrieve transcripts</p>")
-		return
-	}
-
-	// Send all previous transcripts
-	for _, transcript := range allTranscripts {
+	handleTranscriptStream(w, r, guildID, channelID, func(transcript string) {
 		fmt.Fprintf(w, "<p class=\"transcript\">%s</p>\n", template.HTMLEscapeString(transcript))
-		flusher.Flush()
-	}
-
-	// Get or create a channel for this guild and channel
-	key := fmt.Sprintf("%s:%s", guildID, channelID)
-	ch, _ := transcriptChannels.LoadOrStore(key, make(chan string))
-	transcriptChan := ch.(chan string)
-
-	// Start streaming new transcripts
-	for {
-		select {
-		case transcript := <-transcriptChan:
-			fmt.Fprintf(w, "<p class=\"transcript\">%s</p>\n", template.HTMLEscapeString(transcript))
-			flusher.Flush()
-		case <-r.Context().Done():
-			fmt.Fprintf(w, "</div></body></html>")
-			return
-		}
-	}
+	})
+	fmt.Fprintf(w, "</div></body></html>")
 }
 
 func handleTranscript(w http.ResponseWriter, r *http.Request, guildID, channelID string) {
-
 	w.Header().Set("Content-Type", "text/plain")
+	handleTranscriptStream(w, r, guildID, channelID, func(transcript string) {
+		fmt.Fprintln(w, transcript)
+	})
+}
+
+func handleTranscriptStream(w http.ResponseWriter, r *http.Request, guildID, channelID string, writeTranscript func(string)) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -184,7 +153,7 @@ func handleTranscript(w http.ResponseWriter, r *http.Request, guildID, channelID
 
 	// Send all previous transcripts
 	for _, transcript := range allTranscripts {
-		fmt.Fprintln(w, transcript)
+		writeTranscript(transcript)
 	}
 	flusher.Flush()
 
@@ -197,7 +166,7 @@ func handleTranscript(w http.ResponseWriter, r *http.Request, guildID, channelID
 	for {
 		select {
 		case transcript := <-transcriptChan:
-			fmt.Fprintln(w, transcript)
+			writeTranscript(transcript)
 			flusher.Flush()
 		case <-r.Context().Done():
 			return
