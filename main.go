@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -26,6 +27,7 @@ var (
 	logger        *log.Logger
 	DeepgramToken string
 	Port          string
+	transcriptChannels sync.Map
 )
 
 func init() {
@@ -118,39 +120,19 @@ func handleTranscript(w http.ResponseWriter, r *http.Request) {
 	}
 	flusher.Flush()
 
-	lastTimestamp, err := db.GetLastTimestamp(guildID, channelID)
-	if err != nil {
-		logger.Error("Failed to get last timestamp", "error", err.Error())
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
-	}
+	// Get or create a channel for this guild and channel
+	key := fmt.Sprintf("%s:%s", guildID, channelID)
+	ch, _ := transcriptChannels.LoadOrStore(key, make(chan string))
+	transcriptChan := ch.(chan string)
 
 	// Start streaming new transcripts
 	for {
-		transcripts, err := db.GetNewTranscripts(guildID, channelID, lastTimestamp)
-		if err != nil {
-			logger.Error("Failed to get transcripts", "error", err.Error())
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-			return
-		}
-
-		for _, transcript := range transcripts {
-			fmt.Fprintln(w, transcript)
-		}
-		flusher.Flush()
-
-		if len(transcripts) > 0 {
-			lastTimestamp, err = db.GetLastTimestamp(guildID, channelID)
-			if err != nil {
-				logger.Error("Failed to update last timestamp", "error", err.Error())
-			}
-		}
-
 		select {
+		case transcript := <-transcriptChan:
+			fmt.Fprintln(w, transcript)
+			flusher.Flush()
 		case <-r.Context().Done():
 			return
-		default:
-			time.Sleep(1 * time.Second)
 		}
 	}
 }
@@ -302,6 +284,12 @@ func (c MyCallback) Message(mr *api.MessageResponse) error {
 			err = db.SaveTranscript(c.guildID, c.channelID, transcript)
 			if err != nil {
 				logger.Error("Failed to save transcript to database", "error", err.Error())
+			}
+
+			// Send the transcript to the channel
+			key := fmt.Sprintf("%s:%s", c.guildID, c.channelID)
+			if ch, ok := transcriptChannels.Load(key); ok {
+				ch.(chan string) <- transcript
 			}
 
 			c.sb.Reset()
