@@ -27,15 +27,14 @@ func InitDB() {
 	);
 	`
 
-	createOpusPacketsTable := `
-	CREATE TABLE IF NOT EXISTS opus_packets (
+	createDiscordVoicePacketTable := `
+	CREATE TABLE IF NOT EXISTS discord_voice_packet (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
-		guild_id TEXT,
-		channel_id TEXT,
+		stream_id TEXT,
 		packet BLOB,
 		sequence INTEGER,
-		duration REAL,
-		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+		FOREIGN KEY (stream_id) REFERENCES discord_voice_stream(stream_id)
 	);
 	`
 
@@ -56,7 +55,7 @@ func InitDB() {
 		log.Fatal(err)
 	}
 
-	_, err = db.Exec(createOpusPacketsTable)
+	_, err = db.Exec(createDiscordVoicePacketTable)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -87,14 +86,14 @@ func GetVoiceStream(ssrc uint32) (string, error) {
 	return streamID, nil
 }
 
-func SaveOpusPacket(guildID, channelID string, packet []byte, sequence uint16, duration float64) error {
-	stmt, err := db.Prepare("INSERT INTO opus_packets(guild_id, channel_id, packet, sequence, duration, timestamp) VALUES(?, ?, ?, ?, ?, ?)")
+func SaveDiscordVoicePacket(streamID string, packet []byte, sequence uint16) error {
+	stmt, err := db.Prepare("INSERT INTO discord_voice_packet(stream_id, packet, sequence, timestamp) VALUES(?, ?, ?, ?)")
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(guildID, channelID, packet, sequence, duration, time.Now())
+	_, err = stmt.Exec(streamID, packet, sequence, time.Now())
 	return err
 }
 

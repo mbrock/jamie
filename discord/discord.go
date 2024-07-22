@@ -19,9 +19,10 @@ var (
 )
 
 type VoiceState struct {
-	ssrcToUserID sync.Map
-	guildID      string
-	channelID    string
+	ssrcToUserID   sync.Map
+	ssrcToStreamID sync.Map
+	guildID        string
+	channelID      string
 }
 
 func SetLogger(l *log.Logger) {
@@ -84,7 +85,7 @@ func joinAllVoiceChannels(s *discordgo.Session, guildID, deepgramToken string) e
 func voiceStateUpdate(state *VoiceState, _ *discordgo.VoiceConnection, v *discordgo.VoiceSpeakingUpdate) {
 	logger.Info("Voice state update", "userID", v.UserID, "speaking", v.Speaking, "SSRC", v.SSRC)
 
-	_, exists := state.ssrcToUserID.Load(v.SSRC)
+	_, exists := state.ssrcToStreamID.Load(v.SSRC)
 	if !exists {
 		streamID := uuid.New().String()
 		err := db.CreateVoiceStream(state.guildID, state.channelID, streamID, v.UserID, uint32(v.SSRC))
@@ -92,10 +93,10 @@ func voiceStateUpdate(state *VoiceState, _ *discordgo.VoiceConnection, v *discor
 			logger.Error("Failed to create voice stream", "error", err.Error())
 		} else {
 			logger.Info("Created new voice stream", "streamID", streamID, "userID", v.UserID, "SSRC", v.SSRC)
+			state.ssrcToStreamID.Store(v.SSRC, streamID)
+			state.ssrcToUserID.Store(v.SSRC, v.UserID)
 		}
 	}
-
-	state.ssrcToUserID.Store(v.SSRC, v.UserID)
 }
 
 func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID, deepgramToken string) {
@@ -132,13 +133,18 @@ func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID, deepg
 			logger.Error("Failed to send audio to Deepgram", "error", err.Error())
 		}
 
-		// Calculate packet duration
-		pcmDuration := calculatePCMDuration(opus.PCM)
+		// Get the stream ID for this SSRC
+		streamIDInterface, exists := state.ssrcToStreamID.Load(opus.SSRC)
+		if !exists {
+			logger.Error("Failed to find stream ID for SSRC", "SSRC", opus.SSRC)
+			continue
+		}
+		streamID := streamIDInterface.(string)
 
-		// Save the Opus packet to the database
-		err = db.SaveOpusPacket(guildID, channelID, opus.Opus, opus.Sequence, pcmDuration)
+		// Save the Discord voice packet to the database
+		err = db.SaveDiscordVoicePacket(streamID, opus.Opus, opus.Sequence)
 		if err != nil {
-			logger.Error("Failed to save Opus packet to database", "error", err.Error())
+			logger.Error("Failed to save Discord voice packet to database", "error", err.Error())
 		}
 
 		// Print timestamps in seconds
