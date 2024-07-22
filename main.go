@@ -39,6 +39,7 @@ func main() {
 	dg.AddHandler(messageCreate)
 	dg.AddHandler(commandHandler)
 	dg.AddHandler(voiceStateUpdate)
+	dg.AddHandler(guildCreate)
 
 	err = dg.Open()
 	if err != nil {
@@ -198,4 +199,32 @@ func voiceStateUpdate(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
 		"guild", guild.Name,
 		"timestamp", time.Now().Format(time.RFC3339),
 	)
+}
+
+func guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
+	logger.Info("Joined new guild", "guild", event.Guild.Name)
+	err := joinAllVoiceChannels(s, event.Guild.ID)
+	if err != nil {
+		logger.Error("Error joining voice channels", "error", err)
+	}
+}
+
+func joinAllVoiceChannels(s *discordgo.Session, guildID string) error {
+	channels, err := s.GuildChannels(guildID)
+	if err != nil {
+		return fmt.Errorf("error getting guild channels: %w", err)
+	}
+
+	for _, channel := range channels {
+		if channel.Type == discordgo.ChannelTypeGuildVoice {
+			_, err := s.ChannelVoiceJoin(guildID, channel.ID, false, false)
+			if err != nil {
+				logger.Error("Failed to join voice channel", "channel", channel.Name, "error", err)
+			} else {
+				logger.Info("Joined voice channel", "channel", channel.Name)
+			}
+		}
+	}
+
+	return nil
 }
