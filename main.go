@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
@@ -37,6 +38,7 @@ func main() {
 
 	dg.AddHandler(messageCreate)
 	dg.AddHandler(commandHandler)
+	dg.AddHandler(voiceStateUpdate)
 
 	err = dg.Open()
 	if err != nil {
@@ -141,4 +143,59 @@ func sendInviteLink(s *discordgo.Session, channelID string) {
 	inviteLink := fmt.Sprintf("https://discord.com/api/oauth2/authorize?client_id=%s&permissions=3145728&scope=bot", s.State.User.ID)
 	message := fmt.Sprintf("To invite me to your server, use this link:\n%s", inviteLink)
 	s.ChannelMessageSend(channelID, message)
+}
+
+func voiceStateUpdate(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
+	if v.UserID == s.State.User.ID {
+		return // Ignore updates for the bot itself
+	}
+
+	user, err := s.User(v.UserID)
+	if err != nil {
+		logger.Error("Error fetching user", "error", err)
+		return
+	}
+
+	guild, err := s.Guild(v.GuildID)
+	if err != nil {
+		logger.Error("Error fetching guild", "error", err)
+		return
+	}
+
+	var action string
+	var channelName string
+
+	if v.ChannelID != "" {
+		channel, err := s.Channel(v.ChannelID)
+		if err != nil {
+			logger.Error("Error fetching channel", "error", err)
+			return
+		}
+		channelName = channel.Name
+		action = "joined"
+	} else {
+		action = "left"
+	}
+
+	if v.SelfMute {
+		action = "muted themselves in"
+	} else if v.SelfDeaf {
+		action = "deafened themselves in"
+	} else if v.Mute {
+		action = "was muted in"
+	} else if v.Deaf {
+		action = "was deafened in"
+	} else if v.SelfStream {
+		action = "started streaming in"
+	} else if v.SelfVideo {
+		action = "turned on their camera in"
+	}
+
+	logger.Info("Voice state update",
+		"user", user.Username,
+		"action", action,
+		"channel", channelName,
+		"guild", guild.Name,
+		"timestamp", time.Now().Format(time.RFC3339),
+	)
 }
