@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -15,20 +14,26 @@ import (
 	"github.com/charmbracelet/log"
 
 	api "github.com/deepgram/deepgram-go-sdk/pkg/api/listen/v1/websocket/interfaces"
-	"github.com/deepgram/deepgram-go-sdk/pkg/audio/microphone"
 	interfaces "github.com/deepgram/deepgram-go-sdk/pkg/client/interfaces"
 	client "github.com/deepgram/deepgram-go-sdk/pkg/client/listen"
 )
 
 var (
-	Token  string
-	logger *log.Logger
+	Token         string
+	logger        *log.Logger
+	DeepgramToken string
 )
 
 func init() {
 	Token = os.Getenv("DISCORD_TOKEN")
 	if Token == "" {
-		fmt.Println("No token provided. Please set the DISCORD_TOKEN environment variable.")
+		fmt.Println("No Discord token provided. Please set the DISCORD_TOKEN environment variable.")
+		os.Exit(1)
+	}
+
+	DeepgramToken = os.Getenv("DEEPGRAM_TOKEN")
+	if DeepgramToken == "" {
+		fmt.Println("No Deepgram token provided. Please set the DEEPGRAM_TOKEN environment variable.")
 		os.Exit(1)
 	}
 
@@ -122,31 +127,46 @@ func joinVoiceChannel(s *discordgo.Session, guildID, textChannelID, channelName 
 	logger.Info("Joined voice channel", "channel", voiceChannel.Name)
 	s.ChannelMessageSend(textChannelID, "Joined voice channel: "+voiceChannel.Name)
 
-	go startRecording(vc, guildID, voiceChannel.ID)
+	go startDeepgramStream(vc, guildID, voiceChannel.ID)
 
 	return nil
 }
 
-func startRecording(v *discordgo.VoiceConnection, guildID, channelID string) {
-	logger.Info("Starting recording", "guild", guildID, "channel", channelID)
+func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID string) {
+	logger.Info("Starting Deepgram stream", "guild", guildID, "channel", channelID)
 
-	// Create directory structure
-	dirPath := filepath.Join("voice", guildID, channelID)
-	err := os.MkdirAll(dirPath, 0755)
+	// Initialize Deepgram client
+	ctx := context.Background()
+	cOptions := &interfaces.ClientOptions{
+		EnableKeepAlive: true,
+	}
+	tOptions := &interfaces.LiveTranscriptionOptions{
+		Model:           "nova-2",
+		Language:        "en-US",
+		Punctuate:       true,
+		Encoding:        "opus",
+		Channels:        2,
+		SampleRate:      48000,
+		SmartFormat:     true,
+		InterimResults:  true,
+		UtteranceEndMs:  "1000",
+	}
+
+	callback := MyCallback{
+		sb: &strings.Builder{},
+	}
+
+	dgClient, err := client.NewWebSocket(ctx, DeepgramToken, cOptions, tOptions, callback)
 	if err != nil {
-		logger.Error("Failed to create directory", "error", err)
+		logger.Error("Error creating LiveTranscription connection", "error", err)
 		return
 	}
 
-	// Create file with timestamp
-	timestamp := time.Now().Format("20060102-150405")
-	filePath := filepath.Join(dirPath, timestamp+".opus")
-	file, err := os.Create(filePath)
-	if err != nil {
-		logger.Error("Failed to create file", "error", err)
+	bConnected := dgClient.Connect()
+	if !bConnected {
+		logger.Error("Failed to connect to Deepgram")
 		return
 	}
-	defer file.Close()
 
 	// Start receiving audio
 	v.Speaking(true)
@@ -156,14 +176,15 @@ func startRecording(v *discordgo.VoiceConnection, guildID, channelID string) {
 		opus, ok := <-v.OpusRecv
 		if !ok {
 			logger.Info("Voice channel closed")
-			return
+			break
 		}
-		_, err = file.Write(opus.Opus)
+		err := dgClient.SendAudio(opus.Opus)
 		if err != nil {
-			logger.Error("Failed to write to file", "error", err)
-			return
+			logger.Error("Failed to send audio to Deepgram", "error", err)
 		}
 	}
+
+	dgClient.Stop()
 }
 
 func listVoiceChannels(s *discordgo.Session, guildID, textChannelID string) error {
@@ -316,111 +337,4 @@ func (c MyCallback) UnhandledEvent(byData []byte) error {
 	return nil
 }
 
-func foo() {
-	// init library
-	microphone.Initialize()
-
-	// print instructions
-	fmt.Print("\n\nPress ENTER to exit!\n\n")
-
-	/*
-		DG Streaming API
-	*/
-	// init library
-	client.Init(client.InitLib{
-		LogLevel: client.LogLevelDefault, // LogLevelDefault, LogLevelFull, LogLevelDebug, LogLevelTrace
-	})
-
-	// Go context
-	ctx := context.Background()
-
-	// client options
-	cOptions := &interfaces.ClientOptions{
-		EnableKeepAlive: true,
-	}
-
-	// set the Transcription options
-	tOptions := &interfaces.LiveTranscriptionOptions{
-		Model:       "nova-2",
-		Language:    "en-US",
-		Punctuate:   true,
-		Encoding:    "linear16",
-		Channels:    1,
-		SampleRate:  16000,
-		SmartFormat: true,
-		VadEvents:   true,
-		// To get UtteranceEnd, the following must be set:
-		InterimResults: true,
-		UtteranceEndMs: "1000",
-		// End of UtteranceEnd settings
-	}
-
-	// example on how to send a custom parameter
-	// params := make(map[string][]string, 0)
-	// params["dictation"] = []string{"true"}
-	// ctx = interfaces.WithCustomParameters(ctx, params)
-
-	// implement your own callback
-	callback := MyCallback{
-		sb: &strings.Builder{},
-	}
-
-	// create a Deepgram client
-	dgClient, err := client.NewWebSocket(ctx, "", cOptions, tOptions, callback)
-	if err != nil {
-		fmt.Println("ERROR creating LiveTranscription connection:", err)
-		return
-	}
-
-	// connect the websocket to Deepgram
-	bConnected := dgClient.Connect()
-	if !bConnected {
-		fmt.Println("Client.Connect failed")
-		os.Exit(1)
-	}
-
-	/*
-		Microphone package
-	*/
-	// mic stuf
-	mic, err := microphone.New(microphone.AudioConfig{
-		InputChannels: 1,
-		SamplingRate:  16000,
-	})
-	if err != nil {
-		fmt.Printf("Initialize failed. Err: %v\n", err)
-		os.Exit(1)
-	}
-
-	// start the mic
-	err = mic.Start()
-	if err != nil {
-		fmt.Printf("mic.Start failed. Err: %v\n", err)
-		os.Exit(1)
-	}
-
-	go func() {
-		// feed the microphone stream to the Deepgram client (this is a blocking call)
-		mic.Stream(dgClient)
-	}()
-
-	// wait for user input to exit
-	input := bufio.NewScanner(os.Stdin)
-	input.Scan()
-
-	// close mic stream
-	err = mic.Stop()
-	if err != nil {
-		fmt.Printf("mic.Stop failed. Err: %v\n", err)
-		os.Exit(1)
-	}
-
-	// teardown library
-	microphone.Teardown()
-
-	// close DG client
-	dgClient.Stop()
-
-	fmt.Printf("\n\nProgram exiting...\n")
-	// time.Sleep(120 * time.Second)
-}
+// Remove the foo() function as it's no longer needed
