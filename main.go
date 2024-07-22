@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 	"syscall"
-	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
@@ -23,10 +22,10 @@ import (
 )
 
 var (
-	Token         string
-	logger        *log.Logger
-	DeepgramToken string
-	Port          string
+	Token              string
+	logger             *log.Logger
+	DeepgramToken      string
+	Port               string
 	transcriptChannels sync.Map
 )
 
