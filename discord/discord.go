@@ -67,19 +67,18 @@ func joinAllVoiceChannels(s *discordgo.Session, guildID, deepgramToken string) e
 				logger.Error("Failed to join voice channel", "channel", channel.Name, "error", err.Error())
 			} else {
 				logger.Info("Joined voice channel", "channel", channel.Name)
+				channelID := channel.ID
 				go func() {
-					startDeepgramStream(vc, guildID, channel.ID, deepgramToken)
+					startDeepgramStream(vc, guildID, channelID, deepgramToken)
 				}()
 			}
-
-			vc.AddHandler(voiceStateUpdate)
 		}
 	}
 
 	return nil
 }
 
-func voiceStateUpdate(state *VoiceState, s *discordgo.VoiceConnection, v *discordgo.VoiceSpeakingUpdate) {
+func voiceStateUpdate(state *VoiceState, _ *discordgo.VoiceConnection, v *discordgo.VoiceSpeakingUpdate) {
 	logger.Info("Voice state update", "userID", v.UserID, "speaking", v.Speaking, "SSRC", v.SSRC)
 	state.ssrcToUserID.Store(v.SSRC, v.UserID)
 }
