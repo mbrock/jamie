@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"strings"
@@ -54,7 +55,7 @@ func init() {
 		os.Exit(1)
 	}
 
-	logger = log.NewWithOptions(os.Stderr, log.Options{
+	logger = log.NewWithOptions(io.Discard, log.Options{
 		ReportCaller:    true,
 		ReportTimestamp: true,
 	})
