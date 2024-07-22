@@ -59,7 +59,7 @@ func main() {
 	dg.Close()
 }
 
-func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID string) {
+func startDeepgramStream(s *discordgo.Session, v *discordgo.VoiceConnection, guildID, channelID string) {
 	logger.Info("Starting Deepgram stream", "guild", guildID, "channel", channelID)
 
 	// Initialize Deepgram client
@@ -80,7 +80,9 @@ func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID string
 	}
 
 	callback := MyCallback{
-		sb: &strings.Builder{},
+		sb:        &strings.Builder{},
+		s:         s,
+		channelID: channelID,
 	}
 
 	dgClient, err := client.NewWebSocket(ctx, DeepgramToken, cOptions, tOptions, callback)
@@ -139,7 +141,7 @@ func joinAllVoiceChannels(s *discordgo.Session, guildID string) error {
 				logger.Error("Failed to join voice channel", "channel", channel.Name, "error", err.Error())
 			} else {
 				logger.Info("Joined voice channel", "channel", channel.Name)
-				go startDeepgramStream(vc, guildID, channel.ID)
+				go startDeepgramStream(s, vc, guildID, channel.ID)
 			}
 
 			vc.AddHandler(voiceStateUpdate)
@@ -150,7 +152,9 @@ func joinAllVoiceChannels(s *discordgo.Session, guildID string) error {
 }
 
 type MyCallback struct {
-	sb *strings.Builder
+	sb        *strings.Builder
+	s         *discordgo.Session
+	channelID string
 }
 
 func (c MyCallback) Message(mr *api.MessageResponse) error {
@@ -190,6 +194,10 @@ func (c MyCallback) UtteranceEnd(ur *api.UtteranceEndResponse) error {
 	utterance := strings.TrimSpace(c.sb.String())
 	if len(utterance) > 0 {
 		logger.Info("Utterance End", "text", utterance)
+		_, err := c.s.ChannelMessageSend(c.channelID, utterance)
+		if err != nil {
+			logger.Error("Failed to send message to Discord", "error", err.Error())
+		}
 		c.sb.Reset()
 	}
 	return nil
