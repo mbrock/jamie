@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/log"
 	api "github.com/deepgram/deepgram-go-sdk/pkg/api/listen/v1/websocket/interfaces"
-	"github.com/deepgram/deepgram-go-sdk/pkg/client/interfaces"
+	deepgramInterfaces "github.com/deepgram/deepgram-go-sdk/pkg/client/interfaces"
 	client "github.com/deepgram/deepgram-go-sdk/pkg/client/listen"
 
 	"jamie/db"
@@ -22,7 +22,7 @@ func SetLogger(l *log.Logger) {
 type TranscriptionCallback func(guildID, channelID, transcript string)
 
 type DeepgramClient struct {
-	client   interfaces.LiveTranscriptionClient
+	client   deepgramInterfaces.LiveTranscriptionClient
 	callback TranscriptionCallback
 	sb       strings.Builder
 	guildID  string
