@@ -6,14 +6,13 @@ import (
 	"os/signal"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
 )
 
 var (
-	Token string
+	Token  string
 	logger *log.Logger
 )
 
@@ -25,7 +24,7 @@ func init() {
 	}
 
 	logger = log.NewWithOptions(os.Stderr, log.Options{
-		ReportCaller: true,
+		ReportCaller:    true,
 		ReportTimestamp: true,
 	})
 }
@@ -38,7 +37,6 @@ func main() {
 
 	dg.AddHandler(messageCreate)
 	dg.AddHandler(commandHandler)
-	dg.AddHandler(voiceStateUpdate)
 	dg.AddHandler(guildCreate)
 
 	err = dg.Open()
@@ -59,7 +57,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		return
 	}
 
-	logger.Info("Received message", 
+	logger.Info("Received message",
 		"content", m.Content,
 		"author", m.Author.Username,
 		"channel", m.ChannelID,
@@ -146,59 +144,8 @@ func sendInviteLink(s *discordgo.Session, channelID string) {
 	s.ChannelMessageSend(channelID, message)
 }
 
-func voiceStateUpdate(s *discordgo.Session, v *discordgo.VoiceStateUpdate) {
-	if v.UserID == s.State.User.ID {
-		return // Ignore updates for the bot itself
-	}
-
-	user, err := s.User(v.UserID)
-	if err != nil {
-		logger.Error("Error fetching user", "error", err)
-		return
-	}
-
-	guild, err := s.Guild(v.GuildID)
-	if err != nil {
-		logger.Error("Error fetching guild", "error", err)
-		return
-	}
-
-	var action string
-	var channelName string
-
-	if v.ChannelID != "" {
-		channel, err := s.Channel(v.ChannelID)
-		if err != nil {
-			logger.Error("Error fetching channel", "error", err)
-			return
-		}
-		channelName = channel.Name
-		action = "joined"
-	} else {
-		action = "left"
-	}
-
-	if v.SelfMute {
-		action = "muted themselves in"
-	} else if v.SelfDeaf {
-		action = "deafened themselves in"
-	} else if v.Mute {
-		action = "was muted in"
-	} else if v.Deaf {
-		action = "was deafened in"
-	} else if v.SelfStream {
-		action = "started streaming in"
-	} else if v.SelfVideo {
-		action = "turned on their camera in"
-	}
-
-	logger.Info("Voice state update",
-		"user", user.Username,
-		"action", action,
-		"channel", channelName,
-		"guild", guild.Name,
-		"timestamp", time.Now().Format(time.RFC3339),
-	)
+func voiceStateUpdate(s *discordgo.VoiceConnection, v *discordgo.VoiceSpeakingUpdate) {
+	logger.Info("Voice state update", "userID", v.UserID, "speaking", v.Speaking)
 }
 
 func guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
@@ -217,12 +164,14 @@ func joinAllVoiceChannels(s *discordgo.Session, guildID string) error {
 
 	for _, channel := range channels {
 		if channel.Type == discordgo.ChannelTypeGuildVoice {
-			_, err := s.ChannelVoiceJoin(guildID, channel.ID, false, false)
+			voice, err := s.ChannelVoiceJoin(guildID, channel.ID, false, false)
 			if err != nil {
 				logger.Error("Failed to join voice channel", "channel", channel.Name, "error", err)
 			} else {
 				logger.Info("Joined voice channel", "channel", channel.Name)
 			}
+
+			voice.AddHandler(voiceStateUpdate)
 		}
 	}
 
