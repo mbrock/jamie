@@ -79,8 +79,7 @@ func main() {
 
 func startHTTPServer() {
 	http.HandleFunc("/", handleRoot)
-	http.HandleFunc("/guild/", handleTranscript)
-	http.HandleFunc("/guild/", handleTranscriptHTML)
+	http.HandleFunc("/guild/", handleGuildRequest)
 	logger.Info("Starting HTTP server", "port", Port)
 	err := http.ListenAndServe(":"+Port, nil)
 	if err != nil {
@@ -88,15 +87,27 @@ func startHTTPServer() {
 	}
 }
 
-func handleTranscriptHTML(w http.ResponseWriter, r *http.Request) {
+func handleGuildRequest(w http.ResponseWriter, r *http.Request) {
 	parts := strings.Split(r.URL.Path, "/")
-	if len(parts) != 6 || parts[1] != "guild" || parts[3] != "channel" || parts[5] != "transcript.html" {
+	if len(parts) != 6 || parts[1] != "guild" || parts[3] != "channel" {
 		http.Error(w, "Invalid URL", http.StatusBadRequest)
 		return
 	}
 
 	guildID := parts[2]
 	channelID := parts[4]
+
+	switch parts[5] {
+	case "transcript.txt":
+		handleTranscript(w, r, guildID, channelID)
+	case "transcript.html":
+		handleTranscriptHTML(w, r, guildID, channelID)
+	default:
+		http.Error(w, "Invalid URL", http.StatusBadRequest)
+	}
+}
+
+func handleTranscriptHTML(w http.ResponseWriter, r *http.Request, guildID, channelID string) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
@@ -153,15 +164,7 @@ func handleTranscriptHTML(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleTranscript(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(r.URL.Path, "/")
-	if len(parts) != 6 || parts[1] != "guild" || parts[3] != "channel" || parts[5] != "transcript.txt" {
-		http.Error(w, "Invalid URL", http.StatusBadRequest)
-		return
-	}
-
-	guildID := parts[2]
-	channelID := parts[4]
+func handleTranscript(w http.ResponseWriter, r *http.Request, guildID, channelID string) {
 
 	w.Header().Set("Content-Type", "text/plain")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
