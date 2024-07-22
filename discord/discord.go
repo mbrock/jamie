@@ -1,19 +1,14 @@
 package discord
 
 import (
-	"context"
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
 
-	api "github.com/deepgram/deepgram-go-sdk/pkg/api/listen/v1/websocket/interfaces"
-	interfaces "github.com/deepgram/deepgram-go-sdk/pkg/client/interfaces"
-	client "github.com/deepgram/deepgram-go-sdk/pkg/client/listen"
-
 	"jamie/db"
+	"jamie/deepgram"
 )
 
 var (
@@ -23,6 +18,7 @@ var (
 
 func SetLogger(l *log.Logger) {
 	logger = l
+	deepgram.SetLogger(l)
 }
 
 func StartBot(token string, deepgramToken string) (*discordgo.Session, error) {
@@ -80,35 +76,9 @@ func voiceStateUpdate(s *discordgo.VoiceConnection, v *discordgo.VoiceSpeakingUp
 func startDeepgramStream(s *discordgo.Session, v *discordgo.VoiceConnection, guildID, channelID string) {
 	logger.Info("Starting Deepgram stream", "guild", guildID, "channel", channelID)
 
-	// Initialize Deepgram client
-	ctx := context.Background()
-	cOptions := &interfaces.ClientOptions{
-		EnableKeepAlive: true,
-	}
-	tOptions := &interfaces.LiveTranscriptionOptions{
-		Model:          "nova-2",
-		Language:       "en-US",
-		Punctuate:      true,
-		Encoding:       "opus",
-		Channels:       2,
-		SampleRate:     48000,
-		SmartFormat:    true,
-		InterimResults: true,
-		UtteranceEndMs: "1000",
-		VadEvents:      true,
-		Diarize:        true,
-	}
-
-	callback := MyCallback{
-		sb:        &strings.Builder{},
-		s:         s,
-		channelID: channelID,
-		guildID:   guildID,
-	}
-
-	dgClient, err := client.NewWebSocket(ctx, DeepgramToken, cOptions, tOptions, callback)
+	dgClient, err := deepgram.NewDeepgramClient(DeepgramToken, guildID, channelID, handleTranscript)
 	if err != nil {
-		logger.Error("Error creating LiveTranscription connection", "error", err.Error())
+		logger.Error("Error creating Deepgram client", "error", err.Error())
 		return
 	}
 
@@ -148,84 +118,25 @@ func startDeepgramStream(s *discordgo.Session, v *discordgo.VoiceConnection, gui
 	dgClient.Stop()
 }
 
-type MyCallback struct {
-	sb        *strings.Builder
-	s         *discordgo.Session
-	channelID string
-	guildID   string
-}
+func handleTranscript(guildID, channelID, transcript string) {
+	// Send the transcript to Discord
+	s, err := discordgo.New("Bot " + DiscordToken)
+	if err != nil {
+		logger.Error("Failed to create Discord session", "error", err.Error())
+		return
+	}
+	defer s.Close()
 
-func (c MyCallback) Message(mr *api.MessageResponse) error {
-	sentence := strings.TrimSpace(mr.Channel.Alternatives[0].Transcript)
-
-	if len(mr.Channel.Alternatives) == 0 || len(sentence) == 0 {
-		return nil
+	_, err = s.ChannelMessageSend(channelID, transcript)
+	if err != nil {
+		logger.Error("Failed to send message to Discord", "error", err.Error())
 	}
 
-	if mr.IsFinal {
-		c.sb.WriteString(sentence)
-		c.sb.WriteString(" ")
-
-		if mr.SpeechFinal {
-			transcript := strings.TrimSpace(c.sb.String())
-			logger.Info("Transcript", "text", transcript)
-			_, err := c.s.ChannelMessageSend(c.channelID, transcript)
-			if err != nil {
-				logger.Error("Failed to send message to Discord", "error", err.Error())
-			}
-
-			// Store the transcript in the database
-			err = db.SaveTranscript(c.guildID, c.channelID, transcript)
-			if err != nil {
-				logger.Error("Failed to save transcript to database", "error", err.Error())
-			}
-
-			// Send the transcript to the channel
-			key := fmt.Sprintf("%s:%s", c.guildID, c.channelID)
-			if ch, ok := transcriptChannels.Load(key); ok {
-				ch.(chan string) <- transcript
-			}
-
-			c.sb.Reset()
-		}
+	// Send the transcript to the channel
+	key := fmt.Sprintf("%s:%s", guildID, channelID)
+	if ch, ok := transcriptChannels.Load(key); ok {
+		ch.(chan string) <- transcript
 	}
-
-	return nil
-}
-
-func (c MyCallback) Open(ocr *api.OpenResponse) error {
-	logger.Info("Deepgram connection opened")
-	return nil
-}
-
-func (c MyCallback) Metadata(md *api.MetadataResponse) error {
-	logger.Info("Received metadata", "metadata", md)
-	return nil
-}
-
-func (c MyCallback) SpeechStarted(ssr *api.SpeechStartedResponse) error {
-	logger.Info("Speech started", "timestamp", ssr.Timestamp)
-	return nil
-}
-
-func (c MyCallback) UtteranceEnd(ur *api.UtteranceEndResponse) error {
-	logger.Info("Utterance ended", "timestamp", ur.LastWordEnd)
-	return nil
-}
-
-func (c MyCallback) Close(ocr *api.CloseResponse) error {
-	logger.Info("Deepgram connection closed", "reason", ocr.Type)
-	return nil
-}
-
-func (c MyCallback) Error(er *api.ErrorResponse) error {
-	logger.Error("Deepgram error", "type", er.Type, "description", er.Description)
-	return nil
-}
-
-func (c MyCallback) UnhandledEvent(byData []byte) error {
-	logger.Warn("Unhandled Deepgram event", "data", string(byData))
-	return nil
 }
 
 func calculatePCMDuration(pcm []int16) float64 {

@@ -12,6 +12,7 @@ import (
 
 	"jamie/db"
 	"jamie/discord"
+	"jamie/deepgram"
 )
 
 var (
