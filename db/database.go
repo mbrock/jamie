@@ -33,6 +33,7 @@ func InitDB() {
 		guild_id TEXT,
 		channel_id TEXT,
 		packet BLOB,
+		sequence INTEGER,
 		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 	);
 	`
@@ -48,14 +49,14 @@ func InitDB() {
 	}
 }
 
-func SaveOpusPacket(guildID, channelID string, packet []byte) error {
-	stmt, err := db.Prepare("INSERT INTO opus_packets(guild_id, channel_id, packet, timestamp) VALUES(?, ?, ?, ?)")
+func SaveOpusPacket(guildID, channelID string, packet []byte, sequence uint16) error {
+	stmt, err := db.Prepare("INSERT INTO opus_packets(guild_id, channel_id, packet, sequence, timestamp) VALUES(?, ?, ?, ?, ?)")
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(guildID, channelID, packet, time.Now())
+	_, err = stmt.Exec(guildID, channelID, packet, sequence, time.Now())
 	return err
 }
 
