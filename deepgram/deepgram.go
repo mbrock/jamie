@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/log"
 	api "github.com/deepgram/deepgram-go-sdk/pkg/api/listen/v1/websocket/interfaces"
-	interfaces "github.com/deepgram/deepgram-go-sdk/pkg/client/interfaces"
+	"github.com/deepgram/deepgram-go-sdk/pkg/client/interfaces"
 	client "github.com/deepgram/deepgram-go-sdk/pkg/client/listen"
 
 	"jamie/db"
