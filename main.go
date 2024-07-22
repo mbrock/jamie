@@ -31,7 +31,6 @@ type model struct {
 	activeTab    int
 	transcripts  map[string]*list.Model
 	textarea     textarea.Model
-	err          error
 	quitting     bool
 	channelMutex sync.Mutex
 }
@@ -77,10 +76,10 @@ func main() {
 		logger.Fatal("Error opening connection", "error", err.Error())
 	}
 
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(&m, tea.WithAltScreen())
 
 	go func() {
-		if err := p.Start(); err != nil {
+		if _, err := p.Run(); err != nil {
 			logger.Fatal("Error running program", "error", err.Error())
 		}
 	}()
@@ -278,11 +277,11 @@ func (i item) Title() string       { return i.title }
 func (i item) Description() string { return i.description }
 func (i item) FilterValue() string { return i.title }
 
-func (m model) Init() tea.Cmd {
+func (m *model) Init() tea.Cmd {
 	return nil
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m *model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	var cmds []tea.Cmd
 
@@ -314,7 +313,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.channelMutex.Lock()
 		activeList := m.transcripts[m.channels[m.activeTab].ID]
 		updatedList, cmd := activeList.Update(msg)
-		*m.transcripts[m.channels[m.activeTab].ID] = *updatedList
+		*m.transcripts[m.channels[m.activeTab].ID] = updatedList
 		m.channelMutex.Unlock()
 		cmds = append(cmds, cmd)
 	}
@@ -322,7 +321,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m model) View() string {
+func (m *model) View() string {
 	if m.quitting {
 		return "Goodbye!\n"
 	}
