@@ -5,10 +5,8 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"path/filepath"
 	"strings"
 	"syscall"
-	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
@@ -31,9 +29,9 @@ func init() {
 		os.Exit(1)
 	}
 
-	DeepgramToken = os.Getenv("DEEPGRAM_TOKEN")
+	DeepgramToken = os.Getenv("DEEPGRAM_API_KEY")
 	if DeepgramToken == "" {
-		fmt.Println("No Deepgram token provided. Please set the DEEPGRAM_TOKEN environment variable.")
+		fmt.Println("No Deepgram token provided. Please set the DEEPGRAM_API_KEY environment variable.")
 		os.Exit(1)
 	}
 
@@ -141,15 +139,15 @@ func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID string
 		EnableKeepAlive: true,
 	}
 	tOptions := &interfaces.LiveTranscriptionOptions{
-		Model:           "nova-2",
-		Language:        "en-US",
-		Punctuate:       true,
-		Encoding:        "opus",
-		Channels:        2,
-		SampleRate:      48000,
-		SmartFormat:     true,
-		InterimResults:  true,
-		UtteranceEndMs:  "1000",
+		Model:          "nova-2",
+		Language:       "en-US",
+		Punctuate:      true,
+		Encoding:       "opus",
+		Channels:       2,
+		SampleRate:     48000,
+		SmartFormat:    true,
+		InterimResults: true,
+		UtteranceEndMs: "1000",
 	}
 
 	callback := MyCallback{
@@ -178,7 +176,7 @@ func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID string
 			logger.Info("Voice channel closed")
 			break
 		}
-		err := dgClient.SendAudio(opus.Opus)
+		err := dgClient.WriteBinary(opus.Opus)
 		if err != nil {
 			logger.Error("Failed to send audio to Deepgram", "error", err)
 		}
@@ -241,7 +239,7 @@ func joinAllVoiceChannels(s *discordgo.Session, guildID string) error {
 				logger.Error("Failed to join voice channel", "channel", channel.Name, "error", err)
 			} else {
 				logger.Info("Joined voice channel", "channel", channel.Name)
-				go startRecording(vc, guildID, channel.ID)
+				go startDeepgramStream(vc, guildID, channel.ID)
 			}
 
 			vc.AddHandler(voiceStateUpdate)
