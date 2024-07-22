@@ -80,10 +80,76 @@ func main() {
 func startHTTPServer() {
 	http.HandleFunc("/", handleRoot)
 	http.HandleFunc("/guild/", handleTranscript)
+	http.HandleFunc("/guild/", handleTranscriptHTML)
 	logger.Info("Starting HTTP server", "port", Port)
 	err := http.ListenAndServe(":"+Port, nil)
 	if err != nil {
 		logger.Error("HTTP server error", "error", err.Error())
+	}
+}
+
+func handleTranscriptHTML(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(r.URL.Path, "/")
+	if len(parts) != 6 || parts[1] != "guild" || parts[3] != "channel" || parts[5] != "transcript.html" {
+		http.Error(w, "Invalid URL", http.StatusBadRequest)
+		return
+	}
+
+	guildID := parts[2]
+	channelID := parts[4]
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	fmt.Fprintf(w, `<!DOCTYPE html>
+<html>
+<head>
+	<title>Voice Channel Transcript</title>
+	<style>
+		body { font-family: Arial, sans-serif; }
+		.transcript { margin-bottom: 10px; }
+	</style>
+</head>
+<body>
+	<h1>Voice Channel Transcript</h1>
+	<div id="transcripts">
+`)
+	flusher.Flush()
+
+	// Get all previous transcripts
+	allTranscripts, err := db.GetAllTranscripts(guildID, channelID)
+	if err != nil {
+		logger.Error("Failed to get all transcripts", "error", err.Error())
+		fmt.Fprintf(w, "<p>Error: Failed to retrieve transcripts</p>")
+		return
+	}
+
+	// Send all previous transcripts
+	for _, transcript := range allTranscripts {
+		fmt.Fprintf(w, "<p class=\"transcript\">%s</p>\n", template.HTMLEscapeString(transcript))
+		flusher.Flush()
+	}
+
+	// Get or create a channel for this guild and channel
+	key := fmt.Sprintf("%s:%s", guildID, channelID)
+	ch, _ := transcriptChannels.LoadOrStore(key, make(chan string))
+	transcriptChan := ch.(chan string)
+
+	// Start streaming new transcripts
+	for {
+		select {
+		case transcript := <-transcriptChan:
+			fmt.Fprintf(w, "<p class=\"transcript\">%s</p>\n", template.HTMLEscapeString(transcript))
+			flusher.Flush()
+		case <-r.Context().Done():
+			fmt.Fprintf(w, "</div></body></html>")
+			return
+		}
 	}
 }
 
