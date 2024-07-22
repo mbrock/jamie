@@ -104,8 +104,15 @@ func handleTranscript(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	lastTimestamp, err := db.GetLastTimestamp(guildID, channelID)
+	if err != nil {
+		logger.Error("Failed to get last timestamp", "error", err.Error())
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
 	for {
-		transcripts, err := db.GetTranscripts(guildID, channelID)
+		transcripts, err := db.GetNewTranscripts(guildID, channelID, lastTimestamp)
 		if err != nil {
 			logger.Error("Failed to get transcripts", "error", err.Error())
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -116,6 +123,13 @@ func handleTranscript(w http.ResponseWriter, r *http.Request) {
 			fmt.Fprintln(w, transcript)
 		}
 		flusher.Flush()
+
+		if len(transcripts) > 0 {
+			lastTimestamp, err = db.GetLastTimestamp(guildID, channelID)
+			if err != nil {
+				logger.Error("Failed to update last timestamp", "error", err.Error())
+			}
+		}
 
 		select {
 		case <-r.Context().Done():
