@@ -18,11 +18,15 @@ var (
 	discordToken       string
 )
 
+type VoiceStream struct {
+	UserID   string
+	StreamID string
+}
+
 type VoiceState struct {
-	ssrcToUserID   sync.Map
-	ssrcToStreamID sync.Map
-	guildID        string
-	channelID      string
+	ssrcToStream sync.Map
+	guildID      string
+	channelID    string
 }
 
 func SetLogger(l *log.Logger) {
@@ -85,7 +89,7 @@ func joinAllVoiceChannels(s *discordgo.Session, guildID, deepgramToken string) e
 func voiceStateUpdate(state *VoiceState, _ *discordgo.VoiceConnection, v *discordgo.VoiceSpeakingUpdate) {
 	logger.Info("Voice state update", "userID", v.UserID, "speaking", v.Speaking, "SSRC", v.SSRC)
 
-	_, exists := state.ssrcToStreamID.Load(v.SSRC)
+	_, exists := state.ssrcToStream.Load(v.SSRC)
 	if !exists {
 		streamID := uuid.New().String()
 		err := db.CreateVoiceStream(state.guildID, state.channelID, streamID, v.UserID, uint32(v.SSRC))
@@ -93,8 +97,10 @@ func voiceStateUpdate(state *VoiceState, _ *discordgo.VoiceConnection, v *discor
 			logger.Error("Failed to create voice stream", "error", err.Error())
 		} else {
 			logger.Info("Created new voice stream", "streamID", streamID, "userID", v.UserID, "SSRC", v.SSRC)
-			state.ssrcToStreamID.Store(v.SSRC, streamID)
-			state.ssrcToUserID.Store(v.SSRC, v.UserID)
+			state.ssrcToStream.Store(v.SSRC, VoiceStream{
+				UserID:   v.UserID,
+				StreamID: streamID,
+			})
 		}
 	}
 }
@@ -188,9 +194,17 @@ func GetTranscriptChannel(guildID, channelID string) chan string {
 }
 
 func (state *VoiceState) GetUserIDFromSSRC(ssrc uint32) (string, bool) {
-	userID, ok := state.ssrcToUserID.Load(ssrc)
+	stream, ok := state.ssrcToStream.Load(ssrc)
 	if !ok {
 		return "", false
 	}
-	return userID.(string), true
+	return stream.(VoiceStream).UserID, true
+}
+
+func (state *VoiceState) GetStreamIDFromSSRC(ssrc uint32) (string, bool) {
+	stream, ok := state.ssrcToStream.Load(ssrc)
+	if !ok {
+		return "", false
+	}
+	return stream.(VoiceStream).StreamID, true
 }
