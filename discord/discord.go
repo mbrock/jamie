@@ -14,6 +14,7 @@ import (
 var (
 	logger             *log.Logger
 	transcriptChannels sync.Map
+	discordToken       string
 )
 
 func SetLogger(l *log.Logger) {
@@ -21,8 +22,9 @@ func SetLogger(l *log.Logger) {
 	deepgram.SetLogger(l)
 }
 
-func StartBot(discordToken string, deepgramToken string) (*discordgo.Session, error) {
-	dg, err := discordgo.New("Bot " + discordToken)
+func StartBot(token string, deepgramToken string) (*discordgo.Session, error) {
+	discordToken = token
+	dg, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return nil, fmt.Errorf("error creating Discord session: %w", err)
 	}
@@ -120,7 +122,7 @@ func startDeepgramStream(s *discordgo.Session, v *discordgo.VoiceConnection, gui
 	dgClient.Stop()
 }
 
-func handleTranscript(discordToken, guildID, channelID, transcript string) {
+func handleTranscript(guildID, channelID, transcript string) {
 	// Send the transcript to Discord
 	s, err := discordgo.New("Bot " + discordToken)
 	if err != nil {
