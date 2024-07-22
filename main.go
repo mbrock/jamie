@@ -250,6 +250,12 @@ func startDeepgramStream(s *discordgo.Session, v *discordgo.VoiceConnection, gui
 		if err != nil {
 			logger.Error("Failed to send audio to Deepgram", "error", err.Error())
 		}
+		
+		// Save the Opus packet to the database
+		err = db.SaveOpusPacket(guildID, channelID, opus.Opus)
+		if err != nil {
+			logger.Error("Failed to save Opus packet to database", "error", err.Error())
+		}
 	}
 
 	dgClient.Stop()

@@ -17,7 +17,7 @@ func InitDB() {
 		log.Fatal(err)
 	}
 
-	createTable := `
+	createTranscriptsTable := `
 	CREATE TABLE IF NOT EXISTS transcripts (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		guild_id TEXT,
@@ -27,10 +27,36 @@ func InitDB() {
 	);
 	`
 
-	_, err = db.Exec(createTable)
+	createOpusPacketsTable := `
+	CREATE TABLE IF NOT EXISTS opus_packets (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		guild_id TEXT,
+		channel_id TEXT,
+		packet BLOB,
+		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+	);
+	`
+
+	_, err = db.Exec(createTranscriptsTable)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	_, err = db.Exec(createOpusPacketsTable)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func SaveOpusPacket(guildID, channelID string, packet []byte) error {
+	stmt, err := db.Prepare("INSERT INTO opus_packets(guild_id, channel_id, packet, timestamp) VALUES(?, ?, ?, ?)")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(guildID, channelID, packet, time.Now())
+	return err
 }
 
 func SaveTranscript(guildID, channelID, transcript string) error {
