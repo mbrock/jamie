@@ -27,14 +27,22 @@ func init() {
 	rootCmd.AddCommand(discordCmd)
 
 	// Add persistent flags
-	rootCmd.PersistentFlags().String("web-port", "8080", "Port for the HTTP server")
+	rootCmd.PersistentFlags().
+		String("web-port", "8080", "Port for the HTTP server")
 	rootCmd.PersistentFlags().String("discord-token", "", "Discord bot token")
-	rootCmd.PersistentFlags().String("deepgram-api-key", "", "Deepgram API key")
+	rootCmd.PersistentFlags().
+		String("deepgram-api-key", "", "Deepgram API key")
 
 	// Bind flags to viper
 	viper.BindPFlag("web_port", rootCmd.PersistentFlags().Lookup("web-port"))
-	viper.BindPFlag("discord_token", rootCmd.PersistentFlags().Lookup("discord-token"))
-	viper.BindPFlag("deepgram_api_key", rootCmd.PersistentFlags().Lookup("deepgram-api-key"))
+	viper.BindPFlag(
+		"discord_token",
+		rootCmd.PersistentFlags().Lookup("discord-token"),
+	)
+	viper.BindPFlag(
+		"deepgram_api_key",
+		rootCmd.PersistentFlags().Lookup("deepgram-api-key"),
+	)
 }
 
 func initConfig() {
@@ -77,11 +85,11 @@ func runDiscord(cmd *cobra.Command, args []string) {
 	deepgramAPIKey := viper.GetString("deepgram_api_key")
 
 	if discordToken == "" {
-		mainLogger.Fatal("No Discord token provided. Please set the DISCORD_TOKEN flag or environment variable.")
+		mainLogger.Fatal("missing DISCORD_TOKEN or --discord-token=")
 	}
 
 	if deepgramAPIKey == "" {
-		mainLogger.Fatal("No Deepgram API key provided. Please set the DEEPGRAM_API_KEY flag or environment variable.")
+		mainLogger.Fatal("missing DEEPGRAM_API_KEY or --deepgram-api-key=")
 	}
 
 	db.InitDB()
@@ -221,7 +229,7 @@ func handleTranscriptStream(
 
 	// Get the transcript channel for this guild and channel
 	transcriptChan := bot.GetTranscriptChannel(
-		discord.Venue{GuildID: guildID, ChannelID: channelID},
+		discord.Inn{GuildID: guildID, ChannelID: channelID},
 	)
 
 	// Start streaming new transcripts

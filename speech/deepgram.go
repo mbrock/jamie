@@ -93,7 +93,7 @@ func (s *DeepgramSession) SendAudio(data []byte) error {
 	return s.client.WriteBinary(data)
 }
 
-func (s *DeepgramSession) Transcriptions() <-chan chan string {
+func (s *DeepgramSession) Read() <-chan chan string {
 	return s.transcriptions
 }
 

@@ -4,11 +4,11 @@ import (
 	"jamie/speech"
 )
 
-type VoiceStream struct {
-	UserID             string
-	StreamID           string
-	FirstOpusTimestamp uint32
-	FirstReceiveTime   int64
-	FirstSequence      uint16
-	DeepgramSession    speech.LiveTranscriptionSession
+type Rap struct {
+	Uid string
+	Rid string
+	Era uint32
+	Got int64
+	Seq uint16
+	Owl speech.LiveTranscriptionSession
 }

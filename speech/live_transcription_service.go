@@ -7,9 +7,9 @@ import (
 type LiveTranscriptionSession interface {
 	Stop() error
 	SendAudio(data []byte) error
-	Transcriptions() <-chan chan string
+	Read() <-chan chan string
 }
 
-type LiveTranscriptionService interface {
+type ASR interface {
 	Start(ctx context.Context) (LiveTranscriptionSession, error)
 }

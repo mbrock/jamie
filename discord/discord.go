@@ -1,8 +1,9 @@
 package discord
 
 import (
+	vox "jamie/speech"
+
 	"fmt"
-	"jamie/speech"
 	"sync"
 
 	"github.com/bwmarrin/discordgo"
@@ -14,29 +15,27 @@ type ChannelMessage struct {
 	Content   string
 }
 
-type Venue struct {
+type Inn struct {
 	GuildID   string
 	ChannelID string
 }
 
 type DiscordBot struct {
-	logger               *log.Logger
-	discordToken         string
-	session              *discordgo.Session
-	transcriptionService speech.LiveTranscriptionService
-	transcriptChannels   *sync.Map
+	log                *log.Logger
+	api                *discordgo.Session
+	asr                vox.ASR
+	transcriptChannels *sync.Map
 }
 
 func NewDiscordBot(
 	token string,
-	transcriptionService speech.LiveTranscriptionService,
+	asr vox.ASR,
 	logger *log.Logger,
 ) (*DiscordBot, error) {
 	bot := &DiscordBot{
-		discordToken:         token,
-		transcriptionService: transcriptionService,
-		logger:               logger,
-		transcriptChannels:   &sync.Map{},
+		asr:                asr,
+		log:                logger,
+		transcriptChannels: &sync.Map{},
 	}
 
 	dg, err := discordgo.New("Bot " + token)
@@ -53,48 +52,46 @@ func NewDiscordBot(
 		return nil, fmt.Errorf("error opening connection: %w", err)
 	}
 
-	bot.session = dg
-	bot.logger.Info("boot", "username", bot.session.State.User.Username)
+	bot.api = dg
+	bot.log.Info("boot", "username", bot.api.State.User.Username)
 	return bot, nil
 }
 
 func (bot *DiscordBot) Close() error {
-	return bot.session.Close()
+	return bot.api.Close()
 }
 
 func (bot *DiscordBot) guildCreate(
-	s *discordgo.Session,
+	_ *discordgo.Session,
 	event *discordgo.GuildCreate,
 ) {
-	bot.logger.Info("join", "guild", event.Guild.Name)
+	bot.log.Info("join", "guild", event.Guild.Name)
 	err := bot.joinAllVoiceChannels(
-		s,
-		Venue{GuildID: event.Guild.ID, ChannelID: ""},
+		Inn{GuildID: event.Guild.ID, ChannelID: ""},
 	)
 	if err != nil {
-		bot.logger.Error("join voice channels", "error", err.Error())
+		bot.log.Error("join voice channels", "error", err.Error())
 	}
 }
 
 func (bot *DiscordBot) joinAllVoiceChannels(
-	s *discordgo.Session,
-	channelID Venue,
+	channelID Inn,
 ) error {
-	channels, err := s.GuildChannels(channelID.GuildID)
+	channels, err := bot.api.GuildChannels(channelID.GuildID)
 	if err != nil {
 		return fmt.Errorf("error getting guild channels: %w", err)
 	}
 
 	for _, channel := range channels {
 		if channel.Type == discordgo.ChannelTypeGuildVoice {
-			vc, err := s.ChannelVoiceJoin(
+			snd, err := bot.api.ChannelVoiceJoin(
 				channelID.GuildID,
 				channel.ID,
 				false,
 				false,
 			)
 			if err != nil {
-				bot.logger.Error(
+				bot.log.Error(
 					"join",
 					"channel",
 					channel.Name,
@@ -102,10 +99,10 @@ func (bot *DiscordBot) joinAllVoiceChannels(
 					err.Error(),
 				)
 			} else {
-				bot.logger.Info("join", "channel", channel.Name)
-				channelID := Venue{GuildID: channelID.GuildID, ChannelID: channel.ID}
+				bot.log.Info("join", "channel", channel.Name)
+				inn := Inn{GuildID: channelID.GuildID, ChannelID: channel.ID}
 				go func() {
-					bot.startVoiceProcessor(vc, channelID)
+					bot.hear(snd, inn)
 				}()
 			}
 		}
@@ -114,48 +111,48 @@ func (bot *DiscordBot) joinAllVoiceChannels(
 	return nil
 }
 
-func (bot *DiscordBot) startVoiceProcessor(
-	v *discordgo.VoiceConnection,
-	channelID Venue,
+func (bot *DiscordBot) hear(
+	snd *discordgo.VoiceConnection,
+	inn Inn,
 ) {
-	bot.logger.Info(
+	bot.log.Info(
 		"hark",
 		"guild",
-		channelID.GuildID,
+		inn.GuildID,
 		"channel",
-		channelID.ChannelID,
+		inn.ChannelID,
 	)
 
-	vsp := NewVoiceStreamProcessor(
-		channelID.GuildID,
-		channelID.ChannelID,
-		bot.logger,
-		bot.transcriptionService,
-		bot.session,
+	ear := Hear(
+		inn.GuildID,
+		inn.ChannelID,
+		bot.log,
+		bot.asr,
+		bot.api,
 	)
 
-	v.AddHandler(
-		func(vc *discordgo.VoiceConnection, vs *discordgo.VoiceSpeakingUpdate) {
-			vsp.HandleVoiceStateUpdate(vs)
+	snd.AddHandler(
+		func(_ *discordgo.VoiceConnection, evt *discordgo.VoiceSpeakingUpdate) {
+			ear.Know(evt)
 		},
 	)
 
 	for {
-		opus, ok := <-v.OpusRecv
+		pkt, ok := <-snd.OpusRecv
 		if !ok {
-			bot.logger.Info("voice channel closed")
+			bot.log.Info("voice channel closed")
 			break
 		}
 
-		err := vsp.ProcessVoicePacket(opus)
+		err := ear.Recv(pkt)
 		if err != nil {
-			bot.logger.Error("process voice packet", "error", err.Error())
+			bot.log.Error("process voice packet", "error", err.Error())
 		}
 	}
 }
 
 func (bot *DiscordBot) GetTranscriptChannel(
-	channelID Venue,
+	channelID Inn,
 ) chan chan string {
 	key := fmt.Sprintf("%s:%s", channelID.GuildID, channelID.ChannelID)
 	ch, _ := bot.transcriptChannels.LoadOrStore(key, make(chan chan string))
