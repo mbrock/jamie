@@ -149,7 +149,7 @@ func (bot *DiscordBot) handleTranscript(channelID Venue, transcriptChan <-chan s
 			lastMessage = &ChannelMessage{MessageID: msg.ID, Content: transcript}
 		} else {
 			// Edit the existing message
-			newContent := lastMessage.Content + "\n" + transcript
+			newContent := transcript
 			_, err := bot.session.ChannelMessageEdit(channelID.ChannelID, lastMessage.MessageID, newContent)
 			if err != nil {
 				bot.logger.Error("edit message", "error", err.Error())
