@@ -142,7 +142,7 @@ func (bot *DiscordBot) handleTranscript(channelID Venue, transcriptChan <-chan s
 	for transcript := range transcriptChan {
 		finalTranscript = transcript
 		username := bot.getUsernameFromTranscript(transcript)
-		formattedTranscript := fmt.Sprintf("> **%s**: %s 💬", username, transcript)
+		formattedTranscript := fmt.Sprintf("> **%s**: “%s 💬”", username, transcript)
 
 		if lastMessage == nil {
 			// Send a new message if there's no existing message
@@ -165,27 +165,29 @@ func (bot *DiscordBot) handleTranscript(channelID Venue, transcriptChan <-chan s
 
 	// After the channel is closed (final transcript received)
 	if lastMessage != nil {
-		// Delete the last message
-		err := bot.session.ChannelMessageDelete(channelID.ChannelID, lastMessage.MessageID)
-		if err != nil {
-			bot.logger.Error("delete message", "error", err.Error())
-		}
+		// Delete the last message concurrently
+		go func() {
+			err := bot.session.ChannelMessageDelete(channelID.ChannelID, lastMessage.MessageID)
+			if err != nil {
+				bot.logger.Error("delete message", "error", err.Error())
+			}
+		}()
 
 		// Send a new message with the final content (without speech bubble)
 		username := bot.getUsernameFromTranscript(finalTranscript)
-		finalFormattedTranscript := fmt.Sprintf("> **%s**: %s", username, finalTranscript)
-		_, err = bot.session.ChannelMessageSend(channelID.ChannelID, finalFormattedTranscript)
+		finalFormattedTranscript := fmt.Sprintf("> **%s**: “%s”", username, finalTranscript)
+		_, err := bot.session.ChannelMessageSend(channelID.ChannelID, finalFormattedTranscript)
 		if err != nil {
 			bot.logger.Error("send final message", "error", err.Error())
 		}
 	}
 }
 
-func (bot *DiscordBot) getUsernameFromTranscript(transcript string) string {
+func (bot *DiscordBot) getUsernameFromTranscript(_ string) string {
 	// This is a placeholder function. You'll need to implement the logic
 	// to extract the username from the transcript based on your specific format.
 	// For now, it returns a default value.
-	return "Speaker"
+	return "someone"
 }
 
 func (bot *DiscordBot) GetTranscriptChannel(channelID Venue) chan chan string {
