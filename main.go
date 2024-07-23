@@ -26,13 +26,17 @@ var (
 func init() {
 	DiscordToken = os.Getenv("DISCORD_TOKEN")
 	if DiscordToken == "" {
-		fmt.Println("No Discord token provided. Please set the DISCORD_TOKEN environment variable.")
+		fmt.Println(
+			"No Discord token provided. Please set the DISCORD_TOKEN environment variable.",
+		)
 		os.Exit(1)
 	}
 
 	DeepgramToken = os.Getenv("DEEPGRAM_API_KEY")
 	if DeepgramToken == "" {
-		fmt.Println("No Deepgram token provided. Please set the DEEPGRAM_API_KEY environment variable.")
+		fmt.Println(
+			"No Deepgram token provided. Please set the DEEPGRAM_API_KEY environment variable.",
+		)
 		os.Exit(1)
 	}
 
@@ -60,12 +64,19 @@ func main() {
 
 	go startHTTPServer(httpLogger)
 
-	transcriptionService, err := speech.NewDeepgramClient(DeepgramToken, deepgramLogger)
+	transcriptionService, err := speech.NewDeepgramClient(
+		DeepgramToken,
+		deepgramLogger,
+	)
 	if err != nil {
 		mainLogger.Fatal("create deepgram client", "error", err.Error())
 	}
 
-	bot, err = discord.NewDiscordBot(DiscordToken, transcriptionService, discordLogger)
+	bot, err = discord.NewDiscordBot(
+		DiscordToken,
+		transcriptionService,
+		discordLogger,
+	)
 	if err != nil {
 		mainLogger.Fatal("start discord bot", "error", err.Error())
 	}
@@ -80,7 +91,10 @@ func startHTTPServer(httpLogger *log.Logger) {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /", handleRoot)
-	mux.HandleFunc("GET /guild/{guildID}/channel/{channelID}/{format}", handleGuildRequest)
+	mux.HandleFunc(
+		"GET /guild/{guildID}/channel/{channelID}/{format}",
+		handleGuildRequest,
+	)
 
 	httpLogger.Info("boot", "port", HttpPort)
 	err := http.ListenAndServe(":"+HttpPort, mux)
@@ -104,7 +118,11 @@ func handleGuildRequest(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func handleTranscriptHTML(w http.ResponseWriter, r *http.Request, guildID, channelID string) {
+func handleTranscriptHTML(
+	w http.ResponseWriter,
+	r *http.Request,
+	guildID, channelID string,
+) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprintf(w, `<!DOCTYPE html>
 <html>
@@ -120,19 +138,32 @@ func handleTranscriptHTML(w http.ResponseWriter, r *http.Request, guildID, chann
 	<div id="transcripts">
 `)
 	handleTranscriptStream(w, r, guildID, channelID, func(transcript string) {
-		fmt.Fprintf(w, "<p class=\"transcript\">%s</p>\n", template.HTMLEscapeString(transcript))
+		fmt.Fprintf(
+			w,
+			"<p class=\"transcript\">%s</p>\n",
+			template.HTMLEscapeString(transcript),
+		)
 	})
 	fmt.Fprintf(w, "</div></body></html>")
 }
 
-func handleTranscript(w http.ResponseWriter, r *http.Request, guildID, channelID string) {
+func handleTranscript(
+	w http.ResponseWriter,
+	r *http.Request,
+	guildID, channelID string,
+) {
 	w.Header().Set("Content-Type", "text/plain")
 	handleTranscriptStream(w, r, guildID, channelID, func(transcript string) {
 		fmt.Fprintln(w, transcript)
 	})
 }
 
-func handleTranscriptStream(w http.ResponseWriter, r *http.Request, guildID, channelID string, writeTranscript func(string)) {
+func handleTranscriptStream(
+	w http.ResponseWriter,
+	r *http.Request,
+	guildID, channelID string,
+	writeTranscript func(string),
+) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -155,7 +186,9 @@ func handleTranscriptStream(w http.ResponseWriter, r *http.Request, guildID, cha
 	flusher.Flush()
 
 	// Get the transcript channel for this guild and channel
-	transcriptChan := bot.GetTranscriptChannel(discord.Venue{GuildID: guildID, ChannelID: channelID})
+	transcriptChan := bot.GetTranscriptChannel(
+		discord.Venue{GuildID: guildID, ChannelID: channelID},
+	)
 
 	// Start streaming new transcripts
 	for {

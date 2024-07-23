@@ -16,17 +16,22 @@ type DeepgramClient struct {
 	logger *log.Logger
 }
 
-func NewDeepgramClient(token string, logger *log.Logger) (*DeepgramClient, error) {
+func NewDeepgramClient(
+	token string,
+	logger *log.Logger,
+) (*DeepgramClient, error) {
 	return &DeepgramClient{token: token, logger: logger}, nil
 }
 
-func (c *DeepgramClient) Start(ctx context.Context) (LiveTranscriptionSession, error) {
+func (c *DeepgramClient) Start(
+	ctx context.Context,
+) (LiveTranscriptionSession, error) {
 	cOptions := &interfaces.ClientOptions{
 		EnableKeepAlive: true,
 	}
 	tOptions := &interfaces.LiveTranscriptionOptions{
 		Model:          "nova-2",
-		Language:       "sv-SE",
+		Language:       "en-US",
 		Punctuate:      true,
 		Encoding:       "opus",
 		Channels:       2,
@@ -43,9 +48,18 @@ func (c *DeepgramClient) Start(ctx context.Context) (LiveTranscriptionSession, e
 		logger:         c.logger,
 	}
 
-	client, err := listen.NewWebSocket(ctx, c.token, cOptions, tOptions, session)
+	client, err := listen.NewWebSocket(
+		ctx,
+		c.token,
+		cOptions,
+		tOptions,
+		session,
+	)
 	if err != nil {
-		return nil, fmt.Errorf("error creating LiveTranscription connection: %w", err)
+		return nil, fmt.Errorf(
+			"error creating LiveTranscription connection: %w",
+			err,
+		)
 	}
 
 	session.client = client
@@ -124,7 +138,9 @@ func (s *DeepgramSession) Metadata(md *api.MetadataResponse) error {
 	return nil
 }
 
-func (s *DeepgramSession) SpeechStarted(ssr *api.SpeechStartedResponse) error {
+func (s *DeepgramSession) SpeechStarted(
+	ssr *api.SpeechStartedResponse,
+) error {
 	s.logger.Debug("speech start", "timestamp", ssr.Timestamp)
 	return nil
 }
