@@ -88,21 +88,6 @@ func joinAllVoiceChannels(s *discordgo.Session, guildID, deepgramToken string) e
 
 func voiceStateUpdate(state *VoiceState, _ *discordgo.VoiceConnection, v *discordgo.VoiceSpeakingUpdate) {
 	logger.Info("Voice state update", "userID", v.UserID, "speaking", v.Speaking, "SSRC", v.SSRC)
-
-	_, exists := state.ssrcToStream.Load(v.SSRC)
-	if !exists {
-		streamID := uuid.New().String()
-		err := db.CreateVoiceStream(state.guildID, state.channelID, streamID, v.UserID, uint32(v.SSRC), 0) // Add 0 as a placeholder for firstOpusTimestamp
-		if err != nil {
-			logger.Error("Failed to create voice stream", "error", err.Error())
-		} else {
-			logger.Info("Created new voice stream", "streamID", streamID, "userID", v.UserID, "SSRC", v.SSRC)
-			state.ssrcToStream.Store(uint32(v.SSRC), VoiceStream{
-				UserID:   v.UserID,
-				StreamID: streamID,
-			})
-		}
-	}
 }
 
 func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID, deepgramToken string) {
@@ -141,14 +126,26 @@ func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID, deepg
 			logger.Error("Failed to send audio to Deepgram", "error", err.Error())
 		}
 
-		// Get the stream ID for this SSRC
+		// Get or create the stream for this SSRC
 		streamInterface, exists := state.ssrcToStream.Load(opus.SSRC)
+		var streamID string
 		if !exists {
-			logger.Error("Failed to find stream for SSRC", "SSRC", opus.SSRC)
-			continue
+			streamID = uuid.New().String()
+			userID, _ := state.GetUserIDFromSSRC(opus.SSRC)
+			err := db.CreateVoiceStream(state.guildID, state.channelID, streamID, userID, opus.SSRC, opus.Timestamp)
+			if err != nil {
+				logger.Error("Failed to create voice stream", "error", err.Error())
+				continue
+			}
+			logger.Info("Created new voice stream", "streamID", streamID, "userID", userID, "SSRC", opus.SSRC)
+			state.ssrcToStream.Store(opus.SSRC, VoiceStream{
+				UserID:   userID,
+				StreamID: streamID,
+			})
+		} else {
+			stream := streamInterface.(VoiceStream)
+			streamID = stream.StreamID
 		}
-		stream := streamInterface.(VoiceStream)
-		streamID := stream.StreamID
 
 		// Save the Discord voice packet to the database
 		err = db.SaveDiscordVoicePacket(streamID, opus.Opus, opus.Sequence, opus.Timestamp)
