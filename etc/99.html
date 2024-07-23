@@ -6,18 +6,39 @@
     <title>99 Luftballons: A Symbolic Journey</title>
     <style>
       body {
-        font-family: "Big Caslon";
+        font-family: "Big Caslon", serif;
         line-height: 1.6;
         color: #333;
-        max-width: 800px;
-        margin: 0 auto;
+        margin: 0;
         padding: 20px;
+        background-color: #f0f0f0;
       }
       h1 {
         color: #1a1a1a;
+        text-align: center;
+        margin-bottom: 30px;
+      }
+      .card-container {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 20px;
+      }
+      .card {
+        background-color: #fff;
+        border-radius: 8px;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        padding: 20px;
+        width: calc(33.33% - 20px);
+        min-width: 250px;
+        transition: transform 0.3s ease;
+      }
+      .card:hover {
+        transform: translateY(-5px);
       }
       h2 {
         color: #2c2c2c;
+        margin-top: 0;
       }
       .lyric {
         font-style: italic;
@@ -27,9 +48,10 @@
         font-weight: bold;
       }
       .interpretation {
-        margin-left: 20px;
-        border-left: 3px solid #ddd;
-        padding-left: 10px;
+        margin-top: 10px;
+        border-top: 2px solid #ddd;
+        padding-top: 10px;
+        font-style: italic;
       }
     </style>
   </head>
@@ -39,8 +61,8 @@
     </header>
 
     <main>
-      <article>
-        <section>
+      <div class="card-container">
+        <div class="card">
           <h2>🎈 The Innocent Beginning</h2>
           <p class="lyric">Do you have some time for me?</p>
           <p>
@@ -48,9 +70,9 @@
             representing innocence, hope, and unintended consequences.
           </p>
           <p class="interpretation">Naivety ascends, heralding cataclysm.</p>
-        </section>
+        </div>
 
-        <section>
+        <div class="card">
           <h2>🌅 The Journey Begins</h2>
           <p class="lyric">On their way to the horizon</p>
           <p>
@@ -60,9 +82,9 @@
           <p class="interpretation">
             Certainty dissolves into ambiguity at the threshold.
           </p>
-        </section>
+        </div>
 
-        <section>
+        <div class="card">
           <h2>👽 Misinterpretation</h2>
           <p class="lyric">Were mistaken for UFOs from space</p>
           <p>
@@ -223,7 +245,7 @@
           </p>
           <p class="interpretation">Folly's Ouroboros consumes its wisdom.</p>
         </section>
-      </article>
+      </div>
     </main>
   </body>
 </html>
