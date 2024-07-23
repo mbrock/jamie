@@ -4,13 +4,10 @@ import (
 	"fmt"
 	"os"
 	"sync"
-	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
-	"github.com/google/uuid"
 
-	"jamie/db"
 	"jamie/deepgram"
 )
 
@@ -25,21 +22,6 @@ type DiscordBot struct {
 	discordToken       string
 	session            *discordgo.Session
 	deepgramToken      string
-}
-
-type VoiceStream struct {
-	UserID             string
-	StreamID           string
-	FirstOpusTimestamp uint32
-	FirstReceiveTime   int64
-	FirstSequence      uint16
-}
-
-type VoiceState struct {
-	ssrcToUser   sync.Map
-	ssrcToStream sync.Map
-	guildID      string
-	channelID    string
 }
 
 func (bot *DiscordBot) SetLogger(l *log.Logger) {
