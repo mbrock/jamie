@@ -40,7 +40,6 @@ func init() {
 	}
 
 	logger = log.New(os.Stdout)
-	discord.SetLogger(logger)
 }
 
 func main() {
@@ -140,7 +139,7 @@ func handleTranscriptStream(w http.ResponseWriter, r *http.Request, guildID, cha
 	flusher.Flush()
 
 	// Get the channel for this guild and channel
-	transcriptChan := discord.GetTranscriptChannel(guildID, channelID)
+	transcriptChan := bot.GetTranscriptChannel(guildID, channelID)
 
 	// Start streaming new transcripts
 	for {
