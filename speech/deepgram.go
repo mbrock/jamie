@@ -61,7 +61,6 @@ func (c *DeepgramClient) Start(ctx context.Context) (LiveTranscriptionSession, e
 
 type DeepgramSession struct {
 	client         *listen.WebSocketClient
-	sb             *strings.Builder
 	transcriptions chan chan string
 	logger         *log.Logger
 }
@@ -85,16 +84,15 @@ func (s *DeepgramSession) Transcriptions() <-chan chan string {
 }
 
 func (s *DeepgramSession) Message(mr *api.MessageResponse) error {
-	sentence := strings.TrimSpace(mr.Channel.Alternatives[0].Transcript)
-
-	if len(mr.Channel.Alternatives) == 0 || len(sentence) == 0 {
+	if len(mr.Channel.Alternatives) == 0 {
 		return nil
 	}
 
-	s.sb.WriteString(sentence)
-	s.sb.WriteString(" ")
+	transcript := strings.TrimSpace(mr.Channel.Alternatives[0].Transcript)
 
-	transcript := strings.TrimSpace(s.sb.String())
+	if len(transcript) == 0 {
+		return nil
+	}
 
 	if mr.IsFinal {
 		s.logger.Info("hear", "txt", transcript)
@@ -106,12 +104,8 @@ func (s *DeepgramSession) Message(mr *api.MessageResponse) error {
 		// Send the transcript and close the channel
 		transcriptChan <- transcript
 		close(transcriptChan)
-
-		if mr.SpeechFinal {
-			s.sb.Reset()
-		}
 	} else {
-		s.logger.Info("hear", "tmp", sentence)
+		s.logger.Info("hear", "tmp", transcript)
 	}
 
 	return nil
