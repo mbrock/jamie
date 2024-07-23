@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/charmbracelet/log"
 	"github.com/google/uuid"
 
 	"jamie/db"
@@ -13,10 +14,10 @@ type VoiceStreamProcessor struct {
 	guildID   string
 	channelID string
 	state     *VoiceState
-	logger    Logger
+	logger    *log.Logger
 }
 
-func NewVoiceStreamProcessor(guildID, channelID string, logger Logger) *VoiceStreamProcessor {
+func NewVoiceStreamProcessor(guildID, channelID string, logger *log.Logger) *VoiceStreamProcessor {
 	return &VoiceStreamProcessor{
 		guildID:   guildID,
 		channelID: channelID,
@@ -36,7 +37,7 @@ func (vsp *VoiceStreamProcessor) ProcessVoicePacket(opus *discordgo.Packet) erro
 		streamID := uuid.New().String()
 		userID, ok := vsp.state.ssrcToUser.Load(opus.SSRC)
 		if !ok {
-			vsp.logger.Warn("User ID not found for SSRC", "SSRC", opus.SSRC)
+			vsp.logger.Warn("User ID not found for SSRC", log.Int("SSRC", int(opus.SSRC)))
 			userID = "unknown"
 		}
 		stream = VoiceStream{
@@ -49,10 +50,13 @@ func (vsp *VoiceStreamProcessor) ProcessVoicePacket(opus *discordgo.Packet) erro
 		vsp.state.ssrcToStream.Store(opus.SSRC, stream)
 		err := db.CreateVoiceStream(vsp.guildID, vsp.channelID, streamID, userID.(string), opus.SSRC, opus.Timestamp, stream.FirstReceiveTime, stream.FirstSequence)
 		if err != nil {
-			vsp.logger.Error("Failed to create voice stream", "error", err.Error())
+			vsp.logger.Error("Failed to create voice stream", log.Err(err))
 			return err
 		}
-		vsp.logger.Info("Created new voice stream", "streamID", streamID, "userID", userID, "SSRC", opus.SSRC)
+		vsp.logger.Info("Created new voice stream", 
+			log.String("streamID", streamID), 
+			log.String("userID", userID.(string)), 
+			log.Int("SSRC", int(opus.SSRC)))
 	} else {
 		stream = streamInterface.(VoiceStream)
 	}
@@ -65,18 +69,24 @@ func (vsp *VoiceStreamProcessor) ProcessVoicePacket(opus *discordgo.Packet) erro
 	// Save the Discord voice packet to the database
 	err := db.SaveDiscordVoicePacket(stream.StreamID, opus.Opus, relativeSequence, relativeOpusTimestamp, receiveTime)
 	if err != nil {
-		vsp.logger.Error("Failed to save Discord voice packet to database", "error", err.Error())
+		vsp.logger.Error("Failed to save Discord voice packet to database", log.Err(err))
 		return err
 	}
 
 	// Print timestamps in seconds and user ID
 	timestampSeconds := float64(relativeOpusTimestamp) / 48000.0
-	vsp.logger.Info("opus", "seq", opus.Sequence, "t", timestampSeconds, "userID", stream.UserID)
+	vsp.logger.Info("opus", 
+		log.Int("seq", int(opus.Sequence)), 
+		log.Float64("t", timestampSeconds), 
+		log.String("userID", stream.UserID))
 
 	return nil
 }
 
 func (vsp *VoiceStreamProcessor) HandleVoiceStateUpdate(v *discordgo.VoiceSpeakingUpdate) {
-	vsp.logger.Info("Voice state update", "userID", v.UserID, "speaking", v.Speaking, "SSRC", v.SSRC)
+	vsp.logger.Info("Voice state update", 
+		log.String("userID", v.UserID), 
+		log.Bool("speaking", v.Speaking), 
+		log.Int("SSRC", int(v.SSRC)))
 	vsp.state.ssrcToUser.Store(v.SSRC, v.UserID)
 }
