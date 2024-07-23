@@ -14,6 +14,36 @@ import (
 	"jamie/deepgram"
 )
 
+type ChannelIdentifier interface {
+	GetGuildID() string
+	GetChannelID() string
+}
+
+type SimpleChannelIdentifier struct {
+	GuildID   string
+	ChannelID string
+}
+
+func (sci SimpleChannelIdentifier) GetGuildID() string {
+	return sci.GuildID
+}
+
+func (sci SimpleChannelIdentifier) GetChannelID() string {
+	return sci.ChannelID
+}
+	"fmt"
+	"os"
+	"sync"
+	"time"
+
+	"github.com/bwmarrin/discordgo"
+	"github.com/charmbracelet/log"
+	"github.com/google/uuid"
+
+	"jamie/db"
+	"jamie/deepgram"
+)
+
 type DiscordBot struct {
 	logger             *log.Logger
 	transcriptChannels sync.Map
@@ -74,28 +104,28 @@ func (bot *DiscordBot) Close() error {
 
 func (bot *DiscordBot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 	bot.logger.Info("Joined new guild", "guild", event.Guild.Name)
-	err := bot.joinAllVoiceChannels(s, event.Guild.ID)
+	err := bot.joinAllVoiceChannels(s, SimpleChannelIdentifier{GuildID: event.Guild.ID, ChannelID: ""})
 	if err != nil {
 		bot.logger.Error("Error joining voice channels", "error", err.Error())
 	}
 }
 
-func (bot *DiscordBot) joinAllVoiceChannels(s *discordgo.Session, guildID string) error {
-	channels, err := s.GuildChannels(guildID)
+func (bot *DiscordBot) joinAllVoiceChannels(s *discordgo.Session, guildID ChannelIdentifier) error {
+	channels, err := s.GuildChannels(guildID.GetGuildID())
 	if err != nil {
 		return fmt.Errorf("error getting guild channels: %w", err)
 	}
 
 	for _, channel := range channels {
 		if channel.Type == discordgo.ChannelTypeGuildVoice {
-			vc, err := s.ChannelVoiceJoin(guildID, channel.ID, false, false)
+			vc, err := s.ChannelVoiceJoin(guildID.GetGuildID(), channel.ID, false, false)
 			if err != nil {
 				bot.logger.Error("Failed to join voice channel", "channel", channel.Name, "error", err.Error())
 			} else {
 				bot.logger.Info("Joined voice channel", "channel", channel.Name)
-				channelID := channel.ID
+				channelID := SimpleChannelIdentifier{GuildID: guildID.GetGuildID(), ChannelID: channel.ID}
 				go func() {
-					bot.startDeepgramStream(vc, guildID, channelID)
+					bot.startDeepgramStream(vc, channelID)
 				}()
 			}
 		}
@@ -109,12 +139,12 @@ func (bot *DiscordBot) voiceStateUpdate(state *VoiceState, _ *discordgo.VoiceCon
 	state.ssrcToUser.Store(v.SSRC, v.UserID)
 }
 
-func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID string) {
-	bot.logger.Info("Starting Deepgram stream", "guild", guildID, "channel", channelID)
+func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channelID ChannelIdentifier) {
+	bot.logger.Info("Starting Deepgram stream", "guild", channelID.GetGuildID(), "channel", channelID.GetChannelID())
 
 	state := &VoiceState{
-		guildID:   guildID,
-		channelID: channelID,
+		guildID:   channelID.GetGuildID(),
+		channelID: channelID.GetChannelID(),
 	}
 
 	v.AddHandler(func(vc *discordgo.VoiceConnection, vs *discordgo.VoiceSpeakingUpdate) {
@@ -191,22 +221,22 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, guildID
 	dgClient.Stop()
 }
 
-func (bot *DiscordBot) handleTranscript(guildID, channelID, transcript string) {
+func (bot *DiscordBot) handleTranscript(channelID ChannelIdentifier, transcript string) {
 	// Send the transcript to Discord
-	_, err := bot.session.ChannelMessageSend(channelID, transcript)
+	_, err := bot.session.ChannelMessageSend(channelID.GetChannelID(), transcript)
 	if err != nil {
 		bot.logger.Error("Failed to send message to Discord", "error", err.Error())
 	}
 
 	// Send the transcript to the channel
-	key := fmt.Sprintf("%s:%s", guildID, channelID)
+	key := fmt.Sprintf("%s:%s", channelID.GetGuildID(), channelID.GetChannelID())
 	if ch, ok := bot.transcriptChannels.Load(key); ok {
 		ch.(chan string) <- transcript
 	}
 }
 
-func (bot *DiscordBot) GetTranscriptChannel(guildID, channelID string) chan string {
-	key := fmt.Sprintf("%s:%s", guildID, channelID)
+func (bot *DiscordBot) GetTranscriptChannel(channelID ChannelIdentifier) chan string {
+	key := fmt.Sprintf("%s:%s", channelID.GetGuildID(), channelID.GetChannelID())
 	ch, _ := bot.transcriptChannels.LoadOrStore(key, make(chan string))
 	return ch.(chan string)
 }
