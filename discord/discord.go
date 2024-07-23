@@ -3,6 +3,7 @@ package discord
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
@@ -92,7 +93,7 @@ func voiceStateUpdate(state *VoiceState, _ *discordgo.VoiceConnection, v *discor
 	_, exists := state.ssrcToStream.Load(v.SSRC)
 	if !exists {
 		streamID := uuid.New().String()
-		err := db.CreateVoiceStream(state.guildID, state.channelID, streamID, v.UserID, uint32(v.SSRC))
+		err := db.CreateVoiceStream(state.guildID, state.channelID, streamID, v.UserID, uint32(v.SSRC), 0) // Add 0 as a placeholder for firstOpusTimestamp
 		if err != nil {
 			logger.Error("Failed to create voice stream", "error", err.Error())
 		} else {
@@ -113,14 +114,7 @@ func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID, deepg
 		channelID: channelID,
 	}
 	
-	// Record the start time of the stream
-	streamStartTime := time.Now()
-	
-	// Save the stream start time to the database
-	err = db.SaveStreamStartTime(guildID, channelID, streamStartTime)
-	if err != nil {
-		logger.Error("Failed to save stream start time", "error", err.Error())
-	}
+	// The start time is now automatically recorded in the database when creating a voice stream
 	v.AddHandler(func(vc *discordgo.VoiceConnection, vs *discordgo.VoiceSpeakingUpdate) {
 		voiceStateUpdate(state, vc, vs)
 	})
