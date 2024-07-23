@@ -126,7 +126,9 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channel
 		bot.voiceStateUpdate(state, vc, vs)
 	})
 
-	dgClient, err := deepgram.NewDeepgramClient(bot.deepgramToken, guildID, channelID, bot.handleTranscript)
+	dgClient, err := deepgram.NewDeepgramClient(bot.deepgramToken, channelID.GuildID, channelID.ChannelID, func(guildID, channelID, transcript string) {
+		bot.handleTranscript(ChannelIdentifier{GuildID: guildID, ChannelID: channelID}, transcript)
+	})
 	if err != nil {
 		bot.logger.Error("Error creating Deepgram client", "error", err.Error())
 		return
