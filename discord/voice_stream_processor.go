@@ -113,36 +113,47 @@ func (vsp *VoiceStreamProcessor) getOrCreateStream(opus *discordgo.Packet) (*Voi
 func (vsp *VoiceStreamProcessor) handleTranscriptions(stream *VoiceStream) {
 	emoji := getEmojiFromStreamID(stream.StreamID)
 	var lastMessageID string
+	var currentTranscript string
 
 	for transcriptChan := range stream.DeepgramSession.Transcriptions() {
-		var finalTranscript string
 		for transcript := range transcriptChan {
-			finalTranscript = transcript
-		}
-		if finalTranscript != "" {
-			if lastMessageID == "" || endsWithPunctuation(finalTranscript) {
-				// Create a new message
-				finalFormattedTranscript := fmt.Sprintf("%s: %s", emoji, finalTranscript)
-				msg, err := vsp.session.ChannelMessageSend(vsp.channelID, finalFormattedTranscript)
-				if err != nil {
-					vsp.logger.Error("send new message", "error", err.Error())
+			currentTranscript += " " + transcript
+			currentTranscript = strings.TrimSpace(currentTranscript)
+
+			if endsWithPunctuation(currentTranscript) || len(currentTranscript) > 1000 {
+				// Send or edit the message
+				formattedTranscript := fmt.Sprintf("%s: %s", emoji, currentTranscript)
+				if lastMessageID == "" {
+					msg, err := vsp.session.ChannelMessageSend(vsp.channelID, formattedTranscript)
+					if err != nil {
+						vsp.logger.Error("send new message", "error", err.Error())
+					} else {
+						lastMessageID = msg.ID
+					}
 				} else {
-					lastMessageID = msg.ID
-				}
-			} else {
-				// Edit the existing message by appending the new transcript
-				existingMsg, err := vsp.session.ChannelMessage(vsp.channelID, lastMessageID)
-				if err != nil {
-					vsp.logger.Error("fetch existing message", "error", err.Error())
-				} else {
-					existingContent := existingMsg.Content
-					newContent := fmt.Sprintf("%s %s", existingContent, finalTranscript)
-					_, err := vsp.session.ChannelMessageEdit(vsp.channelID, lastMessageID, newContent)
+					_, err := vsp.session.ChannelMessageEdit(vsp.channelID, lastMessageID, formattedTranscript)
 					if err != nil {
 						vsp.logger.Error("edit message", "error", err.Error())
+						// If edit fails, try to send a new message
+						msg, err := vsp.session.ChannelMessageSend(vsp.channelID, formattedTranscript)
+						if err != nil {
+							vsp.logger.Error("send new message after edit failure", "error", err.Error())
+						} else {
+							lastMessageID = msg.ID
+						}
 					}
 				}
+				currentTranscript = ""
 			}
+		}
+	}
+
+	// Send any remaining transcript
+	if currentTranscript != "" {
+		formattedTranscript := fmt.Sprintf("%s: %s", emoji, currentTranscript)
+		_, err := vsp.session.ChannelMessageSend(vsp.channelID, formattedTranscript)
+		if err != nil {
+			vsp.logger.Error("send final message", "error", err.Error())
 		}
 	}
 }
