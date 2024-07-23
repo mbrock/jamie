@@ -44,7 +44,7 @@ func (c *DeepgramClient) Start(ctx context.Context) (LiveTranscriptionSession, e
 	}
 
 	session := &DeepgramSession{
-		transcriptions: make(chan string),
+		transcriptions: make(chan chan string),
 		sb:             &strings.Builder{},
 	}
 
@@ -66,7 +66,8 @@ func (c *DeepgramClient) Start(ctx context.Context) (LiveTranscriptionSession, e
 type DeepgramSession struct {
 	client         *listen.WebSocketClient
 	sb             *strings.Builder
-	transcriptions chan string
+	transcriptions chan chan string
+	currentTrans   chan string
 }
 
 func (s *DeepgramSession) Stop() error {
@@ -83,7 +84,7 @@ func (s *DeepgramSession) SendAudio(data []byte) error {
 	return s.client.WriteBinary(data)
 }
 
-func (s *DeepgramSession) Transcriptions() <-chan string {
+func (s *DeepgramSession) Transcriptions() <-chan chan string {
 	return s.transcriptions
 }
 
@@ -94,16 +95,29 @@ func (s *DeepgramSession) Message(mr *api.MessageResponse) error {
 		return nil
 	}
 
+	s.sb.WriteString(sentence)
+	s.sb.WriteString(" ")
+
 	if mr.IsFinal {
-		s.sb.WriteString(sentence)
-		s.sb.WriteString(" ")
+		if s.currentTrans == nil {
+			s.currentTrans = make(chan string)
+			s.transcriptions <- s.currentTrans
+		}
+		s.currentTrans <- s.sb.String()
 
 		if mr.SpeechFinal {
 			transcript := strings.TrimSpace(s.sb.String())
 			logger.Info("Transcript", "text", transcript)
 
-			// Send the transcript through the channel
-			s.transcriptions <- transcript
+			// Send the final transcript and close the current channel
+			if s.currentTrans != nil {
+				s.currentTrans <- transcript
+				close(s.currentTrans)
+			}
+
+			// Create a new channel for the next transcription
+			s.currentTrans = make(chan string)
+			s.transcriptions <- s.currentTrans
 
 			s.sb.Reset()
 		}
