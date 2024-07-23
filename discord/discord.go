@@ -71,7 +71,7 @@ func (bot *DiscordBot) joinAllVoiceChannels(s *discordgo.Session, channelID Venu
 		if channel.Type == discordgo.ChannelTypeGuildVoice {
 			vc, err := s.ChannelVoiceJoin(channelID.GuildID, channel.ID, false, false)
 			if err != nil {
-				bot.logger.Error("join voice channel", "channel", channel.Name, "error", err.Error())
+				bot.logger.Error("join", "channel", channel.Name, "error", err.Error())
 			} else {
 				bot.logger.Info("join", "channel", channel.Name)
 				channelID := Venue{GuildID: channelID.GuildID, ChannelID: channel.ID}

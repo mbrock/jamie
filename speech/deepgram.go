@@ -125,12 +125,12 @@ func (s *DeepgramSession) Metadata(md *api.MetadataResponse) error {
 }
 
 func (s *DeepgramSession) SpeechStarted(ssr *api.SpeechStartedResponse) error {
-	s.logger.Info("Speech started", "timestamp", ssr.Timestamp)
+	s.logger.Debug("Speech started", "timestamp", ssr.Timestamp)
 	return nil
 }
 
 func (s *DeepgramSession) UtteranceEnd(ur *api.UtteranceEndResponse) error {
-	s.logger.Info("Utterance ended", "timestamp", ur.LastWordEnd)
+	s.logger.Debug("Utterance ended", "timestamp", ur.LastWordEnd)
 	return nil
 }
 
