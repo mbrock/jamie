@@ -3,13 +3,12 @@ package discord
 import (
 	"context"
 	"fmt"
+	"jamie/speech"
 	"os"
 	"sync"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
-
-	"jamie/deepgram"
 )
 
 type Venue struct {
@@ -22,14 +21,14 @@ type DiscordBot struct {
 	transcriptChannels   sync.Map
 	discordToken         string
 	session              *discordgo.Session
-	transcriptionService deepgram.LiveTranscriptionService
+	transcriptionService speech.LiveTranscriptionService
 }
 
 func (bot *DiscordBot) SetLogger(l *log.Logger) {
 	bot.logger = l
 }
 
-func NewDiscordBot(token string, transcriptionService deepgram.LiveTranscriptionService) (*DiscordBot, error) {
+func NewDiscordBot(token string, transcriptionService speech.LiveTranscriptionService) (*DiscordBot, error) {
 	bot := &DiscordBot{
 		discordToken:         token,
 		transcriptionService: transcriptionService,

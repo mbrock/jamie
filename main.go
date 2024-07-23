@@ -12,7 +12,7 @@ import (
 
 	"jamie/db"
 	"jamie/discord"
-	"jamie/deepgram"
+	"jamie/speech"
 )
 
 var (
@@ -50,7 +50,7 @@ func main() {
 
 	go startHTTPServer()
 
-	transcriptionService, err := deepgram.NewDeepgramClient(DeepgramToken)
+	transcriptionService, err := speech.NewDeepgramClient(DeepgramToken)
 	if err != nil {
 		logger.Fatal("Error creating Deepgram client", "error", err.Error())
 	}
