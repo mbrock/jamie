@@ -1,6 +1,7 @@
 package discord
 
 import (
+	"sync"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
@@ -10,32 +11,37 @@ import (
 	"jamie/db"
 )
 
+type VoiceStream struct {
+	UserID             string
+	StreamID           string
+	FirstOpusTimestamp uint32
+	FirstReceiveTime   int64
+	FirstSequence      uint16
+}
+
 type VoiceStreamProcessor struct {
-	guildID   string
-	channelID string
-	state     *VoiceState
-	logger    *log.Logger
+	guildID      string
+	channelID    string
+	logger       *log.Logger
+	ssrcToUser   sync.Map
+	ssrcToStream sync.Map
 }
 
 func NewVoiceStreamProcessor(guildID, channelID string, logger *log.Logger) *VoiceStreamProcessor {
 	return &VoiceStreamProcessor{
 		guildID:   guildID,
 		channelID: channelID,
-		state: &VoiceState{
-			guildID:   guildID,
-			channelID: channelID,
-		},
-		logger: logger,
+		logger:    logger,
 	}
 }
 
 func (vsp *VoiceStreamProcessor) ProcessVoicePacket(opus *discordgo.Packet) error {
 	// Get or create the stream for this SSRC
-	streamInterface, exists := vsp.state.ssrcToStream.Load(opus.SSRC)
+	streamInterface, exists := vsp.ssrcToStream.Load(opus.SSRC)
 	var stream VoiceStream
 	if !exists {
 		streamID := uuid.New().String()
-		userID, ok := vsp.state.ssrcToUser.Load(opus.SSRC)
+		userID, ok := vsp.ssrcToUser.Load(opus.SSRC)
 		if !ok {
 			vsp.logger.Warn("User ID not found for SSRC", "SSRC", int(opus.SSRC))
 			userID = "unknown"
@@ -47,7 +53,7 @@ func (vsp *VoiceStreamProcessor) ProcessVoicePacket(opus *discordgo.Packet) erro
 			FirstReceiveTime:   time.Now().UnixNano(),
 			FirstSequence:      opus.Sequence,
 		}
-		vsp.state.ssrcToStream.Store(opus.SSRC, stream)
+		vsp.ssrcToStream.Store(opus.SSRC, stream)
 		err := db.CreateVoiceStream(vsp.guildID, vsp.channelID, streamID, userID.(string), opus.SSRC, opus.Timestamp, stream.FirstReceiveTime, stream.FirstSequence)
 		if err != nil {
 			vsp.logger.Error("Failed to create voice stream", "error", err)
@@ -88,5 +94,21 @@ func (vsp *VoiceStreamProcessor) HandleVoiceStateUpdate(v *discordgo.VoiceSpeaki
 		"userID", v.UserID, 
 		"speaking", v.Speaking, 
 		"SSRC", int(v.SSRC))
-	vsp.state.ssrcToUser.Store(v.SSRC, v.UserID)
+	vsp.ssrcToUser.Store(v.SSRC, v.UserID)
+}
+
+func (vsp *VoiceStreamProcessor) GetUserIDFromSSRC(ssrc uint32) (string, bool) {
+	userID, ok := vsp.ssrcToUser.Load(ssrc)
+	if !ok {
+		return "", false
+	}
+	return userID.(string), true
+}
+
+func (vsp *VoiceStreamProcessor) GetStreamIDFromSSRC(ssrc uint32) (string, bool) {
+	stream, ok := vsp.ssrcToStream.Load(ssrc)
+	if !ok {
+		return "", false
+	}
+	return stream.(VoiceStream).StreamID, true
 }
