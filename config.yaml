@@ -1,2 +1,2 @@
-WEB_PORT: 8080
+web_port: 8080
 # Add any other configuration options here

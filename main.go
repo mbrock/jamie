@@ -32,9 +32,9 @@ func init() {
 	rootCmd.PersistentFlags().String("deepgram-api-key", "", "Deepgram API key")
 
 	// Bind flags to viper
-	viper.BindPFlag("WEB_PORT", rootCmd.PersistentFlags().Lookup("web-port"))
-	viper.BindPFlag("DISCORD_TOKEN", rootCmd.PersistentFlags().Lookup("discord-token"))
-	viper.BindPFlag("DEEPGRAM_API_KEY", rootCmd.PersistentFlags().Lookup("deepgram-api-key"))
+	viper.BindPFlag("web_port", rootCmd.PersistentFlags().Lookup("web-port"))
+	viper.BindPFlag("discord_token", rootCmd.PersistentFlags().Lookup("discord-token"))
+	viper.BindPFlag("deepgram_api_key", rootCmd.PersistentFlags().Lookup("deepgram-api-key"))
 }
 
 func initConfig() {
@@ -73,8 +73,8 @@ func main() {
 func runDiscord(cmd *cobra.Command, args []string) {
 	mainLogger, discordLogger, deepgramLogger, httpLogger := createLoggers()
 
-	discordToken := viper.GetString("DISCORD_TOKEN")
-	deepgramAPIKey := viper.GetString("DEEPGRAM_API_KEY")
+	discordToken := viper.GetString("discord_token")
+	deepgramAPIKey := viper.GetString("deepgram_api_key")
 
 	if discordToken == "" {
 		mainLogger.Fatal("No Discord token provided. Please set the DISCORD_TOKEN flag or environment variable.")
@@ -129,7 +129,7 @@ func startHTTPServer(httpLogger *log.Logger) {
 		handleGuildRequest,
 	)
 
-	webPort := viper.GetString("WEB_PORT")
+	webPort := viper.GetString("web_port")
 	httpLogger.Info("boot", "port", webPort)
 	err := http.ListenAndServe(":"+webPort, mux)
 	if err != nil {
