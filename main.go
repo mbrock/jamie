@@ -44,39 +44,49 @@ func init() {
 	logger = log.New(os.Stdout)
 }
 
+func createLoggers() (mainLogger, discordLogger, deepgramLogger, httpLogger *log.Logger) {
+	mainLogger = logger.WithPrefix("MAIN")
+	discordLogger = logger.WithPrefix("DISCORD")
+	deepgramLogger = logger.WithPrefix("DEEPGRAM")
+	httpLogger = logger.WithPrefix("HTTP")
+	return
+}
+
 func main() {
+	mainLogger, discordLogger, deepgramLogger, httpLogger := createLoggers()
+
 	db.InitDB()
 	defer db.Close()
 
-	go startHTTPServer()
+	go startHTTPServer(httpLogger)
 
-	transcriptionService, err := speech.NewDeepgramClient(DeepgramToken, logger)
+	transcriptionService, err := speech.NewDeepgramClient(DeepgramToken, deepgramLogger)
 	if err != nil {
-		logger.Fatal("Error creating Deepgram client", "error", err.Error())
+		mainLogger.Fatal("Error creating Deepgram client", "error", err.Error())
 	}
 
-	bot, err = discord.NewDiscordBot(DiscordToken, transcriptionService, logger)
+	bot, err = discord.NewDiscordBot(DiscordToken, transcriptionService, discordLogger)
 	if err != nil {
-		logger.Fatal("Error starting Discord bot", "error", err.Error())
+		mainLogger.Fatal("Error starting Discord bot", "error", err.Error())
 	}
 	defer bot.Close()
 
-	logger.Info("Bot is now running. Press CTRL-C to exit.")
+	mainLogger.Info("Bot is now running. Press CTRL-C to exit.")
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
 }
 
-func startHTTPServer() {
+func startHTTPServer(httpLogger *log.Logger) {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /", handleRoot)
 	mux.HandleFunc("GET /guild/{guildID}/channel/{channelID}/{format}", handleGuildRequest)
 
-	logger.Info("Starting HTTP server", "port", HttpPort)
+	httpLogger.Info("Starting HTTP server", "port", HttpPort)
 	err := http.ListenAndServe(":"+HttpPort, mux)
 	if err != nil {
-		logger.Error("HTTP server error", "error", err.Error())
+		httpLogger.Error("HTTP server error", "error", err.Error())
 	}
 }
 
