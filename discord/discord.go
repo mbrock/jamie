@@ -22,7 +22,6 @@ type Venue struct {
 
 type DiscordBot struct {
 	logger               *log.Logger
-	transcriptChannels   sync.Map // map[string]chan chan string
 	discordToken         string
 	session              *discordgo.Session
 	transcriptionService speech.LiveTranscriptionService
@@ -81,7 +80,7 @@ func (bot *DiscordBot) joinAllVoiceChannels(s *discordgo.Session, channelID Venu
 				bot.logger.Info("join", "channel", channel.Name)
 				channelID := Venue{GuildID: channelID.GuildID, ChannelID: channel.ID}
 				go func() {
-					bot.startDeepgramStream(vc, channelID)
+					bot.startVoiceProcessor(vc, channelID)
 				}()
 			}
 		}
@@ -90,31 +89,14 @@ func (bot *DiscordBot) joinAllVoiceChannels(s *discordgo.Session, channelID Venu
 	return nil
 }
 
-func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channelID Venue) {
+func (bot *DiscordBot) startVoiceProcessor(v *discordgo.VoiceConnection, channelID Venue) {
 	bot.logger.Info("hark", "guild", channelID.GuildID, "channel", channelID.ChannelID)
 
-	vsp := NewVoiceStreamProcessor(channelID.GuildID, channelID.ChannelID, bot.logger)
+	vsp := NewVoiceStreamProcessor(channelID.GuildID, channelID.ChannelID, bot.logger, bot.transcriptionService, bot.session)
 
 	v.AddHandler(func(vc *discordgo.VoiceConnection, vs *discordgo.VoiceSpeakingUpdate) {
 		vsp.HandleVoiceStateUpdate(vs)
 	})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	session, err := bot.transcriptionService.Start(ctx)
-	if err != nil {
-		bot.logger.Error("hark", "error", err.Error())
-		return
-	}
-	defer session.Stop()
-	go func() {
-		for transcriptChan := range session.Transcriptions() {
-			go func(tc <-chan string) {
-				bot.handleTranscript(channelID, tc)
-			}(transcriptChan)
-		}
-	}()
 
 	for {
 		opus, ok := <-v.OpusRecv
@@ -123,12 +105,7 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channel
 			break
 		}
 
-		err := session.SendAudio(opus.Opus)
-		if err != nil {
-			bot.logger.Error("send audio", "error", err.Error())
-		}
-
-		err = vsp.ProcessVoicePacket(opus)
+		err := vsp.ProcessVoicePacket(opus)
 		if err != nil {
 			bot.logger.Error("process voice packet", "error", err.Error())
 		}

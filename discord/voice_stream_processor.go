@@ -12,19 +12,36 @@ import (
 	"jamie/db"
 )
 
+import (
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/bwmarrin/discordgo"
+	"github.com/charmbracelet/log"
+	"github.com/google/uuid"
+
+	"jamie/db"
+	"jamie/speech"
+)
+
 type VoiceStreamProcessor struct {
 	guildID      string
 	channelID    string
 	logger       *log.Logger
 	ssrcToUser   sync.Map
 	ssrcToStream sync.Map
+	transcriptionService speech.LiveTranscriptionService
+	session      *discordgo.Session
 }
 
-func NewVoiceStreamProcessor(guildID, channelID string, logger *log.Logger) *VoiceStreamProcessor {
+func NewVoiceStreamProcessor(guildID, channelID string, logger *log.Logger, transcriptionService speech.LiveTranscriptionService, session *discordgo.Session) *VoiceStreamProcessor {
 	return &VoiceStreamProcessor{
 		guildID:   guildID,
 		channelID: channelID,
 		logger:    logger,
+		transcriptionService: transcriptionService,
+		session:   session,
 	}
 }
 
@@ -45,16 +62,21 @@ func (vsp *VoiceStreamProcessor) ProcessVoicePacket(opus *discordgo.Packet) erro
 		return fmt.Errorf("failed to save Discord voice packet to database: %w", err)
 	}
 
+	// Send audio to the Deepgram stream
+	if err := stream.DeepgramSession.SendAudio(opus.Opus); err != nil {
+		return fmt.Errorf("failed to send audio to Deepgram: %w", err)
+	}
+
 	// Log packet info
 	vsp.logPacketInfo(opus, stream, relativeOpusTimestamp)
 
 	return nil
 }
 
-func (vsp *VoiceStreamProcessor) getOrCreateStream(opus *discordgo.Packet) (VoiceStream, error) {
+func (vsp *VoiceStreamProcessor) getOrCreateStream(opus *discordgo.Packet) (*VoiceStream, error) {
 	streamInterface, exists := vsp.ssrcToStream.Load(opus.SSRC)
 	if exists {
-		return streamInterface.(VoiceStream), nil
+		return streamInterface.(*VoiceStream), nil
 	}
 
 	// Create new stream
@@ -65,18 +87,24 @@ func (vsp *VoiceStreamProcessor) getOrCreateStream(opus *discordgo.Packet) (Voic
 		userID = "unknown"
 	}
 
-	stream := VoiceStream{
+	deepgramSession, err := vsp.transcriptionService.Start(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("failed to start Deepgram session: %w", err)
+	}
+
+	stream := &VoiceStream{
 		UserID:             userID.(string),
 		StreamID:           streamID,
 		FirstOpusTimestamp: opus.Timestamp,
 		FirstReceiveTime:   time.Now().UnixNano(),
 		FirstSequence:      opus.Sequence,
+		DeepgramSession:    deepgramSession,
 	}
 
 	vsp.ssrcToStream.Store(opus.SSRC, stream)
 
 	if err := db.CreateVoiceStream(vsp.guildID, vsp.channelID, streamID, userID.(string), opus.SSRC, opus.Timestamp, stream.FirstReceiveTime, stream.FirstSequence); err != nil {
-		return VoiceStream{}, fmt.Errorf("failed to create voice stream: %w", err)
+		return nil, fmt.Errorf("failed to create voice stream: %w", err)
 	}
 
 	vsp.logger.Info("talk",
@@ -85,10 +113,28 @@ func (vsp *VoiceStreamProcessor) getOrCreateStream(opus *discordgo.Packet) (Voic
 		"ear", streamID,
 	)
 
+	go vsp.handleTranscriptions(stream)
+
 	return stream, nil
 }
 
-func (vsp *VoiceStreamProcessor) logPacketInfo(opus *discordgo.Packet, stream VoiceStream, relativeOpusTimestamp uint32) {
+func (vsp *VoiceStreamProcessor) handleTranscriptions(stream *VoiceStream) {
+	for transcriptChan := range stream.DeepgramSession.Transcriptions() {
+		var finalTranscript string
+		for transcript := range transcriptChan {
+			finalTranscript = transcript
+		}
+		if finalTranscript != "" {
+			finalFormattedTranscript := fmt.Sprintf("> **%s**: %s", stream.UserID, finalTranscript)
+			_, err := vsp.session.ChannelMessageSend(vsp.channelID, finalFormattedTranscript)
+			if err != nil {
+				vsp.logger.Error("send final message", "error", err.Error())
+			}
+		}
+	}
+}
+
+func (vsp *VoiceStreamProcessor) logPacketInfo(opus *discordgo.Packet, stream *VoiceStream, relativeOpusTimestamp uint32) {
 	timestampSeconds := float64(relativeOpusTimestamp) / 48000.0
 	vsp.logger.Debug("voice packet",
 		"seq", int(opus.Sequence),
@@ -119,5 +165,5 @@ func (vsp *VoiceStreamProcessor) GetStreamIDFromSSRC(ssrc uint32) (string, bool)
 	if !ok {
 		return "", false
 	}
-	return stream.(VoiceStream).StreamID, true
+	return stream.(*VoiceStream).StreamID, true
 }
