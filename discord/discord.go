@@ -141,23 +141,24 @@ func (bot *DiscordBot) handleTranscript(channelID Venue, transcriptChan <-chan s
 
 	for transcript := range transcriptChan {
 		finalTranscript = transcript
+		formattedTranscript := "*" + transcript + "* 💬"
 
 		if lastMessage == nil {
 			// Send a new message if there's no existing message
-			msg, err := bot.session.ChannelMessageSend(channelID.ChannelID, transcript)
+			msg, err := bot.session.ChannelMessageSend(channelID.ChannelID, formattedTranscript)
 			if err != nil {
 				bot.logger.Error("send message", "error", err.Error())
 				continue
 			}
-			lastMessage = &ChannelMessage{MessageID: msg.ID, Content: transcript}
+			lastMessage = &ChannelMessage{MessageID: msg.ID, Content: formattedTranscript}
 		} else {
 			// Edit the existing message
-			_, err := bot.session.ChannelMessageEdit(channelID.ChannelID, lastMessage.MessageID, transcript)
+			_, err := bot.session.ChannelMessageEdit(channelID.ChannelID, lastMessage.MessageID, formattedTranscript)
 			if err != nil {
 				bot.logger.Error("edit message", "error", err.Error())
 				continue
 			}
-			lastMessage.Content = transcript
+			lastMessage.Content = formattedTranscript
 		}
 	}
 
@@ -169,7 +170,7 @@ func (bot *DiscordBot) handleTranscript(channelID Venue, transcriptChan <-chan s
 			bot.logger.Error("delete message", "error", err.Error())
 		}
 
-		// Send a new message with the final content
+		// Send a new message with the final content (without italics and speech bubble)
 		_, err = bot.session.ChannelMessageSend(channelID.ChannelID, finalTranscript)
 		if err != nil {
 			bot.logger.Error("send final message", "error", err.Error())
