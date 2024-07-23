@@ -24,7 +24,7 @@ type DiscordBot struct {
 	discordToken         string
 	session              *discordgo.Session
 	transcriptionService speech.LiveTranscriptionService
-	transcriptChannels   sync.Map
+	transcriptChannels   *sync.Map
 }
 
 func NewDiscordBot(token string, transcriptionService speech.LiveTranscriptionService, logger *log.Logger) (*DiscordBot, error) {
@@ -32,7 +32,7 @@ func NewDiscordBot(token string, transcriptionService speech.LiveTranscriptionSe
 		discordToken:         token,
 		transcriptionService: transcriptionService,
 		logger:               logger,
-		transcriptChannels:   sync.Map{},
+		transcriptChannels:   &sync.Map{},
 	}
 
 	dg, err := discordgo.New("Bot " + token)

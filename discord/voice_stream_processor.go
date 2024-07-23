@@ -18,8 +18,8 @@ type VoiceStreamProcessor struct {
 	guildID              string
 	channelID            string
 	logger               *log.Logger
-	ssrcToUser           sync.Map
-	ssrcToStream         sync.Map
+	ssrcToUser           *sync.Map
+	ssrcToStream         *sync.Map
 	transcriptionService speech.LiveTranscriptionService
 	session              *discordgo.Session
 }
@@ -29,6 +29,8 @@ func NewVoiceStreamProcessor(guildID, channelID string, logger *log.Logger, tran
 		guildID:              guildID,
 		channelID:            channelID,
 		logger:               logger,
+		ssrcToUser:           &sync.Map{},
+		ssrcToStream:         &sync.Map{},
 		transcriptionService: transcriptionService,
 		session:              session,
 	}
