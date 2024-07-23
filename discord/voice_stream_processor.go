@@ -113,63 +113,49 @@ func (vsp *VoiceStreamProcessor) getOrCreateStream(opus *discordgo.Packet) (*Voi
 
 func (vsp *VoiceStreamProcessor) handleTranscriptions(stream *VoiceStream) {
 	emoji := getEmojiFromStreamID(stream.StreamID)
-	var lastMessageID string
-	var currentTranscript string
 	var fullTranscript string
 
 	for transcriptChan := range stream.DeepgramSession.Transcriptions() {
 		for transcript := range transcriptChan {
-			currentTranscript = strings.TrimSpace(transcript)
+			currentTranscript := strings.TrimSpace(transcript)
 
 			if endsWithPunctuation(currentTranscript) || len(currentTranscript) > 1000 {
 				// Append to full transcript
 				fullTranscript += " " + currentTranscript
 				fullTranscript = strings.TrimSpace(fullTranscript)
 
-				// Format the full transcript
+				// Format the transcript
 				formattedTranscript := fmt.Sprintf("%s %s", emoji, fullTranscript)
 
-				// Send or edit the message
-				if lastMessageID == "" {
-					msg, err := vsp.session.ChannelMessageSend(vsp.channelID, formattedTranscript)
-					if err != nil {
-						vsp.logger.Error("send new message", "error", err.Error())
-					} else {
-						lastMessageID = msg.ID
-					}
-				} else {
-					_, err := vsp.session.ChannelMessageEdit(vsp.channelID, lastMessageID, formattedTranscript)
-					if err != nil {
-						vsp.logger.Error("edit message", "error", err.Error())
-						// If edit fails, try to send a new message
-						msg, err := vsp.session.ChannelMessageSend(vsp.channelID, formattedTranscript)
-						if err != nil {
-							vsp.logger.Error("send new message after edit failure", "error", err.Error())
-						} else {
-							lastMessageID = msg.ID
-						}
-					}
+				// Send a new message
+				_, err := vsp.session.ChannelMessageSend(vsp.channelID, formattedTranscript)
+				if err != nil {
+					vsp.logger.Error("send new message", "error", err.Error())
 				}
 
-				currentTranscript = ""
+				// Save the transcript to the database
+				if err := db.SaveTranscript(vsp.guildID, vsp.channelID, fullTranscript); err != nil {
+					vsp.logger.Error("save transcript to database", "error", err.Error())
+				}
+
+				// Reset the full transcript
+				fullTranscript = ""
 			}
 		}
 	}
 
 	// Send any remaining transcript
-	if currentTranscript != "" {
-		fullTranscript += " " + currentTranscript
-		fullTranscript = strings.TrimSpace(fullTranscript)
+	if fullTranscript != "" {
 		formattedTranscript := fmt.Sprintf("%s %s", emoji, fullTranscript)
 		_, err := vsp.session.ChannelMessageSend(vsp.channelID, formattedTranscript)
 		if err != nil {
 			vsp.logger.Error("send final message", "error", err.Error())
 		}
-	}
 
-	// Save the full transcript to the database
-	if err := db.SaveTranscript(vsp.guildID, vsp.channelID, fullTranscript); err != nil {
-		vsp.logger.Error("save transcript to database", "error", err.Error())
+		// Save the final transcript to the database
+		if err := db.SaveTranscript(vsp.guildID, vsp.channelID, fullTranscript); err != nil {
+			vsp.logger.Error("save final transcript to database", "error", err.Error())
+		}
 	}
 }
 
