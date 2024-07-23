@@ -24,6 +24,7 @@ type VoiceStream struct {
 }
 
 type VoiceState struct {
+	ssrcToUser  sync.Map
 	ssrcToStream sync.Map
 	guildID      string
 	channelID    string
@@ -88,6 +89,7 @@ func joinAllVoiceChannels(s *discordgo.Session, guildID, deepgramToken string) e
 
 func voiceStateUpdate(state *VoiceState, _ *discordgo.VoiceConnection, v *discordgo.VoiceSpeakingUpdate) {
 	logger.Info("Voice state update", "userID", v.UserID, "speaking", v.Speaking, "SSRC", v.SSRC)
+	state.ssrcToUser.Store(v.SSRC, v.UserID)
 }
 
 func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID, deepgramToken string) {
@@ -131,17 +133,21 @@ func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID, deepg
 		var streamID string
 		if !exists {
 			streamID = uuid.New().String()
-			userID, _ := state.GetUserIDFromSSRC(opus.SSRC)
-			err := db.CreateVoiceStream(state.guildID, state.channelID, streamID, userID, opus.SSRC, opus.Timestamp)
+			userID, ok := state.ssrcToUser.Load(opus.SSRC)
+			if !ok {
+				logger.Warn("User ID not found for SSRC", "SSRC", opus.SSRC)
+				userID = "unknown"
+			}
+			state.ssrcToStream.Store(opus.SSRC, VoiceStream{
+				UserID:   userID.(string),
+				StreamID: streamID,
+			})
+			err := db.CreateVoiceStream(state.guildID, state.channelID, streamID, userID.(string), opus.SSRC, opus.Timestamp)
 			if err != nil {
 				logger.Error("Failed to create voice stream", "error", err.Error())
 				continue
 			}
 			logger.Info("Created new voice stream", "streamID", streamID, "userID", userID, "SSRC", opus.SSRC)
-			state.ssrcToStream.Store(opus.SSRC, VoiceStream{
-				UserID:   userID,
-				StreamID: streamID,
-			})
 		} else {
 			stream := streamInterface.(VoiceStream)
 			streamID = stream.StreamID
@@ -190,11 +196,11 @@ func GetTranscriptChannel(guildID, channelID string) chan string {
 }
 
 func (state *VoiceState) GetUserIDFromSSRC(ssrc uint32) (string, bool) {
-	stream, ok := state.ssrcToStream.Load(ssrc)
+	userID, ok := state.ssrcToUser.Load(ssrc)
 	if !ok {
 		return "", false
 	}
-	return stream.(VoiceStream).UserID, true
+	return userID.(string), true
 }
 
 func (state *VoiceState) GetStreamIDFromSSRC(ssrc uint32) (string, bool) {
