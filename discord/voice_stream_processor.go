@@ -119,8 +119,7 @@ func (vsp *VoiceStreamProcessor) handleTranscriptions(stream *VoiceStream) {
 
 	for transcriptChan := range stream.DeepgramSession.Transcriptions() {
 		for transcript := range transcriptChan {
-			currentTranscript += " " + transcript
-			currentTranscript = strings.TrimSpace(currentTranscript)
+			currentTranscript = strings.TrimSpace(transcript)
 
 			if endsWithPunctuation(currentTranscript) || len(currentTranscript) > 1000 {
 				// Append to full transcript
