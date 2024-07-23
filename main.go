@@ -147,7 +147,6 @@ func handleTranscriptStream(w http.ResponseWriter, r *http.Request, guildID, cha
 	flusher.Flush()
 
 	// Start streaming new transcripts
-	key := fmt.Sprintf("%s:%s", guildID, channelID)
 	for {
 		select {
 		case <-time.After(100 * time.Millisecond):
