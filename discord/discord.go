@@ -137,8 +137,11 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channel
 
 func (bot *DiscordBot) handleTranscript(channelID Venue, transcriptChan <-chan string) {
 	var lastMessage *ChannelMessage
+	var finalTranscript string
 
 	for transcript := range transcriptChan {
+		finalTranscript = transcript
+
 		if lastMessage == nil {
 			// Send a new message if there's no existing message
 			msg, err := bot.session.ChannelMessageSend(channelID.ChannelID, transcript)
@@ -149,13 +152,27 @@ func (bot *DiscordBot) handleTranscript(channelID Venue, transcriptChan <-chan s
 			lastMessage = &ChannelMessage{MessageID: msg.ID, Content: transcript}
 		} else {
 			// Edit the existing message
-			newContent := transcript
-			_, err := bot.session.ChannelMessageEdit(channelID.ChannelID, lastMessage.MessageID, newContent)
+			_, err := bot.session.ChannelMessageEdit(channelID.ChannelID, lastMessage.MessageID, transcript)
 			if err != nil {
 				bot.logger.Error("edit message", "error", err.Error())
 				continue
 			}
-			lastMessage.Content = newContent
+			lastMessage.Content = transcript
+		}
+	}
+
+	// After the channel is closed (final transcript received)
+	if lastMessage != nil {
+		// Delete the last message
+		err := bot.session.ChannelMessageDelete(channelID.ChannelID, lastMessage.MessageID)
+		if err != nil {
+			bot.logger.Error("delete message", "error", err.Error())
+		}
+
+		// Send a new message with the final content
+		_, err = bot.session.ChannelMessageSend(channelID.ChannelID, finalTranscript)
+		if err != nil {
+			bot.logger.Error("send final message", "error", err.Error())
 		}
 	}
 }
