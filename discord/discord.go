@@ -11,7 +11,7 @@ import (
 	"jamie/deepgram"
 )
 
-type ChannelIdentifier struct {
+type Venue struct {
 	GuildID   string
 	ChannelID string
 }
@@ -61,13 +61,13 @@ func (bot *DiscordBot) Close() error {
 
 func (bot *DiscordBot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
 	bot.logger.Info("Joined new guild", "guild", event.Guild.Name)
-	err := bot.joinAllVoiceChannels(s, ChannelIdentifier{GuildID: event.Guild.ID, ChannelID: ""})
+	err := bot.joinAllVoiceChannels(s, Venue{GuildID: event.Guild.ID, ChannelID: ""})
 	if err != nil {
 		bot.logger.Error("Error joining voice channels", "error", err.Error())
 	}
 }
 
-func (bot *DiscordBot) joinAllVoiceChannels(s *discordgo.Session, channelID ChannelIdentifier) error {
+func (bot *DiscordBot) joinAllVoiceChannels(s *discordgo.Session, channelID Venue) error {
 	channels, err := s.GuildChannels(channelID.GuildID)
 	if err != nil {
 		return fmt.Errorf("error getting guild channels: %w", err)
@@ -80,7 +80,7 @@ func (bot *DiscordBot) joinAllVoiceChannels(s *discordgo.Session, channelID Chan
 				bot.logger.Error("Failed to join voice channel", "channel", channel.Name, "error", err.Error())
 			} else {
 				bot.logger.Info("Joined voice channel", "channel", channel.Name)
-				channelID := ChannelIdentifier{GuildID: channelID.GuildID, ChannelID: channel.ID}
+				channelID := Venue{GuildID: channelID.GuildID, ChannelID: channel.ID}
 				go func() {
 					bot.startDeepgramStream(vc, channelID)
 				}()
@@ -91,7 +91,7 @@ func (bot *DiscordBot) joinAllVoiceChannels(s *discordgo.Session, channelID Chan
 	return nil
 }
 
-func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channelID ChannelIdentifier) {
+func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channelID Venue) {
 	bot.logger.Info("Starting Deepgram stream", "guild", channelID.GuildID, "channel", channelID.ChannelID)
 
 	vsp := NewVoiceStreamProcessor(channelID.GuildID, channelID.ChannelID, bot.logger)
@@ -101,7 +101,7 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channel
 	})
 
 	dgClient, err := deepgram.NewDeepgramClient(bot.deepgramToken, channelID.GuildID, channelID.ChannelID, func(guildID, channelID, transcript string) {
-		bot.handleTranscript(ChannelIdentifier{GuildID: guildID, ChannelID: channelID}, transcript)
+		bot.handleTranscript(Venue{GuildID: guildID, ChannelID: channelID}, transcript)
 	})
 	if err != nil {
 		bot.logger.Error("Error creating Deepgram client", "error", err.Error())
@@ -134,7 +134,7 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channel
 	dgClient.Stop()
 }
 
-func (bot *DiscordBot) handleTranscript(channelID ChannelIdentifier, transcript string) {
+func (bot *DiscordBot) handleTranscript(channelID Venue, transcript string) {
 	// Send the transcript to Discord
 	_, err := bot.session.ChannelMessageSend(channelID.ChannelID, transcript)
 	if err != nil {
@@ -148,10 +148,8 @@ func (bot *DiscordBot) handleTranscript(channelID ChannelIdentifier, transcript 
 	}
 }
 
-func (bot *DiscordBot) GetTranscriptChannel(channelID ChannelIdentifier) chan string {
+func (bot *DiscordBot) GetTranscriptChannel(channelID Venue) chan string {
 	key := fmt.Sprintf("%s:%s", channelID.GuildID, channelID.ChannelID)
 	ch, _ := bot.transcriptChannels.LoadOrStore(key, make(chan string))
 	return ch.(chan string)
 }
-
-// These methods are now part of VoiceStreamProcessor, so we can remove them from here.

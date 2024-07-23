@@ -141,7 +141,7 @@ func handleTranscriptStream(w http.ResponseWriter, r *http.Request, guildID, cha
 	flusher.Flush()
 
 	// Get the channel for this guild and channel
-	transcriptChan := bot.GetTranscriptChannel(guildID, channelID)
+	transcriptChan := bot.GetTranscriptChannel(discord.Venue{GuildID: guildID, ChannelID: channelID})
 
 	// Start streaming new transcripts
 	for {
