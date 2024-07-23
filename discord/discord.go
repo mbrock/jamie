@@ -142,7 +142,7 @@ func (bot *DiscordBot) handleTranscript(channelID Venue, transcriptChan <-chan s
 	for transcript := range transcriptChan {
 		finalTranscript = transcript
 		username := bot.getUsernameFromTranscript(transcript)
-		formattedTranscript := fmt.Sprintf("> **%s**: “%s 💬”", username, transcript)
+		formattedTranscript := fmt.Sprintf("> **%s**: %s 💬", username, transcript)
 
 		if lastMessage == nil {
 			// Send a new message if there's no existing message
@@ -175,7 +175,7 @@ func (bot *DiscordBot) handleTranscript(channelID Venue, transcriptChan <-chan s
 
 		// Send a new message with the final content (without speech bubble)
 		username := bot.getUsernameFromTranscript(finalTranscript)
-		finalFormattedTranscript := fmt.Sprintf("> **%s**: “%s”", username, finalTranscript)
+		finalFormattedTranscript := fmt.Sprintf("> **%s**: %s", username, finalTranscript)
 		_, err := bot.session.ChannelMessageSend(channelID.ChannelID, finalFormattedTranscript)
 		if err != nil {
 			bot.logger.Error("send final message", "error", err.Error())
