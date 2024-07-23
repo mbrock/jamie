@@ -136,44 +136,14 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channel
 }
 
 func (bot *DiscordBot) handleTranscript(channelID Venue, transcriptChan <-chan string) {
-	var lastMessage *ChannelMessage
 	var finalTranscript string
 
 	for transcript := range transcriptChan {
 		finalTranscript = transcript
-		username := bot.getUsernameFromTranscript(transcript)
-		formattedTranscript := fmt.Sprintf("> **%s**: %s 💬", username, transcript)
-
-		if lastMessage == nil {
-			// Send a new message if there's no existing message
-			msg, err := bot.session.ChannelMessageSend(channelID.ChannelID, formattedTranscript)
-			if err != nil {
-				bot.logger.Error("send message", "error", err.Error())
-				continue
-			}
-			lastMessage = &ChannelMessage{MessageID: msg.ID, Content: formattedTranscript}
-		} else {
-			// Edit the existing message
-			_, err := bot.session.ChannelMessageEdit(channelID.ChannelID, lastMessage.MessageID, formattedTranscript)
-			if err != nil {
-				bot.logger.Error("edit message", "error", err.Error())
-				continue
-			}
-			lastMessage.Content = formattedTranscript
-		}
 	}
 
 	// After the channel is closed (final transcript received)
-	if lastMessage != nil {
-		// Delete the last message concurrently
-		go func() {
-			err := bot.session.ChannelMessageDelete(channelID.ChannelID, lastMessage.MessageID)
-			if err != nil {
-				bot.logger.Error("delete message", "error", err.Error())
-			}
-		}()
-
-		// Send a new message with the final content (without speech bubble)
+	if finalTranscript != "" {
 		username := bot.getUsernameFromTranscript(finalTranscript)
 		finalFormattedTranscript := fmt.Sprintf("> **%s**: %s", username, finalTranscript)
 		_, err := bot.session.ChannelMessageSend(channelID.ChannelID, finalFormattedTranscript)
