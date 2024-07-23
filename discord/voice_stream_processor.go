@@ -189,7 +189,8 @@ func endsWithPunctuation(s string) bool {
 // Helper function to generate a consistent emoji based on the stream ID
 func getEmojiFromStreamID(streamID string) string {
 	// List of emojis to choose from
-	emojis := []string{"😀", "😎", "🤖", "👽", "🐱", "🐶", "🦄", "🐸", "🦉", "🦋", "🌈", "🌟", "🍎", "🍕", "🎸", "🚀"}
+	emojis := []string{"😀", "😎", "🤖", "👽", "🐱", "🐶", "🦄", "🐸", "🦉", "🦋", "🌈", "🌟", "🍎", "🍕", "🎸", "🚀", 
+		"🧙", "🧛", "🧜", "🧚", "🧝", "🦸", "🦹", "🥷", "👨‍🚀", "👩‍🔬", "🕵️", "👨‍🍳", "🧑‍🎨", "👩‍🏫", "🧑‍🌾", "🧑‍🏭"}
 
 	// Use the first 4 characters of the stream ID to generate a consistent index
 	index := 0
