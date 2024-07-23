@@ -45,6 +45,7 @@ func (c *DeepgramClient) Start(ctx context.Context) (LiveTranscriptionSession, e
 
 	session := &DeepgramSession{
 		transcriptions: make(chan string),
+		sb:             &strings.Builder{},
 	}
 
 	client, err := listen.NewWebSocket(ctx, c.token, cOptions, tOptions, session)
@@ -64,12 +65,17 @@ func (c *DeepgramClient) Start(ctx context.Context) (LiveTranscriptionSession, e
 
 type DeepgramSession struct {
 	client         *listen.WebSocketClient
-	sb             strings.Builder
+	sb             *strings.Builder
 	transcriptions chan string
 }
 
 func (s *DeepgramSession) Stop() error {
 	s.client.Stop()
+	return nil
+}
+
+func (s *DeepgramSession) Close(ocr *api.CloseResponse) error {
+	logger.Info("Deepgram connection closed", "reason", ocr.Type)
 	return nil
 }
 
@@ -81,7 +87,7 @@ func (s *DeepgramSession) Transcriptions() <-chan string {
 	return s.transcriptions
 }
 
-func (c *DeepgramClient) Message(mr *api.MessageResponse) error {
+func (s *DeepgramSession) Message(mr *api.MessageResponse) error {
 	sentence := strings.TrimSpace(mr.Channel.Alternatives[0].Transcript)
 
 	if len(mr.Channel.Alternatives) == 0 || len(sentence) == 0 {
@@ -89,54 +95,49 @@ func (c *DeepgramClient) Message(mr *api.MessageResponse) error {
 	}
 
 	if mr.IsFinal {
-		c.sb.WriteString(sentence)
-		c.sb.WriteString(" ")
+		s.sb.WriteString(sentence)
+		s.sb.WriteString(" ")
 
 		if mr.SpeechFinal {
-			transcript := strings.TrimSpace(c.sb.String())
+			transcript := strings.TrimSpace(s.sb.String())
 			logger.Info("Transcript", "text", transcript)
 
 			// Send the transcript through the channel
-			c.transcriptions <- transcript
+			s.transcriptions <- transcript
 
-			c.sb.Reset()
+			s.sb.Reset()
 		}
 	}
 
 	return nil
 }
 
-func (c *DeepgramClient) Open(ocr *api.OpenResponse) error {
+func (s *DeepgramSession) Open(ocr *api.OpenResponse) error {
 	logger.Info("Deepgram connection opened")
 	return nil
 }
 
-func (c *DeepgramClient) Metadata(md *api.MetadataResponse) error {
+func (s *DeepgramSession) Metadata(md *api.MetadataResponse) error {
 	logger.Info("Received metadata", "metadata", md)
 	return nil
 }
 
-func (c *DeepgramClient) SpeechStarted(ssr *api.SpeechStartedResponse) error {
+func (s *DeepgramSession) SpeechStarted(ssr *api.SpeechStartedResponse) error {
 	logger.Info("Speech started", "timestamp", ssr.Timestamp)
 	return nil
 }
 
-func (c *DeepgramClient) UtteranceEnd(ur *api.UtteranceEndResponse) error {
+func (s *DeepgramSession) UtteranceEnd(ur *api.UtteranceEndResponse) error {
 	logger.Info("Utterance ended", "timestamp", ur.LastWordEnd)
 	return nil
 }
 
-func (c *DeepgramClient) Close(ocr *api.CloseResponse) error {
-	logger.Info("Deepgram connection closed", "reason", ocr.Type)
-	return nil
-}
-
-func (c *DeepgramClient) Error(er *api.ErrorResponse) error {
+func (s *DeepgramSession) Error(er *api.ErrorResponse) error {
 	logger.Error("Deepgram error", "type", er.Type, "description", er.Description)
 	return nil
 }
 
-func (c *DeepgramClient) UnhandledEvent(byData []byte) error {
+func (s *DeepgramSession) UnhandledEvent(byData []byte) error {
 	logger.Warn("Unhandled Deepgram event", "data", string(byData))
 	return nil
 }
