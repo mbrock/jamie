@@ -19,6 +19,7 @@ var (
 	DeepgramToken string
 	HttpPort      string
 	logger        *log.Logger
+	bot           *discord.DiscordBot
 )
 
 func init() {
@@ -48,7 +49,8 @@ func main() {
 
 	go startHTTPServer()
 
-	bot, err := discord.NewDiscordBot(DiscordToken, DeepgramToken)
+	var err error
+	bot, err = discord.NewDiscordBot(DiscordToken, DeepgramToken)
 	if err != nil {
 		logger.Fatal("Error starting Discord bot", "error", err.Error())
 	}
