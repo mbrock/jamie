@@ -79,10 +79,11 @@ func (vsp *VoiceStreamProcessor) getOrCreateStream(opus *discordgo.Packet) (Voic
 		return VoiceStream{}, fmt.Errorf("failed to create voice stream: %w", err)
 	}
 
-	vsp.logger.Info("new voice stream",
-		"stream_id", streamID,
-		"user_id", userID.(string),
-		"ssrc", int(opus.SSRC))
+	vsp.logger.Info("talk",
+		"src", int(opus.SSRC),
+		"guy", userID.(string),
+		"ear", streamID,
+	)
 
 	return stream, nil
 }
@@ -91,15 +92,17 @@ func (vsp *VoiceStreamProcessor) logPacketInfo(opus *discordgo.Packet, stream Vo
 	timestampSeconds := float64(relativeOpusTimestamp) / 48000.0
 	vsp.logger.Debug("voice packet",
 		"seq", int(opus.Sequence),
-		"timestamp", timestampSeconds,
-		"user_id", stream.UserID)
+		"sec", timestampSeconds,
+		"guy", stream.UserID,
+	)
 }
 
 func (vsp *VoiceStreamProcessor) HandleVoiceStateUpdate(v *discordgo.VoiceSpeakingUpdate) {
-	vsp.logger.Info("voice state update",
-		"user_id", v.UserID,
-		"speaking", v.Speaking,
-		"ssrc", v.SSRC)
+	vsp.logger.Info("talk",
+		"src", v.SSRC,
+		"guy", v.UserID,
+		"yap", v.Speaking,
+	)
 	vsp.ssrcToUser.Store(uint32(v.SSRC), v.UserID)
 }
 

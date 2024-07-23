@@ -45,10 +45,10 @@ func init() {
 }
 
 func createLoggers() (mainLogger, discordLogger, deepgramLogger, httpLogger *log.Logger) {
-	mainLogger = logger.WithPrefix("main")
-	discordLogger = logger.WithPrefix("chat")
-	deepgramLogger = logger.WithPrefix("hear")
-	httpLogger = logger.WithPrefix("http")
+	mainLogger = logger.WithPrefix("app")
+	discordLogger = logger.WithPrefix("yap")
+	deepgramLogger = logger.WithPrefix("ear")
+	httpLogger = logger.WithPrefix("web")
 	return
 }
 
@@ -71,7 +71,6 @@ func main() {
 	}
 	defer bot.Close()
 
-	mainLogger.Info("press ctrl-c to exit")
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc

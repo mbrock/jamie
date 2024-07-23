@@ -94,9 +94,10 @@ func (s *DeepgramSession) Message(mr *api.MessageResponse) error {
 	s.sb.WriteString(sentence)
 	s.sb.WriteString(" ")
 
+	transcript := strings.TrimSpace(s.sb.String())
+
 	if mr.IsFinal {
-		transcript := strings.TrimSpace(s.sb.String())
-		s.logger.Info("transcript", "text", transcript)
+		s.logger.Info("hear", "txt", transcript)
 
 		// Create a new channel for this transcription
 		transcriptChan := make(chan string)
@@ -109,13 +110,15 @@ func (s *DeepgramSession) Message(mr *api.MessageResponse) error {
 		if mr.SpeechFinal {
 			s.sb.Reset()
 		}
+	} else {
+		s.logger.Info("hear", "tmp", sentence)
 	}
 
 	return nil
 }
 
 func (s *DeepgramSession) Open(ocr *api.OpenResponse) error {
-	s.logger.Info("opened")
+	s.logger.Info("open", "kind", "deepgram")
 	return nil
 }
 

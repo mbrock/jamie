@@ -45,7 +45,7 @@ func NewDiscordBot(token string, transcriptionService speech.LiveTranscriptionSe
 	}
 
 	bot.session = dg
-	bot.logger.Info("boot", "user", bot.session.State.User.Username, "name", bot.session.State.User.GlobalName)
+	bot.logger.Info("boot", "username", bot.session.State.User.Username)
 	return bot, nil
 }
 
