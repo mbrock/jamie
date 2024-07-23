@@ -72,12 +72,11 @@ func (vsp *VoiceStreamProcessor) getOrCreateStream(opus *discordgo.Packet) (*Voi
 		return streamInterface.(*VoiceStream), nil
 	}
 
-	// Create new stream
 	streamID := uuid.New().String()
 	userID, ok := vsp.ssrcToUser.Load(opus.SSRC)
 	if !ok {
 		vsp.logger.Debug("user id not found", "ssrc", int(opus.SSRC))
-		userID = "unknown"
+		userID = ""
 	}
 
 	deepgramSession, err := vsp.transcriptionService.Start(context.Background())
@@ -112,14 +111,16 @@ func (vsp *VoiceStreamProcessor) getOrCreateStream(opus *discordgo.Packet) (*Voi
 }
 
 func (vsp *VoiceStreamProcessor) handleTranscriptions(stream *VoiceStream) {
+	// Generate a consistent emoji based on the stream ID
+	emoji := getEmojiFromStreamID(stream.StreamID)
+
 	for transcriptChan := range stream.DeepgramSession.Transcriptions() {
 		var finalTranscript string
 		for transcript := range transcriptChan {
 			finalTranscript = transcript
 		}
 		if finalTranscript != "" {
-			username := vsp.getUsernameFromID(stream.UserID)
-			finalFormattedTranscript := fmt.Sprintf("> **%s**: %s", username, finalTranscript)
+			finalFormattedTranscript := fmt.Sprintf("%s %s", emoji, finalTranscript)
 			_, err := vsp.session.ChannelMessageSend(vsp.channelID, finalFormattedTranscript)
 			if err != nil {
 				vsp.logger.Error("send final message", "error", err.Error())
@@ -128,20 +129,39 @@ func (vsp *VoiceStreamProcessor) handleTranscriptions(stream *VoiceStream) {
 	}
 }
 
-func (vsp *VoiceStreamProcessor) getUsernameFromID(userID string) string {
-	if cachedName, ok := vsp.userCache.Load(userID); ok {
-		return cachedName.(string)
+// Helper function to generate a consistent emoji based on the stream ID
+func getEmojiFromStreamID(streamID string) string {
+	// List of emojis to choose from
+	emojis := []string{"😀", "😎", "🤖", "👽", "🐱", "🐶", "🦄", "🐸", "🦉", "🦋", "🌈", "🌟", "🍎", "🍕", "🎸", "🚀"}
+
+	// Use the first 4 characters of the stream ID to generate a consistent index
+	index := 0
+	for i := 0; i < 4 && i < len(streamID); i++ {
+		index += int(streamID[i])
 	}
 
-	user, err := vsp.session.User(userID)
-	if err != nil {
-		vsp.logger.Error("fetch user", "error", err.Error())
-		return userID // Fallback to userID if we can't fetch the user
-	}
-
-	vsp.userCache.Store(userID, user.Username)
-	return user.Username
+	// Use modulo to ensure the index is within the range of the emojis slice
+	return emojis[index%len(emojis)]
 }
+
+// func (vsp *VoiceStreamProcessor) getUsernameFromID(userID string) string {
+// 	if userID == "" {
+// 		return "unknown"
+// 	}
+
+// 	if cachedName, ok := vsp.userCache.Load(userID); ok {
+// 		return cachedName.(string)
+// 	}
+
+// 	user, err := vsp.session.User(userID)
+// 	if err != nil {
+// 		vsp.logger.Error("fetch user", "error", err.Error())
+// 		return userID // Fallback to userID if we can't fetch the user
+// 	}
+
+// 	vsp.userCache.Store(userID, user.Username)
+// 	return user.Username
+// }
 
 func (vsp *VoiceStreamProcessor) logPacketInfo(opus *discordgo.Packet, stream *VoiceStream, relativeOpusTimestamp uint32) {
 	timestampSeconds := float64(relativeOpusTimestamp) / 48000.0
