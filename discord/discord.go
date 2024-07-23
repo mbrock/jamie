@@ -154,18 +154,4 @@ func (bot *DiscordBot) GetTranscriptChannel(channelID ChannelIdentifier) chan st
 	return ch.(chan string)
 }
 
-func (state *VoiceState) GetUserIDFromSSRC(ssrc uint32) (string, bool) {
-	userID, ok := state.ssrcToUser.Load(ssrc)
-	if !ok {
-		return "", false
-	}
-	return userID.(string), true
-}
-
-func (state *VoiceState) GetStreamIDFromSSRC(ssrc uint32) (string, bool) {
-	stream, ok := state.ssrcToStream.Load(ssrc)
-	if !ok {
-		return "", false
-	}
-	return stream.(VoiceStream).StreamID, true
-}
+// These methods are now part of VoiceStreamProcessor, so we can remove them from here.
