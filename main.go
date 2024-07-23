@@ -146,14 +146,15 @@ func handleTranscriptStream(w http.ResponseWriter, r *http.Request, guildID, cha
 	}
 	flusher.Flush()
 
+	// Get the transcript channel for this guild and channel
+	transcriptChan := bot.GetTranscriptChannel(discord.Venue{GuildID: guildID, ChannelID: channelID})
+
 	// Start streaming new transcripts
 	for {
 		select {
-		case <-time.After(100 * time.Millisecond):
-			if currentTranscript, ok := bot.GetCurrentTranscript(guildID, channelID); ok {
-				writeTranscript(currentTranscript)
-				flusher.Flush()
-			}
+		case transcript := <-transcriptChan:
+			writeTranscript(transcript)
+			flusher.Flush()
 		case <-r.Context().Done():
 			return
 		}

@@ -22,7 +22,6 @@ type DiscordBot struct {
 	discordToken         string
 	session              *discordgo.Session
 	transcriptionService speech.LiveTranscriptionService
-	currentTranscripts   sync.Map
 }
 
 func (bot *DiscordBot) SetLogger(l *log.Logger) {
@@ -136,23 +135,17 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channel
 
 func (bot *DiscordBot) handleTranscript(channelID Venue, transcriptChan <-chan string) {
 	key := fmt.Sprintf("%s:%s", channelID.GuildID, channelID.ChannelID)
-	bot.currentTranscripts.Store(key, "")
 
 	for transcript := range transcriptChan {
-		// Update the current transcript
-		bot.currentTranscripts.Store(key, transcript)
+		// Send the transcript to Discord
+		_, err := bot.session.ChannelMessageSend(channelID.ChannelID, transcript)
+		if err != nil {
+			bot.logger.Error("Failed to send message to Discord", "error", err.Error())
+		}
 
-		// Send the transcript to Discord only if it's the final one
-		if transcriptChan == nil {
-			_, err := bot.session.ChannelMessageSend(channelID.ChannelID, transcript)
-			if err != nil {
-				bot.logger.Error("Failed to send message to Discord", "error", err.Error())
-			}
-
-			// Send the final transcript to the channel
-			if ch, ok := bot.transcriptChannels.Load(key); ok {
-				ch.(chan string) <- transcript
-			}
+		// Send the transcript to the channel
+		if ch, ok := bot.transcriptChannels.Load(key); ok {
+			ch.(chan string) <- transcript
 		}
 	}
 }
@@ -163,11 +156,3 @@ func (bot *DiscordBot) GetTranscriptChannel(channelID Venue) chan string {
 	return ch.(chan string)
 }
 
-func (bot *DiscordBot) GetCurrentTranscript(guildID, channelID string) (string, bool) {
-	key := fmt.Sprintf("%s:%s", guildID, channelID)
-	transcript, ok := bot.currentTranscripts.Load(key)
-	if !ok {
-		return "", false
-	}
-	return transcript.(string), true
-}
