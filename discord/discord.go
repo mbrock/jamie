@@ -141,7 +141,8 @@ func (bot *DiscordBot) handleTranscript(channelID Venue, transcriptChan <-chan s
 
 	for transcript := range transcriptChan {
 		finalTranscript = transcript
-		formattedTranscript := "*" + transcript + "* 💬"
+		username := bot.getUsernameFromTranscript(transcript)
+		formattedTranscript := fmt.Sprintf("> **%s**: %s 💬", username, transcript)
 
 		if lastMessage == nil {
 			// Send a new message if there's no existing message
@@ -170,12 +171,21 @@ func (bot *DiscordBot) handleTranscript(channelID Venue, transcriptChan <-chan s
 			bot.logger.Error("delete message", "error", err.Error())
 		}
 
-		// Send a new message with the final content (without italics and speech bubble)
-		_, err = bot.session.ChannelMessageSend(channelID.ChannelID, finalTranscript)
+		// Send a new message with the final content (without speech bubble)
+		username := bot.getUsernameFromTranscript(finalTranscript)
+		finalFormattedTranscript := fmt.Sprintf("> **%s**: %s", username, finalTranscript)
+		_, err = bot.session.ChannelMessageSend(channelID.ChannelID, finalFormattedTranscript)
 		if err != nil {
 			bot.logger.Error("send final message", "error", err.Error())
 		}
 	}
+}
+
+func (bot *DiscordBot) getUsernameFromTranscript(transcript string) string {
+	// This is a placeholder function. You'll need to implement the logic
+	// to extract the username from the transcript based on your specific format.
+	// For now, it returns a default value.
+	return "Speaker"
 }
 
 func (bot *DiscordBot) GetTranscriptChannel(channelID Venue) chan chan string {
