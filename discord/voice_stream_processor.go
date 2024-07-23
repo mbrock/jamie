@@ -115,6 +115,7 @@ func (vsp *VoiceStreamProcessor) handleTranscriptions(stream *VoiceStream) {
 	emoji := getEmojiFromStreamID(stream.StreamID)
 	var lastMessageID string
 	var currentTranscript string
+	var fullTranscript string
 
 	for transcriptChan := range stream.DeepgramSession.Transcriptions() {
 		for transcript := range transcriptChan {
@@ -122,8 +123,14 @@ func (vsp *VoiceStreamProcessor) handleTranscriptions(stream *VoiceStream) {
 			currentTranscript = strings.TrimSpace(currentTranscript)
 
 			if endsWithPunctuation(currentTranscript) || len(currentTranscript) > 1000 {
+				// Append to full transcript
+				fullTranscript += " " + currentTranscript
+				fullTranscript = strings.TrimSpace(fullTranscript)
+
+				// Format the full transcript
+				formattedTranscript := fmt.Sprintf("%s %s", emoji, fullTranscript)
+
 				// Send or edit the message
-				formattedTranscript := fmt.Sprintf("%s %s", emoji, currentTranscript)
 				if lastMessageID == "" {
 					msg, err := vsp.session.ChannelMessageSend(vsp.channelID, formattedTranscript)
 					if err != nil {
@@ -144,6 +151,7 @@ func (vsp *VoiceStreamProcessor) handleTranscriptions(stream *VoiceStream) {
 						}
 					}
 				}
+
 				currentTranscript = ""
 			}
 		}
@@ -151,11 +159,18 @@ func (vsp *VoiceStreamProcessor) handleTranscriptions(stream *VoiceStream) {
 
 	// Send any remaining transcript
 	if currentTranscript != "" {
-		formattedTranscript := fmt.Sprintf("%s %s", emoji, currentTranscript)
+		fullTranscript += " " + currentTranscript
+		fullTranscript = strings.TrimSpace(fullTranscript)
+		formattedTranscript := fmt.Sprintf("%s %s", emoji, fullTranscript)
 		_, err := vsp.session.ChannelMessageSend(vsp.channelID, formattedTranscript)
 		if err != nil {
 			vsp.logger.Error("send final message", "error", err.Error())
 		}
+	}
+
+	// Save the full transcript to the database
+	if err := db.SaveTranscript(vsp.guildID, vsp.channelID, fullTranscript); err != nil {
+		vsp.logger.Error("save transcript to database", "error", err.Error())
 	}
 }
 
