@@ -40,7 +40,6 @@ func (c *DeepgramClient) Start(ctx context.Context) (LiveTranscriptionSession, e
 
 	session := &DeepgramSession{
 		transcriptions: make(chan chan string),
-		sb:             &strings.Builder{},
 		logger:         c.logger,
 	}
 
@@ -95,34 +94,21 @@ func (s *DeepgramSession) Message(mr *api.MessageResponse) error {
 		return nil
 	}
 
-	if mr.IsFinal {
-		s.logger.Info("hear", "txt", transcript)
+	s.logger.Info("hear", "txt", transcript)
 
-		// Close the current transcript channel if it exists
-		if s.currentTranscriptCh != nil {
-			close(s.currentTranscriptCh)
-		}
-
-		// Create a new channel for this transcription
+	if s.currentTranscriptCh == nil {
+		s.logger.Info("next")
 		s.currentTranscriptCh = make(chan string)
 		s.transcriptions <- s.currentTranscriptCh
+	}
 
-		// Send the transcript
-		s.currentTranscriptCh <- transcript
+	s.currentTranscriptCh <- transcript
 
-		// Reset the current transcript channel
+	if mr.IsFinal {
+		close(s.currentTranscriptCh)
 		s.currentTranscriptCh = nil
 	} else {
 		s.logger.Info("hear", "tmp", transcript)
-
-		// If there's no current transcript channel, create one
-		if s.currentTranscriptCh == nil {
-			s.currentTranscriptCh = make(chan string)
-			s.transcriptions <- s.currentTranscriptCh
-		}
-
-		// Send the interim transcript
-		s.currentTranscriptCh <- transcript
 	}
 
 	return nil

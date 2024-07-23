@@ -103,10 +103,11 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channel
 		return
 	}
 	defer session.Stop()
-
 	go func() {
 		for transcriptChan := range session.Transcriptions() {
-			go bot.handleTranscript(channelID, transcriptChan)
+			go func(tc <-chan string) {
+				bot.handleTranscript(channelID, tc)
+			}(transcriptChan)
 		}
 	}()
 
@@ -130,29 +131,12 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channel
 }
 
 func (bot *DiscordBot) handleTranscript(channelID Venue, transcriptChan <-chan string) {
-	key := fmt.Sprintf("%s:%s", channelID.GuildID, channelID.ChannelID)
-
-	// Create a new channel for this transcription
-	singleTranscriptChan := make(chan string)
-
-	// Send the channel to the transcriptChannels
-	if ch, ok := bot.transcriptChannels.Load(key); ok {
-		ch.(chan chan string) <- singleTranscriptChan
-	}
-
 	for transcript := range transcriptChan {
-		// Send the transcript to Discord
 		_, err := bot.session.ChannelMessageSend(channelID.ChannelID, transcript)
 		if err != nil {
 			bot.logger.Error("send message", "error", err.Error())
 		}
-
-		// Send the transcript to the channel
-		singleTranscriptChan <- transcript
 	}
-
-	// Close the channel when we're done
-	close(singleTranscriptChan)
 }
 
 func (bot *DiscordBot) GetTranscriptChannel(channelID Venue) chan chan string {
