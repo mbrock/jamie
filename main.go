@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/charmbracelet/log"
 
@@ -144,9 +145,6 @@ func handleTranscriptStream(w http.ResponseWriter, r *http.Request, guildID, cha
 		writeTranscript(transcript)
 	}
 	flusher.Flush()
-
-	// Get the channel for this guild and channel
-	transcriptChan := bot.GetTranscriptChannel(discord.Venue{GuildID: guildID, ChannelID: channelID})
 
 	// Start streaming new transcripts
 	key := fmt.Sprintf("%s:%s", guildID, channelID)
