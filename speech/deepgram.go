@@ -72,7 +72,7 @@ func (s *DeepgramSession) Stop() error {
 }
 
 func (s *DeepgramSession) Close(ocr *api.CloseResponse) error {
-	s.logger.Info("Deepgram connection closed", "reason", ocr.Type)
+	s.logger.Info("closed", "reason", ocr.Type)
 	return nil
 }
 
@@ -96,7 +96,7 @@ func (s *DeepgramSession) Message(mr *api.MessageResponse) error {
 
 	if mr.IsFinal {
 		transcript := strings.TrimSpace(s.sb.String())
-		s.logger.Info("Transcript", "text", transcript)
+		s.logger.Info("transcript", "text", transcript)
 
 		// Create a new channel for this transcription
 		transcriptChan := make(chan string)
@@ -115,31 +115,31 @@ func (s *DeepgramSession) Message(mr *api.MessageResponse) error {
 }
 
 func (s *DeepgramSession) Open(ocr *api.OpenResponse) error {
-	s.logger.Info("Deepgram connection opened")
+	s.logger.Info("opened")
 	return nil
 }
 
 func (s *DeepgramSession) Metadata(md *api.MetadataResponse) error {
-	s.logger.Info("Received metadata", "metadata", md)
+	s.logger.Info("metadata", "metadata", md)
 	return nil
 }
 
 func (s *DeepgramSession) SpeechStarted(ssr *api.SpeechStartedResponse) error {
-	s.logger.Debug("Speech started", "timestamp", ssr.Timestamp)
+	s.logger.Debug("speech start", "timestamp", ssr.Timestamp)
 	return nil
 }
 
 func (s *DeepgramSession) UtteranceEnd(ur *api.UtteranceEndResponse) error {
-	s.logger.Debug("Utterance ended", "timestamp", ur.LastWordEnd)
+	s.logger.Debug("utterance end", "timestamp", ur.LastWordEnd)
 	return nil
 }
 
 func (s *DeepgramSession) Error(er *api.ErrorResponse) error {
-	s.logger.Error("Deepgram error", "type", er.Type, "description", er.Description)
+	s.logger.Error("error", "type", er.Type, "description", er.Description)
 	return nil
 }
 
 func (s *DeepgramSession) UnhandledEvent(byData []byte) error {
-	s.logger.Warn("Unhandled Deepgram event", "data", string(byData))
+	s.logger.Warn("unhandled event", "data", string(byData))
 	return nil
 }
