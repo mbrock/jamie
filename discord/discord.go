@@ -109,21 +109,13 @@ func (bot *DiscordBot) joinAllVoiceChannels(s *discordgo.Session, channelID Chan
 	return nil
 }
 
-func (bot *DiscordBot) voiceStateUpdate(state *VoiceState, _ *discordgo.VoiceConnection, v *discordgo.VoiceSpeakingUpdate) {
-	bot.logger.Info("Voice state update", "userID", v.UserID, "speaking", v.Speaking, "SSRC", v.SSRC)
-	state.ssrcToUser.Store(v.SSRC, v.UserID)
-}
-
 func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channelID ChannelIdentifier) {
 	bot.logger.Info("Starting Deepgram stream", "guild", channelID.GuildID, "channel", channelID.ChannelID)
 
-	state := &VoiceState{
-		guildID:   channelID.GuildID,
-		channelID: channelID.ChannelID,
-	}
+	vsp := NewVoiceStreamProcessor(channelID.GuildID, channelID.ChannelID, bot.logger)
 
 	v.AddHandler(func(vc *discordgo.VoiceConnection, vs *discordgo.VoiceSpeakingUpdate) {
-		bot.voiceStateUpdate(state, vc, vs)
+		vsp.HandleVoiceStateUpdate(vs)
 	})
 
 	dgClient, err := deepgram.NewDeepgramClient(bot.deepgramToken, channelID.GuildID, channelID.ChannelID, func(guildID, channelID, transcript string) {
@@ -151,48 +143,10 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channel
 			bot.logger.Error("Failed to send audio to Deepgram", "error", err.Error())
 		}
 
-		// Get or create the stream for this SSRC
-		streamInterface, exists := state.ssrcToStream.Load(opus.SSRC)
-		var stream VoiceStream
-		if !exists {
-			streamID := uuid.New().String()
-			userID, ok := state.ssrcToUser.Load(opus.SSRC)
-			if !ok {
-				bot.logger.Warn("User ID not found for SSRC", "SSRC", opus.SSRC)
-				userID = "unknown"
-			}
-			stream = VoiceStream{
-				UserID:             userID.(string),
-				StreamID:           streamID,
-				FirstOpusTimestamp: opus.Timestamp,
-				FirstReceiveTime:   time.Now().UnixNano(),
-				FirstSequence:      opus.Sequence,
-			}
-			state.ssrcToStream.Store(opus.SSRC, stream)
-			err := db.CreateVoiceStream(state.guildID, state.channelID, streamID, userID.(string), opus.SSRC, opus.Timestamp, stream.FirstReceiveTime, stream.FirstSequence)
-			if err != nil {
-				bot.logger.Error("Failed to create voice stream", "error", err.Error())
-				continue
-			}
-			bot.logger.Info("Created new voice stream", "streamID", streamID, "userID", userID, "SSRC", opus.SSRC)
-		} else {
-			stream = streamInterface.(VoiceStream)
-		}
-
-		// Calculate relative timestamps and sequence
-		relativeOpusTimestamp := opus.Timestamp - stream.FirstOpusTimestamp
-		relativeSequence := opus.Sequence - stream.FirstSequence
-		receiveTime := time.Now().UnixNano()
-
-		// Save the Discord voice packet to the database
-		err = db.SaveDiscordVoicePacket(stream.StreamID, opus.Opus, relativeSequence, relativeOpusTimestamp, receiveTime)
+		err = vsp.ProcessVoicePacket(opus)
 		if err != nil {
-			bot.logger.Error("Failed to save Discord voice packet to database", "error", err.Error())
+			bot.logger.Error("Failed to process voice packet", "error", err.Error())
 		}
-
-		// Print timestamps in seconds and user ID
-		timestampSeconds := float64(relativeOpusTimestamp) / 48000.0
-		bot.logger.Info("opus", "seq", opus.Sequence, "t", timestampSeconds, "userID", stream.UserID)
 	}
 
 	dgClient.Stop()
