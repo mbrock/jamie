@@ -158,10 +158,10 @@ func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID, deepg
 
 		// Calculate relative timestamps
 		relativeOpusTimestamp := opus.Timestamp - stream.FirstOpusTimestamp
-		relativeReceiveTime := time.Now().UnixNano() - stream.FirstReceiveTime
+		receiveTime := time.Now().UnixNano()
 
 		// Save the Discord voice packet to the database
-		err = db.SaveDiscordVoicePacket(stream.StreamID, opus.Opus, opus.Sequence, relativeOpusTimestamp, relativeReceiveTime)
+		err = db.SaveDiscordVoicePacket(stream.StreamID, opus.Opus, opus.Sequence, relativeOpusTimestamp, receiveTime)
 		if err != nil {
 			logger.Error("Failed to save Discord voice packet to database", "error", err.Error())
 		}

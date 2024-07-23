@@ -34,7 +34,7 @@ func InitDB() {
 		packet BLOB,
 		sequence INTEGER,
 		relative_opus_timestamp INTEGER,
-		relative_receive_time INTEGER,
+		receive_time INTEGER,
 		FOREIGN KEY (stream_id) REFERENCES discord_voice_stream(stream_id)
 	);
 	`
@@ -87,14 +87,14 @@ func GetVoiceStream(ssrc uint32) (string, error) {
 	return streamID, nil
 }
 
-func SaveDiscordVoicePacket(streamID string, packet []byte, sequence uint16, relativeOpusTimestamp uint32, relativeReceiveTime int64) error {
-	stmt, err := db.Prepare("INSERT INTO discord_voice_packet(stream_id, packet, sequence, relative_opus_timestamp, relative_receive_time) VALUES(?, ?, ?, ?, ?)")
+func SaveDiscordVoicePacket(streamID string, packet []byte, sequence uint16, relativeOpusTimestamp uint32, receiveTime int64) error {
+	stmt, err := db.Prepare("INSERT INTO discord_voice_packet(stream_id, packet, sequence, relative_opus_timestamp, receive_time) VALUES(?, ?, ?, ?, ?)")
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(streamID, packet, sequence, relativeOpusTimestamp, relativeReceiveTime)
+	_, err = stmt.Exec(streamID, packet, sequence, relativeOpusTimestamp, receiveTime)
 	return err
 }
 
