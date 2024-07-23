@@ -40,10 +40,9 @@ func InitDB() {
 
 	createVoiceStreamTable := `
 	CREATE TABLE IF NOT EXISTS discord_voice_stream (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		stream_id TEXT PRIMARY KEY,
 		guild_id TEXT,
 		channel_id TEXT,
-		stream_id TEXT UNIQUE,
 		ssrc INTEGER,
 		user_id TEXT,
 		first_opus_timestamp INTEGER,
