@@ -60,9 +60,10 @@ func (c *DeepgramClient) Start(ctx context.Context) (LiveTranscriptionSession, e
 }
 
 type DeepgramSession struct {
-	client         *listen.WebSocketClient
-	transcriptions chan chan string
-	logger         *log.Logger
+	client              *listen.WebSocketClient
+	transcriptions      chan chan string
+	logger              *log.Logger
+	currentTranscriptCh chan string
 }
 
 func (s *DeepgramSession) Stop() error {
@@ -97,15 +98,31 @@ func (s *DeepgramSession) Message(mr *api.MessageResponse) error {
 	if mr.IsFinal {
 		s.logger.Info("hear", "txt", transcript)
 
-		// Create a new channel for this transcription
-		transcriptChan := make(chan string)
-		s.transcriptions <- transcriptChan
+		// Close the current transcript channel if it exists
+		if s.currentTranscriptCh != nil {
+			close(s.currentTranscriptCh)
+		}
 
-		// Send the transcript and close the channel
-		transcriptChan <- transcript
-		close(transcriptChan)
+		// Create a new channel for this transcription
+		s.currentTranscriptCh = make(chan string)
+		s.transcriptions <- s.currentTranscriptCh
+
+		// Send the transcript
+		s.currentTranscriptCh <- transcript
+
+		// Reset the current transcript channel
+		s.currentTranscriptCh = nil
 	} else {
 		s.logger.Info("hear", "tmp", transcript)
+
+		// If there's no current transcript channel, create one
+		if s.currentTranscriptCh == nil {
+			s.currentTranscriptCh = make(chan string)
+			s.transcriptions <- s.currentTranscriptCh
+		}
+
+		// Send the interim transcript
+		s.currentTranscriptCh <- transcript
 	}
 
 	return nil
