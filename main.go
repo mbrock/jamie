@@ -62,16 +62,16 @@ func main() {
 
 	transcriptionService, err := speech.NewDeepgramClient(DeepgramToken, deepgramLogger)
 	if err != nil {
-		mainLogger.Fatal("Error creating Deepgram client", "error", err.Error())
+		mainLogger.Fatal("create deepgram client", "error", err.Error())
 	}
 
 	bot, err = discord.NewDiscordBot(DiscordToken, transcriptionService, discordLogger)
 	if err != nil {
-		mainLogger.Fatal("Error starting Discord bot", "error", err.Error())
+		mainLogger.Fatal("start discord bot", "error", err.Error())
 	}
 	defer bot.Close()
 
-	mainLogger.Info("Press CTRL-C to exit.")
+	mainLogger.Info("press ctrl-c to exit")
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
@@ -83,10 +83,10 @@ func startHTTPServer(httpLogger *log.Logger) {
 	mux.HandleFunc("GET /", handleRoot)
 	mux.HandleFunc("GET /guild/{guildID}/channel/{channelID}/{format}", handleGuildRequest)
 
-	httpLogger.Info("Starting HTTP server", "port", HttpPort)
+	httpLogger.Info("start http server", "port", HttpPort)
 	err := http.ListenAndServe(":"+HttpPort, mux)
 	if err != nil {
-		httpLogger.Error("HTTP server error", "error", err.Error())
+		httpLogger.Error("http server error", "error", err.Error())
 	}
 }
 
@@ -144,7 +144,7 @@ func handleTranscriptStream(w http.ResponseWriter, r *http.Request, guildID, cha
 	// Get all previous transcripts
 	allTranscripts, err := db.GetAllTranscripts(guildID, channelID)
 	if err != nil {
-		logger.Error("Failed to get all transcripts", "error", err.Error())
+		logger.Error("get all transcripts", "error", err.Error())
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
@@ -186,7 +186,7 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 
 	err := tmpl.Execute(w, nil)
 	if err != nil {
-		logger.Error("Template execution error", "error", err.Error())
+		logger.Error("template execution", "error", err.Error())
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 	}
 }
