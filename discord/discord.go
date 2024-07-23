@@ -13,17 +13,11 @@ import (
 	"jamie/deepgram"
 )
 
-var logger *log.Logger
-
-type DiscordBot struct {
-	session            *discordgo.Session
-	deepgramToken      string
+var (
+	logger             *log.Logger
 	transcriptChannels sync.Map
-}
-
-func (bot *DiscordBot) Close() {
-	bot.session.Close()
-}
+	discordToken       string
+)
 
 type VoiceStream struct {
 	UserID             string
@@ -45,18 +39,16 @@ func SetLogger(l *log.Logger) {
 	deepgram.SetLogger(l)
 }
 
-func NewDiscordBot(token, deepgramToken string) (*DiscordBot, error) {
+func StartBot(token string, deepgramToken string) (*discordgo.Session, error) {
+	discordToken = token
 	dg, err := discordgo.New("Bot " + token)
 	if err != nil {
 		return nil, fmt.Errorf("error creating Discord session: %w", err)
 	}
 
-	bot := &DiscordBot{
-		session:       dg,
-		deepgramToken: deepgramToken,
-	}
-
-	dg.AddHandler(bot.handleGuildCreate)
+	dg.AddHandler(func(s *discordgo.Session, event *discordgo.GuildCreate) {
+		guildCreate(s, event, deepgramToken)
+	})
 
 	err = dg.Open()
 	if err != nil {
@@ -64,32 +56,34 @@ func NewDiscordBot(token, deepgramToken string) (*DiscordBot, error) {
 	}
 
 	logger.Info("Bot is now running.")
-	return bot, nil
+	return dg, nil
 }
 
-func (bot *DiscordBot) handleGuildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
+func guildCreate(s *discordgo.Session, event *discordgo.GuildCreate, deepgramToken string) {
 	logger.Info("Joined new guild", "guild", event.Guild.Name)
-	err := bot.joinAllVoiceChannels(event.Guild.ID)
+	err := joinAllVoiceChannels(s, event.Guild.ID, deepgramToken)
 	if err != nil {
 		logger.Error("Error joining voice channels", "error", err.Error())
 	}
 }
 
-func (bot *DiscordBot) joinAllVoiceChannels(guildID string) error {
-	channels, err := bot.session.GuildChannels(guildID)
+func joinAllVoiceChannels(s *discordgo.Session, guildID, deepgramToken string) error {
+	channels, err := s.GuildChannels(guildID)
 	if err != nil {
 		return fmt.Errorf("error getting guild channels: %w", err)
 	}
 
 	for _, channel := range channels {
 		if channel.Type == discordgo.ChannelTypeGuildVoice {
-			vc, err := bot.session.ChannelVoiceJoin(guildID, channel.ID, false, false)
+			vc, err := s.ChannelVoiceJoin(guildID, channel.ID, false, false)
 			if err != nil {
 				logger.Error("Failed to join voice channel", "channel", channel.Name, "error", err.Error())
 			} else {
 				logger.Info("Joined voice channel", "channel", channel.Name)
 				channelID := channel.ID
-				go bot.startDeepgramStream(vc, guildID, channelID)
+				go func() {
+					startDeepgramStream(vc, guildID, channelID, deepgramToken)
+				}()
 			}
 		}
 	}
@@ -97,12 +91,12 @@ func (bot *DiscordBot) joinAllVoiceChannels(guildID string) error {
 	return nil
 }
 
-func (bot *DiscordBot) voiceStateUpdate(state *VoiceState, _ *discordgo.VoiceConnection, v *discordgo.VoiceSpeakingUpdate) {
+func voiceStateUpdate(state *VoiceState, _ *discordgo.VoiceConnection, v *discordgo.VoiceSpeakingUpdate) {
 	logger.Info("Voice state update", "userID", v.UserID, "speaking", v.Speaking, "SSRC", v.SSRC)
 	state.ssrcToUser.Store(v.SSRC, v.UserID)
 }
 
-func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID string) {
+func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID, deepgramToken string) {
 	logger.Info("Starting Deepgram stream", "guild", guildID, "channel", channelID)
 
 	state := &VoiceState{
@@ -111,10 +105,10 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, guildID
 	}
 
 	v.AddHandler(func(vc *discordgo.VoiceConnection, vs *discordgo.VoiceSpeakingUpdate) {
-		bot.voiceStateUpdate(state, vc, vs)
+		voiceStateUpdate(state, vc, vs)
 	})
 
-	dgClient, err := deepgram.NewDeepgramClient(bot.deepgramToken, guildID, channelID, bot.handleTranscript)
+	dgClient, err := deepgram.NewDeepgramClient(deepgramToken, guildID, channelID, handleTranscript)
 	if err != nil {
 		logger.Error("Error creating Deepgram client", "error", err.Error())
 		return
@@ -184,4 +178,45 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, guildID
 	dgClient.Stop()
 }
 
-func (bot *DiscordBot) handleTranscript(guildID,
+func handleTranscript(guildID, channelID, transcript string) {
+	// Send the transcript to Discord
+	s, err := discordgo.New("Bot " + discordToken)
+	if err != nil {
+		logger.Error("Failed to create Discord session", "error", err.Error())
+		return
+	}
+	defer s.Close()
+
+	_, err = s.ChannelMessageSend(channelID, transcript)
+	if err != nil {
+		logger.Error("Failed to send message to Discord", "error", err.Error())
+	}
+
+	// Send the transcript to the channel
+	key := fmt.Sprintf("%s:%s", guildID, channelID)
+	if ch, ok := transcriptChannels.Load(key); ok {
+		ch.(chan string) <- transcript
+	}
+}
+
+func GetTranscriptChannel(guildID, channelID string) chan string {
+	key := fmt.Sprintf("%s:%s", guildID, channelID)
+	ch, _ := transcriptChannels.LoadOrStore(key, make(chan string))
+	return ch.(chan string)
+}
+
+func (state *VoiceState) GetUserIDFromSSRC(ssrc uint32) (string, bool) {
+	userID, ok := state.ssrcToUser.Load(ssrc)
+	if !ok {
+		return "", false
+	}
+	return userID.(string), true
+}
+
+func (state *VoiceState) GetStreamIDFromSSRC(ssrc uint32) (string, bool) {
+	stream, ok := state.ssrcToStream.Load(ssrc)
+	if !ok {
+		return "", false
+	}
+	return stream.(VoiceStream).StreamID, true
+}
