@@ -67,7 +67,6 @@ type DeepgramSession struct {
 	client         *listen.WebSocketClient
 	sb             *strings.Builder
 	transcriptions chan chan string
-	currentTrans   chan string
 }
 
 func (s *DeepgramSession) Stop() error {

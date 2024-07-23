@@ -7,7 +7,7 @@ import (
 type LiveTranscriptionSession interface {
 	Stop() error
 	SendAudio(data []byte) error
-	Transcriptions() <-chan string
+	Transcriptions() <-chan chan string
 }
 
 type LiveTranscriptionService interface {
