@@ -3,6 +3,7 @@ package discord
 import (
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
@@ -27,7 +28,7 @@ type VoiceStream struct {
 }
 
 type VoiceState struct {
-	ssrcToUser  sync.Map
+	ssrcToUser   sync.Map
 	ssrcToStream sync.Map
 	guildID      string
 	channelID    string
