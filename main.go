@@ -50,7 +50,7 @@ func main() {
 
 	go startHTTPServer()
 
-	transcriptionService, err := speech.NewDeepgramClient(DeepgramToken)
+	transcriptionService, err := speech.NewDeepgramClient(DeepgramToken, logger)
 	if err != nil {
 		logger.Fatal("Error creating Deepgram client", "error", err.Error())
 	}
