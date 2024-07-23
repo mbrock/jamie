@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"jamie/speech"
-	"os"
 	"sync"
 
 	"github.com/bwmarrin/discordgo"
@@ -151,4 +150,3 @@ func (bot *DiscordBot) GetTranscriptChannel(channelID Venue) chan string {
 	ch, _ := bot.transcriptChannels.LoadOrStore(key, make(chan string))
 	return ch.(chan string)
 }
-
