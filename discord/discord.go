@@ -1,10 +1,8 @@
 package discord
 
 import (
-	"context"
 	"fmt"
 	"jamie/speech"
-	"sync"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
