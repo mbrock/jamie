@@ -10,6 +10,11 @@ import (
 	"github.com/charmbracelet/log"
 )
 
+type ChannelMessage struct {
+	MessageID string
+	Content   string
+}
+
 type Venue struct {
 	GuildID   string
 	ChannelID string
@@ -21,6 +26,7 @@ type DiscordBot struct {
 	discordToken         string
 	session              *discordgo.Session
 	transcriptionService speech.LiveTranscriptionService
+	lastMessages         sync.Map // map[string]*ChannelMessage
 }
 
 func NewDiscordBot(token string, transcriptionService speech.LiveTranscriptionService, logger *log.Logger) (*DiscordBot, error) {
@@ -131,10 +137,32 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channel
 }
 
 func (bot *DiscordBot) handleTranscript(channelID Venue, transcriptChan <-chan string) {
+	key := fmt.Sprintf("%s:%s", channelID.GuildID, channelID.ChannelID)
+	var lastMessage *ChannelMessage
+
 	for transcript := range transcriptChan {
-		_, err := bot.session.ChannelMessageSend(channelID.ChannelID, transcript)
-		if err != nil {
-			bot.logger.Error("send message", "error", err.Error())
+		if lastMessageInterface, exists := bot.lastMessages.Load(key); exists {
+			lastMessage = lastMessageInterface.(*ChannelMessage)
+		}
+
+		if lastMessage == nil {
+			// Send a new message if there's no existing message
+			msg, err := bot.session.ChannelMessageSend(channelID.ChannelID, transcript)
+			if err != nil {
+				bot.logger.Error("send message", "error", err.Error())
+				continue
+			}
+			lastMessage = &ChannelMessage{MessageID: msg.ID, Content: transcript}
+			bot.lastMessages.Store(key, lastMessage)
+		} else {
+			// Edit the existing message
+			newContent := lastMessage.Content + "\n" + transcript
+			_, err := bot.session.ChannelMessageEdit(channelID.ChannelID, lastMessage.MessageID, newContent)
+			if err != nil {
+				bot.logger.Error("edit message", "error", err.Error())
+				continue
+			}
+			lastMessage.Content = newContent
 		}
 	}
 }
