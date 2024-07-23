@@ -123,8 +123,8 @@ func (vsp *VoiceStreamProcessor) handleTranscriptions(stream *VoiceStream) {
 			finalTranscript = transcript
 		}
 		if finalTranscript != "" {
-			if vsp.currentSpeaker != stream.UserID {
-				// New speaker, create a new message
+			if vsp.currentSpeaker != stream.UserID || endsWithPunctuation(finalTranscript) {
+				// New speaker or end of sentence, create a new message
 				vsp.currentSpeaker = stream.UserID
 				finalFormattedTranscript := fmt.Sprintf("%s: %s", emoji, finalTranscript)
 				msg, err := vsp.session.ChannelMessageSend(vsp.channelID, finalFormattedTranscript)
@@ -148,6 +148,14 @@ func (vsp *VoiceStreamProcessor) handleTranscriptions(stream *VoiceStream) {
 			}
 		}
 	}
+}
+
+func endsWithPunctuation(s string) bool {
+	if len(s) == 0 {
+		return false
+	}
+	lastChar := s[len(s)-1]
+	return lastChar == '.' || lastChar == '?' || lastChar == '!'
 }
 
 func (vsp *VoiceStreamProcessor) getUsernameFromID(userID string) string {
