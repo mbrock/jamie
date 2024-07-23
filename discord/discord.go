@@ -45,7 +45,7 @@ func NewDiscordBot(token string, transcriptionService speech.LiveTranscriptionSe
 	}
 
 	bot.session = dg
-	bot.logger.Info("Bot is now running.")
+	bot.logger.Info("running")
 	return bot, nil
 }
 
@@ -54,10 +54,10 @@ func (bot *DiscordBot) Close() error {
 }
 
 func (bot *DiscordBot) guildCreate(s *discordgo.Session, event *discordgo.GuildCreate) {
-	bot.logger.Info("Joined new guild", "guild", event.Guild.Name)
+	bot.logger.Info("join", "guild", event.Guild.Name)
 	err := bot.joinAllVoiceChannels(s, Venue{GuildID: event.Guild.ID, ChannelID: ""})
 	if err != nil {
-		bot.logger.Error("Error joining voice channels", "error", err.Error())
+		bot.logger.Error("join voice channels", "error", err.Error())
 	}
 }
 
@@ -71,9 +71,9 @@ func (bot *DiscordBot) joinAllVoiceChannels(s *discordgo.Session, channelID Venu
 		if channel.Type == discordgo.ChannelTypeGuildVoice {
 			vc, err := s.ChannelVoiceJoin(channelID.GuildID, channel.ID, false, false)
 			if err != nil {
-				bot.logger.Error("Failed to join voice channel", "channel", channel.Name, "error", err.Error())
+				bot.logger.Error("join voice channel", "channel", channel.Name, "error", err.Error())
 			} else {
-				bot.logger.Info("Joined voice channel", "channel", channel.Name)
+				bot.logger.Info("join", "channel", channel.Name)
 				channelID := Venue{GuildID: channelID.GuildID, ChannelID: channel.ID}
 				go func() {
 					bot.startDeepgramStream(vc, channelID)
@@ -86,7 +86,7 @@ func (bot *DiscordBot) joinAllVoiceChannels(s *discordgo.Session, channelID Venu
 }
 
 func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channelID Venue) {
-	bot.logger.Info("Starting transcription stream", "guild", channelID.GuildID, "channel", channelID.ChannelID)
+	bot.logger.Info("start transcription", "guild", channelID.GuildID, "channel", channelID.ChannelID)
 
 	vsp := NewVoiceStreamProcessor(channelID.GuildID, channelID.ChannelID, bot.logger)
 
@@ -99,7 +99,7 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channel
 
 	session, err := bot.transcriptionService.Start(ctx)
 	if err != nil {
-		bot.logger.Error("Failed to start transcription service", "error", err.Error())
+		bot.logger.Error("start transcription", "error", err.Error())
 		return
 	}
 	defer session.Stop()
@@ -113,17 +113,17 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channel
 	for {
 		opus, ok := <-v.OpusRecv
 		if !ok {
-			bot.logger.Info("Voice channel closed")
+			bot.logger.Info("voice channel closed")
 			break
 		}
 		err := session.SendAudio(opus.Opus)
 		if err != nil {
-			bot.logger.Error("Failed to send audio to transcription service", "error", err.Error())
+			bot.logger.Error("send audio", "error", err.Error())
 		}
 
 		err = vsp.ProcessVoicePacket(opus)
 		if err != nil {
-			bot.logger.Error("Failed to process voice packet", "error", err.Error())
+			bot.logger.Error("process voice packet", "error", err.Error())
 		}
 	}
 }
@@ -135,7 +135,7 @@ func (bot *DiscordBot) handleTranscript(channelID Venue, transcriptChan <-chan s
 		// Send the transcript to Discord
 		_, err := bot.session.ChannelMessageSend(channelID.ChannelID, transcript)
 		if err != nil {
-			bot.logger.Error("Failed to send message to Discord", "error", err.Error())
+			bot.logger.Error("send message", "error", err.Error())
 		}
 
 		// Send the transcript to the channel
