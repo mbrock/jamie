@@ -112,6 +112,15 @@ func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID, deepg
 		guildID:   guildID,
 		channelID: channelID,
 	}
+	
+	// Record the start time of the stream
+	streamStartTime := time.Now()
+	
+	// Save the stream start time to the database
+	err = db.SaveStreamStartTime(guildID, channelID, streamStartTime)
+	if err != nil {
+		logger.Error("Failed to save stream start time", "error", err.Error())
+	}
 	v.AddHandler(func(vc *discordgo.VoiceConnection, vs *discordgo.VoiceSpeakingUpdate) {
 		voiceStateUpdate(state, vc, vs)
 	})
@@ -149,7 +158,7 @@ func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID, deepg
 		streamID := stream.StreamID
 
 		// Save the Discord voice packet to the database
-		err = db.SaveDiscordVoicePacket(streamID, opus.Opus, opus.Sequence)
+		err = db.SaveDiscordVoicePacket(streamID, opus.Opus, opus.Sequence, opus.Timestamp)
 		if err != nil {
 			logger.Error("Failed to save Discord voice packet to database", "error", err.Error())
 		}

@@ -33,7 +33,7 @@ func InitDB() {
 		stream_id TEXT,
 		packet BLOB,
 		sequence INTEGER,
-		timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+		opus_timestamp INTEGER,
 		FOREIGN KEY (stream_id) REFERENCES discord_voice_stream(stream_id)
 	);
 	`
@@ -86,14 +86,14 @@ func GetVoiceStream(ssrc uint32) (string, error) {
 	return streamID, nil
 }
 
-func SaveDiscordVoicePacket(streamID string, packet []byte, sequence uint16) error {
-	stmt, err := db.Prepare("INSERT INTO discord_voice_packet(stream_id, packet, sequence, timestamp) VALUES(?, ?, ?, ?)")
+func SaveDiscordVoicePacket(streamID string, packet []byte, sequence uint16, opusTimestamp uint32) error {
+	stmt, err := db.Prepare("INSERT INTO discord_voice_packet(stream_id, packet, sequence, opus_timestamp) VALUES(?, ?, ?, ?)")
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(streamID, packet, sequence, time.Now())
+	_, err = stmt.Exec(streamID, packet, sequence, opusTimestamp)
 	return err
 }
 
@@ -140,6 +140,17 @@ func Close() {
 	if db != nil {
 		db.Close()
 	}
+}
+
+func SaveStreamStartTime(guildID, channelID string, startTime time.Time) error {
+	stmt, err := db.Prepare("INSERT INTO discord_voice_stream(guild_id, channel_id, first_timestamp) VALUES(?, ?, ?)")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(guildID, channelID, startTime)
+	return err
 }
 func GetAllTranscripts(guildID, channelID string) ([]string, error) {
 	rows, err := db.Query("SELECT transcript FROM transcripts WHERE guild_id = ? AND channel_id = ? ORDER BY timestamp", guildID, channelID)
