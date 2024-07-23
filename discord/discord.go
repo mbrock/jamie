@@ -19,8 +19,10 @@ var (
 )
 
 type VoiceStream struct {
-	UserID   string
-	StreamID string
+	UserID             string
+	StreamID           string
+	FirstOpusTimestamp uint32
+	FirstReceiveTime   int64
 }
 
 type VoiceState struct {
@@ -100,7 +102,6 @@ func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID, deepg
 		channelID: channelID,
 	}
 
-	// The start time is now automatically recorded in the database when creating a voice stream
 	v.AddHandler(func(vc *discordgo.VoiceConnection, vs *discordgo.VoiceSpeakingUpdate) {
 		voiceStateUpdate(state, vc, vs)
 	})
@@ -130,39 +131,44 @@ func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID, deepg
 
 		// Get or create the stream for this SSRC
 		streamInterface, exists := state.ssrcToStream.Load(opus.SSRC)
-		var streamID string
+		var stream VoiceStream
 		if !exists {
-			streamID = uuid.New().String()
+			streamID := uuid.New().String()
 			userID, ok := state.ssrcToUser.Load(opus.SSRC)
 			if !ok {
 				logger.Warn("User ID not found for SSRC", "SSRC", opus.SSRC)
 				userID = "unknown"
 			}
-			state.ssrcToStream.Store(opus.SSRC, VoiceStream{
-				UserID:   userID.(string),
-				StreamID: streamID,
-			})
-			err := db.CreateVoiceStream(state.guildID, state.channelID, streamID, userID.(string), opus.SSRC, opus.Timestamp)
+			stream = VoiceStream{
+				UserID:             userID.(string),
+				StreamID:           streamID,
+				FirstOpusTimestamp: opus.Timestamp,
+				FirstReceiveTime:   time.Now().UnixNano(),
+			}
+			state.ssrcToStream.Store(opus.SSRC, stream)
+			err := db.CreateVoiceStream(state.guildID, state.channelID, streamID, userID.(string), opus.SSRC, opus.Timestamp, stream.FirstReceiveTime)
 			if err != nil {
 				logger.Error("Failed to create voice stream", "error", err.Error())
 				continue
 			}
 			logger.Info("Created new voice stream", "streamID", streamID, "userID", userID, "SSRC", opus.SSRC)
 		} else {
-			stream := streamInterface.(VoiceStream)
-			streamID = stream.StreamID
+			stream = streamInterface.(VoiceStream)
 		}
 
+		// Calculate relative timestamps
+		relativeOpusTimestamp := opus.Timestamp - stream.FirstOpusTimestamp
+		relativeReceiveTime := time.Now().UnixNano() - stream.FirstReceiveTime
+
 		// Save the Discord voice packet to the database
-		err = db.SaveDiscordVoicePacket(streamID, opus.Opus, opus.Sequence, opus.Timestamp)
+		err = db.SaveDiscordVoicePacket(stream.StreamID, opus.Opus, opus.Sequence, relativeOpusTimestamp, relativeReceiveTime)
 		if err != nil {
 			logger.Error("Failed to save Discord voice packet to database", "error", err.Error())
 		}
 
 		// Print timestamps in seconds and user ID
-		timestampSeconds := float64(opus.Timestamp) / 48000.0
-		userID, _ := state.GetUserIDFromSSRC(opus.SSRC)
-		logger.Info("opus", "seq", opus.Sequence, "t", timestampSeconds, "userID", userID)
+		timestampSeconds := float64(relativeOpusTimestamp) / 48000.0
+		logger.Info("opus", "seq", opus.Sequence, "t", timestampSeconds, "userID", stream.UserID)
 	}
 
 	dgClient.Stop()

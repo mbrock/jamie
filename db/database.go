@@ -33,8 +33,8 @@ func InitDB() {
 		stream_id TEXT,
 		packet BLOB,
 		sequence INTEGER,
-		opus_timestamp INTEGER,
-		receive_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+		relative_opus_timestamp INTEGER,
+		relative_receive_time INTEGER,
 		FOREIGN KEY (stream_id) REFERENCES discord_voice_stream(stream_id)
 	);
 	`
@@ -47,7 +47,7 @@ func InitDB() {
 		ssrc INTEGER,
 		user_id TEXT,
 		first_opus_timestamp INTEGER,
-		first_receive_time DATETIME DEFAULT CURRENT_TIMESTAMP
+		first_receive_time INTEGER
 	);
 	`
 
@@ -67,14 +67,14 @@ func InitDB() {
 	}
 }
 
-func CreateVoiceStream(guildID, channelID, streamID, userID string, ssrc uint32, firstOpusTimestamp uint32) error {
-	stmt, err := db.Prepare("INSERT INTO discord_voice_stream(guild_id, channel_id, stream_id, ssrc, user_id, first_opus_timestamp) VALUES(?, ?, ?, ?, ?, ?)")
+func CreateVoiceStream(guildID, channelID, streamID, userID string, ssrc uint32, firstOpusTimestamp uint32, firstReceiveTime int64) error {
+	stmt, err := db.Prepare("INSERT INTO discord_voice_stream(guild_id, channel_id, stream_id, ssrc, user_id, first_opus_timestamp, first_receive_time) VALUES(?, ?, ?, ?, ?, ?, ?)")
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(guildID, channelID, streamID, ssrc, userID, firstOpusTimestamp)
+	_, err = stmt.Exec(guildID, channelID, streamID, ssrc, userID, firstOpusTimestamp, firstReceiveTime)
 	return err
 }
 
@@ -87,14 +87,14 @@ func GetVoiceStream(ssrc uint32) (string, error) {
 	return streamID, nil
 }
 
-func SaveDiscordVoicePacket(streamID string, packet []byte, sequence uint16, opusTimestamp uint32) error {
-	stmt, err := db.Prepare("INSERT INTO discord_voice_packet(stream_id, packet, sequence, opus_timestamp, receive_time) VALUES(?, ?, ?, ?, ?)")
+func SaveDiscordVoicePacket(streamID string, packet []byte, sequence uint16, relativeOpusTimestamp uint32, relativeReceiveTime int64) error {
+	stmt, err := db.Prepare("INSERT INTO discord_voice_packet(stream_id, packet, sequence, relative_opus_timestamp, relative_receive_time) VALUES(?, ?, ?, ?, ?)")
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(streamID, packet, sequence, opusTimestamp, time.Now())
+	_, err = stmt.Exec(streamID, packet, sequence, relativeOpusTimestamp, relativeReceiveTime)
 	return err
 }
 
