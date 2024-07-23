@@ -26,7 +26,6 @@ type DiscordBot struct {
 	discordToken         string
 	session              *discordgo.Session
 	transcriptionService speech.LiveTranscriptionService
-	lastMessages         sync.Map // map[string]*ChannelMessage
 }
 
 func NewDiscordBot(token string, transcriptionService speech.LiveTranscriptionService, logger *log.Logger) (*DiscordBot, error) {
@@ -138,10 +137,11 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channel
 
 func (bot *DiscordBot) handleTranscript(channelID Venue, transcriptChan <-chan string) {
 	key := fmt.Sprintf("%s:%s", channelID.GuildID, channelID.ChannelID)
+	var lastMessages sync.Map // map[string]*ChannelMessage
 	var lastMessage *ChannelMessage
 
 	for transcript := range transcriptChan {
-		if lastMessageInterface, exists := bot.lastMessages.Load(key); exists {
+		if lastMessageInterface, exists := lastMessages.Load(key); exists {
 			lastMessage = lastMessageInterface.(*ChannelMessage)
 		}
 
@@ -153,7 +153,7 @@ func (bot *DiscordBot) handleTranscript(channelID Venue, transcriptChan <-chan s
 				continue
 			}
 			lastMessage = &ChannelMessage{MessageID: msg.ID, Content: transcript}
-			bot.lastMessages.Store(key, lastMessage)
+			lastMessages.Store(key, lastMessage)
 		} else {
 			// Edit the existing message
 			newContent := lastMessage.Content + "\n" + transcript
