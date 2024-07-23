@@ -162,3 +162,12 @@ func (bot *DiscordBot) GetTranscriptChannel(channelID Venue) chan string {
 	ch, _ := bot.transcriptChannels.LoadOrStore(key, make(chan string))
 	return ch.(chan string)
 }
+
+func (bot *DiscordBot) GetCurrentTranscript(guildID, channelID string) (string, bool) {
+	key := fmt.Sprintf("%s:%s", guildID, channelID)
+	transcript, ok := bot.currentTranscripts.Load(key)
+	if !ok {
+		return "", false
+	}
+	return transcript.(string), true
+}

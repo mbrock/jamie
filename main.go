@@ -151,8 +151,8 @@ func handleTranscriptStream(w http.ResponseWriter, r *http.Request, guildID, cha
 	for {
 		select {
 		case <-time.After(100 * time.Millisecond):
-			if currentTranscript, ok := bot.currentTranscripts.Load(key); ok {
-				writeTranscript(currentTranscript.(string))
+			if currentTranscript, ok := bot.GetCurrentTranscript(guildID, channelID); ok {
+				writeTranscript(currentTranscript)
 				flusher.Flush()
 			}
 		case <-r.Context().Done():
