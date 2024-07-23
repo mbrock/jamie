@@ -25,6 +25,16 @@ var (
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.AddCommand(discordCmd)
+
+	// Add persistent flags
+	rootCmd.PersistentFlags().String("port", "8080", "Port for the HTTP server")
+	rootCmd.PersistentFlags().String("discord-token", "", "Discord bot token")
+	rootCmd.PersistentFlags().String("deepgram-api-key", "", "Deepgram API key")
+
+	// Bind flags to viper
+	viper.BindPFlag("PORT", rootCmd.PersistentFlags().Lookup("port"))
+	viper.BindPFlag("DISCORD_TOKEN", rootCmd.PersistentFlags().Lookup("discord-token"))
+	viper.BindPFlag("DEEPGRAM_API_KEY", rootCmd.PersistentFlags().Lookup("deepgram-api-key"))
 }
 
 func initConfig() {
@@ -33,15 +43,10 @@ func initConfig() {
 	viper.AddConfigPath(".")
 	viper.AutomaticEnv()
 
-	viper.SetDefault("PORT", "8080")
-
 	err := viper.ReadInConfig()
 	if err != nil {
 		fmt.Printf("Error reading config file: %s\n", err)
 	}
-
-	viper.BindEnv("DISCORD_TOKEN")
-	viper.BindEnv("DEEPGRAM_API_KEY")
 
 	logger = log.New(os.Stdout)
 }
@@ -68,12 +73,15 @@ func main() {
 func runDiscord(cmd *cobra.Command, args []string) {
 	mainLogger, discordLogger, deepgramLogger, httpLogger := createLoggers()
 
-	if !viper.IsSet("DISCORD_TOKEN") {
-		mainLogger.Fatal("No Discord token provided. Please set the JAMIE_DISCORD_TOKEN environment variable.")
+	discordToken := viper.GetString("DISCORD_TOKEN")
+	deepgramAPIKey := viper.GetString("DEEPGRAM_API_KEY")
+
+	if discordToken == "" {
+		mainLogger.Fatal("No Discord token provided. Please set the DISCORD_TOKEN flag or environment variable.")
 	}
 
-	if !viper.IsSet("DEEPGRAM_API_KEY") {
-		mainLogger.Fatal("No Deepgram token provided. Please set the JAMIE_DEEPGRAM_API_KEY environment variable.")
+	if deepgramAPIKey == "" {
+		mainLogger.Fatal("No Deepgram API key provided. Please set the DEEPGRAM_API_KEY flag or environment variable.")
 	}
 
 	db.InitDB()
@@ -82,7 +90,7 @@ func runDiscord(cmd *cobra.Command, args []string) {
 	go startHTTPServer(httpLogger)
 
 	transcriptionService, err := speech.NewDeepgramClient(
-		viper.GetString("DEEPGRAM_API_KEY"),
+		deepgramAPIKey,
 		deepgramLogger,
 	)
 	if err != nil {
@@ -90,7 +98,7 @@ func runDiscord(cmd *cobra.Command, args []string) {
 	}
 
 	bot, err = discord.NewDiscordBot(
-		viper.GetString("DISCORD_TOKEN"),
+		discordToken,
 		transcriptionService,
 		discordLogger,
 	)
