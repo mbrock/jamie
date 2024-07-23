@@ -18,18 +18,6 @@ type ChannelIdentifier struct {
 	GuildID   string
 	ChannelID string
 }
-	"fmt"
-	"os"
-	"sync"
-	"time"
-
-	"github.com/bwmarrin/discordgo"
-	"github.com/charmbracelet/log"
-	"github.com/google/uuid"
-
-	"jamie/db"
-	"jamie/deepgram"
-)
 
 type DiscordBot struct {
 	logger             *log.Logger
