@@ -55,7 +55,7 @@ func main() {
 		logger.Fatal("Error creating Deepgram client", "error", err.Error())
 	}
 
-	bot, err = discord.NewDiscordBot(DiscordToken, transcriptionService)
+	bot, err = discord.NewDiscordBot(DiscordToken, transcriptionService, logger)
 	if err != nil {
 		logger.Fatal("Error starting Discord bot", "error", err.Error())
 	}

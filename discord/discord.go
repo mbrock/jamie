@@ -24,15 +24,11 @@ type DiscordBot struct {
 	transcriptionService speech.LiveTranscriptionService
 }
 
-func (bot *DiscordBot) SetLogger(l *log.Logger) {
-	bot.logger = l
-}
-
-func NewDiscordBot(token string, transcriptionService speech.LiveTranscriptionService) (*DiscordBot, error) {
+func NewDiscordBot(token string, transcriptionService speech.LiveTranscriptionService, logger *log.Logger) (*DiscordBot, error) {
 	bot := &DiscordBot{
 		discordToken:         token,
 		transcriptionService: transcriptionService,
-		logger:               log.New(os.Stderr),
+		logger:               logger,
 	}
 
 	dg, err := discordgo.New("Bot " + token)
