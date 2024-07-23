@@ -49,17 +49,16 @@ func main() {
 
 	go startHTTPServer()
 
-	dg, err := discord.StartBot(DiscordToken, DeepgramToken)
+	bot, err := discord.NewDiscordBot(DiscordToken, DeepgramToken)
 	if err != nil {
 		logger.Fatal("Error starting Discord bot", "error", err.Error())
 	}
+	defer bot.Close()
 
 	logger.Info("Bot is now running. Press CTRL-C to exit.")
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
-
-	dg.Close()
 }
 
 func startHTTPServer() {
