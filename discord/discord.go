@@ -23,6 +23,7 @@ type VoiceStream struct {
 	StreamID           string
 	FirstOpusTimestamp uint32
 	FirstReceiveTime   int64
+	FirstSequence      uint16
 }
 
 type VoiceState struct {
@@ -144,9 +145,10 @@ func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID, deepg
 				StreamID:           streamID,
 				FirstOpusTimestamp: opus.Timestamp,
 				FirstReceiveTime:   time.Now().UnixNano(),
+				FirstSequence:      opus.Sequence,
 			}
 			state.ssrcToStream.Store(opus.SSRC, stream)
-			err := db.CreateVoiceStream(state.guildID, state.channelID, streamID, userID.(string), opus.SSRC, opus.Timestamp, stream.FirstReceiveTime)
+			err := db.CreateVoiceStream(state.guildID, state.channelID, streamID, userID.(string), opus.SSRC, opus.Timestamp, stream.FirstReceiveTime, stream.FirstSequence)
 			if err != nil {
 				logger.Error("Failed to create voice stream", "error", err.Error())
 				continue
@@ -156,12 +158,13 @@ func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID, deepg
 			stream = streamInterface.(VoiceStream)
 		}
 
-		// Calculate relative timestamps
+		// Calculate relative timestamps and sequence
 		relativeOpusTimestamp := opus.Timestamp - stream.FirstOpusTimestamp
+		relativeSequence := opus.Sequence - stream.FirstSequence
 		receiveTime := time.Now().UnixNano()
 
 		// Save the Discord voice packet to the database
-		err = db.SaveDiscordVoicePacket(stream.StreamID, opus.Opus, opus.Sequence, relativeOpusTimestamp, receiveTime)
+		err = db.SaveDiscordVoicePacket(stream.StreamID, opus.Opus, relativeSequence, relativeOpusTimestamp, receiveTime)
 		if err != nil {
 			logger.Error("Failed to save Discord voice packet to database", "error", err.Error())
 		}

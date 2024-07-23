@@ -32,7 +32,7 @@ func InitDB() {
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		stream_id TEXT,
 		packet BLOB,
-		sequence INTEGER,
+		relative_sequence INTEGER,
 		relative_opus_timestamp INTEGER,
 		receive_time INTEGER,
 		FOREIGN KEY (stream_id) REFERENCES discord_voice_stream(stream_id)
@@ -47,7 +47,8 @@ func InitDB() {
 		ssrc INTEGER,
 		user_id TEXT,
 		first_opus_timestamp INTEGER,
-		first_receive_time INTEGER
+		first_receive_time INTEGER,
+		first_sequence INTEGER
 	);
 	`
 
@@ -67,14 +68,14 @@ func InitDB() {
 	}
 }
 
-func CreateVoiceStream(guildID, channelID, streamID, userID string, ssrc uint32, firstOpusTimestamp uint32, firstReceiveTime int64) error {
-	stmt, err := db.Prepare("INSERT INTO discord_voice_stream(guild_id, channel_id, stream_id, ssrc, user_id, first_opus_timestamp, first_receive_time) VALUES(?, ?, ?, ?, ?, ?, ?)")
+func CreateVoiceStream(guildID, channelID, streamID, userID string, ssrc uint32, firstOpusTimestamp uint32, firstReceiveTime int64, firstSequence uint16) error {
+	stmt, err := db.Prepare("INSERT INTO discord_voice_stream(guild_id, channel_id, stream_id, ssrc, user_id, first_opus_timestamp, first_receive_time, first_sequence) VALUES(?, ?, ?, ?, ?, ?, ?, ?)")
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(guildID, channelID, streamID, ssrc, userID, firstOpusTimestamp, firstReceiveTime)
+	_, err = stmt.Exec(guildID, channelID, streamID, ssrc, userID, firstOpusTimestamp, firstReceiveTime, firstSequence)
 	return err
 }
 
@@ -87,14 +88,14 @@ func GetVoiceStream(ssrc uint32) (string, error) {
 	return streamID, nil
 }
 
-func SaveDiscordVoicePacket(streamID string, packet []byte, sequence uint16, relativeOpusTimestamp uint32, receiveTime int64) error {
-	stmt, err := db.Prepare("INSERT INTO discord_voice_packet(stream_id, packet, sequence, relative_opus_timestamp, receive_time) VALUES(?, ?, ?, ?, ?)")
+func SaveDiscordVoicePacket(streamID string, packet []byte, relativeSequence uint16, relativeOpusTimestamp uint32, receiveTime int64) error {
+	stmt, err := db.Prepare("INSERT INTO discord_voice_packet(stream_id, packet, relative_sequence, relative_opus_timestamp, receive_time) VALUES(?, ?, ?, ?, ?)")
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 
-	_, err = stmt.Exec(streamID, packet, sequence, relativeOpusTimestamp, receiveTime)
+	_, err = stmt.Exec(streamID, packet, relativeSequence, relativeOpusTimestamp, receiveTime)
 	return err
 }
 
