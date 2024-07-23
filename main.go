@@ -34,18 +34,20 @@ func init() {
 		fmt.Printf("Error reading config file: %s\n", err)
 	}
 
-	// Set required environment variables
-	viper.SetEnvPrefix("JAMIE")
 	viper.BindEnv("DISCORD_TOKEN")
 	viper.BindEnv("DEEPGRAM_API_KEY")
 
 	if !viper.IsSet("DISCORD_TOKEN") {
-		fmt.Println("No Discord token provided. Please set the JAMIE_DISCORD_TOKEN environment variable.")
+		fmt.Println(
+			"No Discord token provided. Please set the JAMIE_DISCORD_TOKEN environment variable.",
+		)
 		os.Exit(1)
 	}
 
 	if !viper.IsSet("DEEPGRAM_API_KEY") {
-		fmt.Println("No Deepgram token provided. Please set the JAMIE_DEEPGRAM_API_KEY environment variable.")
+		fmt.Println(
+			"No Deepgram token provided. Please set the JAMIE_DEEPGRAM_API_KEY environment variable.",
+		)
 		os.Exit(1)
 	}
 
