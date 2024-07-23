@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/charmbracelet/log"
+	"github.com/spf13/viper"
 
 	"jamie/db"
 	"jamie/discord"
@@ -16,33 +17,36 @@ import (
 )
 
 var (
-	DiscordToken  string
-	DeepgramToken string
-	HttpPort      string
-	logger        *log.Logger
-	bot           *discord.DiscordBot
+	logger *log.Logger
+	bot    *discord.DiscordBot
 )
 
 func init() {
-	DiscordToken = os.Getenv("DISCORD_TOKEN")
-	if DiscordToken == "" {
-		fmt.Println(
-			"No Discord token provided. Please set the DISCORD_TOKEN environment variable.",
-		)
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath(".")
+	viper.AutomaticEnv()
+
+	viper.SetDefault("PORT", "8080")
+
+	err := viper.ReadInConfig()
+	if err != nil {
+		fmt.Printf("Error reading config file: %s\n", err)
+	}
+
+	// Set required environment variables
+	viper.SetEnvPrefix("JAMIE")
+	viper.BindEnv("DISCORD_TOKEN")
+	viper.BindEnv("DEEPGRAM_API_KEY")
+
+	if !viper.IsSet("DISCORD_TOKEN") {
+		fmt.Println("No Discord token provided. Please set the JAMIE_DISCORD_TOKEN environment variable.")
 		os.Exit(1)
 	}
 
-	DeepgramToken = os.Getenv("DEEPGRAM_API_KEY")
-	if DeepgramToken == "" {
-		fmt.Println(
-			"No Deepgram token provided. Please set the DEEPGRAM_API_KEY environment variable.",
-		)
+	if !viper.IsSet("DEEPGRAM_API_KEY") {
+		fmt.Println("No Deepgram token provided. Please set the JAMIE_DEEPGRAM_API_KEY environment variable.")
 		os.Exit(1)
-	}
-
-	HttpPort = os.Getenv("PORT")
-	if HttpPort == "" {
-		HttpPort = "8080" // Default port if not specified
 	}
 
 	logger = log.New(os.Stdout)
@@ -65,7 +69,7 @@ func main() {
 	go startHTTPServer(httpLogger)
 
 	transcriptionService, err := speech.NewDeepgramClient(
-		DeepgramToken,
+		viper.GetString("DEEPGRAM_API_KEY"),
 		deepgramLogger,
 	)
 	if err != nil {
@@ -73,7 +77,7 @@ func main() {
 	}
 
 	bot, err = discord.NewDiscordBot(
-		DiscordToken,
+		viper.GetString("DISCORD_TOKEN"),
 		transcriptionService,
 		discordLogger,
 	)
@@ -96,8 +100,9 @@ func startHTTPServer(httpLogger *log.Logger) {
 		handleGuildRequest,
 	)
 
-	httpLogger.Info("boot", "port", HttpPort)
-	err := http.ListenAndServe(":"+HttpPort, mux)
+	port := viper.GetString("PORT")
+	httpLogger.Info("boot", "port", port)
+	err := http.ListenAndServe(":"+port, mux)
 	if err != nil {
 		httpLogger.Error("error", "error", err.Error())
 	}
