@@ -103,14 +103,15 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channel
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	err := bot.transcriptionService.Start(ctx)
+	session, err := bot.transcriptionService.Start(ctx)
 	if err != nil {
 		bot.logger.Error("Failed to start transcription service", "error", err.Error())
 		return
 	}
+	defer session.Stop()
 
 	go func() {
-		for transcript := range bot.transcriptionService.Transcriptions() {
+		for transcript := range session.Transcriptions() {
 			bot.handleTranscript(channelID, transcript)
 		}
 	}()
@@ -121,7 +122,7 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channel
 			bot.logger.Info("Voice channel closed")
 			break
 		}
-		err := bot.transcriptionService.SendAudio(opus.Opus)
+		err := session.SendAudio(opus.Opus)
 		if err != nil {
 			bot.logger.Error("Failed to send audio to transcription service", "error", err.Error())
 		}
@@ -131,8 +132,6 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channel
 			bot.logger.Error("Failed to process voice packet", "error", err.Error())
 		}
 	}
-
-	bot.transcriptionService.Stop()
 }
 
 func (bot *DiscordBot) handleTranscript(channelID Venue, transcript string) {

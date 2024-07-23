@@ -18,13 +18,14 @@ func SetLogger(l *log.Logger) {
 }
 
 type DeepgramClient struct {
-	client         *listen.WebSocketClient
-	sb             strings.Builder
-	transcriptions chan string
+	token string
 }
 
 func NewDeepgramClient(token string) (*DeepgramClient, error) {
-	ctx := context.Background()
+	return &DeepgramClient{token: token}, nil
+}
+
+func (c *DeepgramClient) Start(ctx context.Context) (LiveTranscriptionSession, error) {
 	cOptions := &interfaces.ClientOptions{
 		EnableKeepAlive: true,
 	}
@@ -42,39 +43,42 @@ func NewDeepgramClient(token string) (*DeepgramClient, error) {
 		Diarize:        true,
 	}
 
-	dgClient := &DeepgramClient{
+	session := &DeepgramSession{
 		transcriptions: make(chan string),
 	}
 
-	client, err := listen.NewWebSocket(ctx, token, cOptions, tOptions, dgClient)
+	client, err := listen.NewWebSocket(ctx, c.token, cOptions, tOptions, session)
 	if err != nil {
 		return nil, fmt.Errorf("error creating LiveTranscription connection: %w", err)
 	}
 
-	dgClient.client = client
+	session.client = client
 
-	return dgClient, nil
-}
-
-func (c *DeepgramClient) Start(ctx context.Context) error {
-	connected := c.client.Connect()
+	connected := session.client.Connect()
 	if !connected {
-		return fmt.Errorf("failed to connect to Deepgram")
+		return nil, fmt.Errorf("failed to connect to Deepgram")
 	}
+
+	return session, nil
+}
+
+type DeepgramSession struct {
+	client         *listen.WebSocketClient
+	sb             strings.Builder
+	transcriptions chan string
+}
+
+func (s *DeepgramSession) Stop() error {
+	s.client.Stop()
 	return nil
 }
 
-func (c *DeepgramClient) Stop() error {
-	c.client.Stop()
-	return nil
+func (s *DeepgramSession) SendAudio(data []byte) error {
+	return s.client.WriteBinary(data)
 }
 
-func (c *DeepgramClient) SendAudio(data []byte) error {
-	return c.client.WriteBinary(data)
-}
-
-func (c *DeepgramClient) Transcriptions() <-chan string {
-	return c.transcriptions
+func (s *DeepgramSession) Transcriptions() <-chan string {
+	return s.transcriptions
 }
 
 func (c *DeepgramClient) Message(mr *api.MessageResponse) error {
