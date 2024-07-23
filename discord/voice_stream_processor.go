@@ -35,8 +35,6 @@ func NewVoiceStreamProcessor(guildID, channelID string, logger *log.Logger, tran
 		transcriptionService: transcriptionService,
 		session:              session,
 		userCache:            &sync.Map{},
-		lastMessageID:        &sync.Map{},
-		currentSpeaker:       "",
 	}
 }
 
