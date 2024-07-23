@@ -119,6 +119,15 @@ func (vsp *VoiceStreamProcessor) handleTranscriptions(stream *VoiceStream) {
 		for transcript := range transcriptChan {
 			currentTranscript := strings.TrimSpace(transcript)
 
+			if strings.EqualFold(currentTranscript, "Change my identity.") {
+				emoji = getNewEmoji(emoji)
+				_, err := vsp.session.ChannelMessageSend(vsp.channelID, fmt.Sprintf("Your identity has been changed to %s", emoji))
+				if err != nil {
+					vsp.logger.Error("send identity change message", "error", err.Error())
+				}
+				continue
+			}
+
 			if endsWithPunctuation(currentTranscript) || len(currentTranscript) > 1000 {
 				// Append to full transcript
 				fullTranscript += " " + currentTranscript
@@ -157,6 +166,22 @@ func (vsp *VoiceStreamProcessor) handleTranscriptions(stream *VoiceStream) {
 			vsp.logger.Error("save final transcript to database", "error", err.Error())
 		}
 	}
+}
+
+func getNewEmoji(currentEmoji string) string {
+	emojis := []string{"😀", "😎", "🤖", "👽", "🐱", "🐶", "🦄", "🐸", "🦉", "🦋", "🌈", "🌟", "🍎", "🍕", "🎸", "🚀", 
+		"🧙", "🧛", "🧜", "🧚", "🧝", "🦸", "🦹", "🥷", "👨‍🚀", "👩‍🔬", "🕵️", "👨‍🍳", "🧑‍🎨", "👩‍🏫", "🧑‍🌾", "🧑‍🏭"}
+	
+	currentIndex := -1
+	for i, emoji := range emojis {
+		if emoji == currentEmoji {
+			currentIndex = i
+			break
+		}
+	}
+
+	newIndex := (currentIndex + 1) % len(emojis)
+	return emojis[newIndex]
 }
 
 func endsWithPunctuation(s string) bool {
