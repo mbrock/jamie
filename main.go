@@ -27,12 +27,12 @@ func init() {
 	rootCmd.AddCommand(discordCmd)
 
 	// Add persistent flags
-	rootCmd.PersistentFlags().String("port", "8080", "Port for the HTTP server")
+	rootCmd.PersistentFlags().String("web-port", "8080", "Port for the HTTP server")
 	rootCmd.PersistentFlags().String("discord-token", "", "Discord bot token")
 	rootCmd.PersistentFlags().String("deepgram-api-key", "", "Deepgram API key")
 
 	// Bind flags to viper
-	viper.BindPFlag("PORT", rootCmd.PersistentFlags().Lookup("port"))
+	viper.BindPFlag("WEB_PORT", rootCmd.PersistentFlags().Lookup("web-port"))
 	viper.BindPFlag("DISCORD_TOKEN", rootCmd.PersistentFlags().Lookup("discord-token"))
 	viper.BindPFlag("DEEPGRAM_API_KEY", rootCmd.PersistentFlags().Lookup("deepgram-api-key"))
 }
@@ -129,9 +129,9 @@ func startHTTPServer(httpLogger *log.Logger) {
 		handleGuildRequest,
 	)
 
-	port := viper.GetString("PORT")
-	httpLogger.Info("boot", "port", port)
-	err := http.ListenAndServe(":"+port, mux)
+	webPort := viper.GetString("WEB_PORT")
+	httpLogger.Info("boot", "port", webPort)
+	err := http.ListenAndServe(":"+webPort, mux)
 	if err != nil {
 		httpLogger.Error("error", "error", err.Error())
 	}
