@@ -23,8 +23,6 @@ type VoiceStreamProcessor struct {
 	transcriptionService speech.LiveTranscriptionService
 	session              *discordgo.Session
 	userCache            *sync.Map
-	lastMessageID        *sync.Map
-	currentSpeaker       string
 }
 
 func NewVoiceStreamProcessor(guildID, channelID string, logger *log.Logger, transcriptionService speech.LiveTranscriptionService, session *discordgo.Session) *VoiceStreamProcessor {
@@ -116,6 +114,7 @@ func (vsp *VoiceStreamProcessor) getOrCreateStream(opus *discordgo.Packet) (*Voi
 
 func (vsp *VoiceStreamProcessor) handleTranscriptions(stream *VoiceStream) {
 	emoji := getEmojiFromStreamID(stream.StreamID)
+	var lastMessageID string
 
 	for transcriptChan := range stream.DeepgramSession.Transcriptions() {
 		var finalTranscript string
@@ -123,33 +122,27 @@ func (vsp *VoiceStreamProcessor) handleTranscriptions(stream *VoiceStream) {
 			finalTranscript = transcript
 		}
 		if finalTranscript != "" {
-			if vsp.currentSpeaker != stream.UserID || endsWithPunctuation(finalTranscript) {
-				// New speaker or end of sentence, create a new message
-				vsp.currentSpeaker = stream.UserID
+			if lastMessageID == "" || endsWithPunctuation(finalTranscript) {
+				// Create a new message
 				finalFormattedTranscript := fmt.Sprintf("%s: %s", emoji, finalTranscript)
 				msg, err := vsp.session.ChannelMessageSend(vsp.channelID, finalFormattedTranscript)
 				if err != nil {
 					vsp.logger.Error("send new message", "error", err.Error())
 				} else {
-					vsp.lastMessageID.Store(stream.UserID, msg.ID)
+					lastMessageID = msg.ID
 				}
 			} else {
-				// Same speaker, edit the existing message by appending the new transcript
-				lastMsgID, ok := vsp.lastMessageID.Load(stream.UserID)
-				if ok {
-					existingMsg, err := vsp.session.ChannelMessage(vsp.channelID, lastMsgID.(string))
-					if err != nil {
-						vsp.logger.Error("fetch existing message", "error", err.Error())
-					} else {
-						existingContent := existingMsg.Content
-						newContent := fmt.Sprintf("%s %s", existingContent, finalTranscript)
-						_, err := vsp.session.ChannelMessageEdit(vsp.channelID, lastMsgID.(string), newContent)
-						if err != nil {
-							vsp.logger.Error("edit message", "error", err.Error())
-						}
-					}
+				// Edit the existing message by appending the new transcript
+				existingMsg, err := vsp.session.ChannelMessage(vsp.channelID, lastMessageID)
+				if err != nil {
+					vsp.logger.Error("fetch existing message", "error", err.Error())
 				} else {
-					vsp.logger.Error("last message ID not found", "userID", stream.UserID)
+					existingContent := existingMsg.Content
+					newContent := fmt.Sprintf("%s %s", existingContent, finalTranscript)
+					_, err := vsp.session.ChannelMessageEdit(vsp.channelID, lastMessageID, newContent)
+					if err != nil {
+						vsp.logger.Error("edit message", "error", err.Error())
+					}
 				}
 			}
 		}
