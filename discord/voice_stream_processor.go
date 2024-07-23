@@ -23,6 +23,8 @@ type VoiceStreamProcessor struct {
 	transcriptionService speech.LiveTranscriptionService
 	session              *discordgo.Session
 	userCache            *sync.Map
+	lastMessageID        *sync.Map
+	currentSpeaker       string
 }
 
 func NewVoiceStreamProcessor(guildID, channelID string, logger *log.Logger, transcriptionService speech.LiveTranscriptionService, session *discordgo.Session) *VoiceStreamProcessor {
@@ -35,6 +37,8 @@ func NewVoiceStreamProcessor(guildID, channelID string, logger *log.Logger, tran
 		transcriptionService: transcriptionService,
 		session:              session,
 		userCache:            &sync.Map{},
+		lastMessageID:        &sync.Map{},
+		currentSpeaker:       "",
 	}
 }
 
@@ -111,7 +115,6 @@ func (vsp *VoiceStreamProcessor) getOrCreateStream(opus *discordgo.Packet) (*Voi
 }
 
 func (vsp *VoiceStreamProcessor) handleTranscriptions(stream *VoiceStream) {
-	// Generate a consistent emoji based on the stream ID
 	emoji := getEmojiFromStreamID(stream.StreamID)
 
 	for transcriptChan := range stream.DeepgramSession.Transcriptions() {
@@ -120,11 +123,28 @@ func (vsp *VoiceStreamProcessor) handleTranscriptions(stream *VoiceStream) {
 			finalTranscript = transcript
 		}
 		if finalTranscript != "" {
-			username := vsp.getUsernameFromID(stream.UserID)
-			finalFormattedTranscript := fmt.Sprintf("%s **%s**: %s", emoji, username, finalTranscript)
-			_, err := vsp.session.ChannelMessageSend(vsp.channelID, finalFormattedTranscript)
-			if err != nil {
-				vsp.logger.Error("send final message", "error", err.Error())
+			if vsp.currentSpeaker != stream.UserID {
+				// New speaker, create a new message
+				vsp.currentSpeaker = stream.UserID
+				finalFormattedTranscript := fmt.Sprintf("%s: %s", emoji, finalTranscript)
+				msg, err := vsp.session.ChannelMessageSend(vsp.channelID, finalFormattedTranscript)
+				if err != nil {
+					vsp.logger.Error("send new message", "error", err.Error())
+				} else {
+					vsp.lastMessageID.Store(stream.UserID, msg.ID)
+				}
+			} else {
+				// Same speaker, edit the existing message
+				lastMsgID, ok := vsp.lastMessageID.Load(stream.UserID)
+				if ok {
+					finalFormattedTranscript := fmt.Sprintf("%s: %s", emoji, finalTranscript)
+					_, err := vsp.session.ChannelMessageEdit(vsp.channelID, lastMsgID.(string), finalFormattedTranscript)
+					if err != nil {
+						vsp.logger.Error("edit message", "error", err.Error())
+					}
+				} else {
+					vsp.logger.Error("last message ID not found", "userID", stream.UserID)
+				}
 			}
 		}
 	}
