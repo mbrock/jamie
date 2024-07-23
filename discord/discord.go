@@ -3,7 +3,6 @@ package discord
 import (
 	"fmt"
 	"sync"
-	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
@@ -113,7 +112,7 @@ func startDeepgramStream(v *discordgo.VoiceConnection, guildID, channelID, deepg
 		guildID:   guildID,
 		channelID: channelID,
 	}
-	
+
 	// The start time is now automatically recorded in the database when creating a voice stream
 	v.AddHandler(func(vc *discordgo.VoiceConnection, vs *discordgo.VoiceSpeakingUpdate) {
 		voiceStateUpdate(state, vc, vs)
