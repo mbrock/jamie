@@ -9,6 +9,7 @@ import (
 	"syscall"
 
 	"github.com/charmbracelet/log"
+	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
 	"jamie/db"
@@ -22,6 +23,11 @@ var (
 )
 
 func init() {
+	cobra.OnInitialize(initConfig)
+	rootCmd.AddCommand(discordCmd)
+}
+
+func initConfig() {
 	viper.SetConfigName("config")
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath(".")
@@ -37,33 +43,38 @@ func init() {
 	viper.BindEnv("DISCORD_TOKEN")
 	viper.BindEnv("DEEPGRAM_API_KEY")
 
-	if !viper.IsSet("DISCORD_TOKEN") {
-		fmt.Println(
-			"No Discord token provided. Please set the JAMIE_DISCORD_TOKEN environment variable.",
-		)
-		os.Exit(1)
-	}
-
-	if !viper.IsSet("DEEPGRAM_API_KEY") {
-		fmt.Println(
-			"No Deepgram token provided. Please set the JAMIE_DEEPGRAM_API_KEY environment variable.",
-		)
-		os.Exit(1)
-	}
-
 	logger = log.New(os.Stdout)
 }
 
-func createLoggers() (mainLogger, discordLogger, deepgramLogger, httpLogger *log.Logger) {
-	mainLogger = logger.WithPrefix("app")
-	discordLogger = logger.WithPrefix("yap")
-	deepgramLogger = logger.WithPrefix("ear")
-	httpLogger = logger.WithPrefix("web")
-	return
+var rootCmd = &cobra.Command{
+	Use:   "jamie",
+	Short: "Jamie is a Discord bot for voice channel transcription",
+	Long:  `Jamie is a Discord bot that transcribes voice channels and provides various utilities.`,
+}
+
+var discordCmd = &cobra.Command{
+	Use:   "discord",
+	Short: "Start the Discord bot",
+	Run:   runDiscord,
 }
 
 func main() {
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+}
+
+func runDiscord(cmd *cobra.Command, args []string) {
 	mainLogger, discordLogger, deepgramLogger, httpLogger := createLoggers()
+
+	if !viper.IsSet("DISCORD_TOKEN") {
+		mainLogger.Fatal("No Discord token provided. Please set the JAMIE_DISCORD_TOKEN environment variable.")
+	}
+
+	if !viper.IsSet("DEEPGRAM_API_KEY") {
+		mainLogger.Fatal("No Deepgram token provided. Please set the JAMIE_DEEPGRAM_API_KEY environment variable.")
+	}
 
 	db.InitDB()
 	defer db.Close()
@@ -91,6 +102,14 @@ func main() {
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
+}
+
+func createLoggers() (mainLogger, discordLogger, deepgramLogger, httpLogger *log.Logger) {
+	mainLogger = logger.WithPrefix("app")
+	discordLogger = logger.WithPrefix("yap")
+	deepgramLogger = logger.WithPrefix("ear")
+	httpLogger = logger.WithPrefix("web")
+	return
 }
 
 func startHTTPServer(httpLogger *log.Logger) {
