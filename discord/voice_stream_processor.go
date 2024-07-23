@@ -134,13 +134,19 @@ func (vsp *VoiceStreamProcessor) handleTranscriptions(stream *VoiceStream) {
 					vsp.lastMessageID.Store(stream.UserID, msg.ID)
 				}
 			} else {
-				// Same speaker, edit the existing message
+				// Same speaker, edit the existing message by appending the new transcript
 				lastMsgID, ok := vsp.lastMessageID.Load(stream.UserID)
 				if ok {
-					finalFormattedTranscript := fmt.Sprintf("%s: %s", emoji, finalTranscript)
-					_, err := vsp.session.ChannelMessageEdit(vsp.channelID, lastMsgID.(string), finalFormattedTranscript)
+					existingMsg, err := vsp.session.ChannelMessage(vsp.channelID, lastMsgID.(string))
 					if err != nil {
-						vsp.logger.Error("edit message", "error", err.Error())
+						vsp.logger.Error("fetch existing message", "error", err.Error())
+					} else {
+						existingContent := existingMsg.Content
+						newContent := fmt.Sprintf("%s %s", existingContent, finalTranscript)
+						_, err := vsp.session.ChannelMessageEdit(vsp.channelID, lastMsgID.(string), newContent)
+						if err != nil {
+							vsp.logger.Error("edit message", "error", err.Error())
+						}
 					}
 				} else {
 					vsp.logger.Error("last message ID not found", "userID", stream.UserID)
