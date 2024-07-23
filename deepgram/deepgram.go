@@ -43,9 +43,7 @@ func NewDeepgramClient(token string) (*DeepgramClient, error) {
 	}
 
 	dgClient := &DeepgramClient{
-		callback:  callback,
-		guildID:   guildID,
-		channelID: channelID,
+		transcriptions: make(chan string),
 	}
 
 	client, err := listen.NewWebSocket(ctx, token, cOptions, tOptions, dgClient)
@@ -59,7 +57,11 @@ func NewDeepgramClient(token string) (*DeepgramClient, error) {
 }
 
 func (c *DeepgramClient) Start(ctx context.Context) error {
-	return c.client.Connect()
+	connected := c.client.Connect()
+	if !connected {
+		return fmt.Errorf("failed to connect to Deepgram")
+	}
+	return nil
 }
 
 func (c *DeepgramClient) Stop() error {

@@ -1,6 +1,7 @@
 package discord
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sync"
@@ -16,16 +17,11 @@ type Venue struct {
 	ChannelID string
 }
 
-import (
-	"jamie/deepgram"
-	// ... other imports
-)
-
 type DiscordBot struct {
-	logger             *log.Logger
-	transcriptChannels sync.Map
-	discordToken       string
-	session            *discordgo.Session
+	logger               *log.Logger
+	transcriptChannels   sync.Map
+	discordToken         string
+	session              *discordgo.Session
 	transcriptionService deepgram.LiveTranscriptionService
 }
 
@@ -35,9 +31,9 @@ func (bot *DiscordBot) SetLogger(l *log.Logger) {
 
 func NewDiscordBot(token string, transcriptionService deepgram.LiveTranscriptionService) (*DiscordBot, error) {
 	bot := &DiscordBot{
-		discordToken:  token,
+		discordToken:         token,
 		transcriptionService: transcriptionService,
-		logger:        log.New(os.Stderr),
+		logger:               log.New(os.Stderr),
 	}
 
 	dg, err := discordgo.New("Bot " + token)
