@@ -22,6 +22,7 @@ type VoiceStreamProcessor struct {
 	ssrcToStream         *sync.Map
 	transcriptionService speech.LiveTranscriptionService
 	session              *discordgo.Session
+	userCache            *sync.Map
 }
 
 func NewVoiceStreamProcessor(guildID, channelID string, logger *log.Logger, transcriptionService speech.LiveTranscriptionService, session *discordgo.Session) *VoiceStreamProcessor {
@@ -33,6 +34,7 @@ func NewVoiceStreamProcessor(guildID, channelID string, logger *log.Logger, tran
 		ssrcToStream:         &sync.Map{},
 		transcriptionService: transcriptionService,
 		session:              session,
+		userCache:            &sync.Map{},
 	}
 }
 
@@ -116,13 +118,29 @@ func (vsp *VoiceStreamProcessor) handleTranscriptions(stream *VoiceStream) {
 			finalTranscript = transcript
 		}
 		if finalTranscript != "" {
-			finalFormattedTranscript := fmt.Sprintf("> **%s**: %s", stream.UserID, finalTranscript)
+			username := vsp.getUsernameFromID(stream.UserID)
+			finalFormattedTranscript := fmt.Sprintf("> **%s**: %s", username, finalTranscript)
 			_, err := vsp.session.ChannelMessageSend(vsp.channelID, finalFormattedTranscript)
 			if err != nil {
 				vsp.logger.Error("send final message", "error", err.Error())
 			}
 		}
 	}
+}
+
+func (vsp *VoiceStreamProcessor) getUsernameFromID(userID string) string {
+	if cachedName, ok := vsp.userCache.Load(userID); ok {
+		return cachedName.(string)
+	}
+
+	user, err := vsp.session.User(userID)
+	if err != nil {
+		vsp.logger.Error("fetch user", "error", err.Error())
+		return userID // Fallback to userID if we can't fetch the user
+	}
+
+	vsp.userCache.Store(userID, user.Username)
+	return user.Username
 }
 
 func (vsp *VoiceStreamProcessor) logPacketInfo(opus *discordgo.Packet, stream *VoiceStream, relativeOpusTimestamp uint32) {

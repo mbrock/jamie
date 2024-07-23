@@ -113,30 +113,7 @@ func (bot *DiscordBot) startVoiceProcessor(v *discordgo.VoiceConnection, channel
 	}
 }
 
-func (bot *DiscordBot) handleTranscript(channelID Venue, transcriptChan <-chan string) {
-	var finalTranscript string
-
-	for transcript := range transcriptChan {
-		finalTranscript = transcript
-	}
-
-	// After the channel is closed (final transcript received)
-	if finalTranscript != "" {
-		username := bot.getUsernameFromTranscript(finalTranscript)
-		finalFormattedTranscript := fmt.Sprintf("> **%s**: %s", username, finalTranscript)
-		_, err := bot.session.ChannelMessageSend(channelID.ChannelID, finalFormattedTranscript)
-		if err != nil {
-			bot.logger.Error("send final message", "error", err.Error())
-		}
-	}
-}
-
-func (bot *DiscordBot) getUsernameFromTranscript(_ string) string {
-	// This is a placeholder function. You'll need to implement the logic
-	// to extract the username from the transcript based on your specific format.
-	// For now, it returns a default value.
-	return "someone"
-}
+// Removed unused handleTranscript and getUsernameFromTranscript methods
 
 func (bot *DiscordBot) GetTranscriptChannel(channelID Venue) chan chan string {
 	key := fmt.Sprintf("%s:%s", channelID.GuildID, channelID.ChannelID)
