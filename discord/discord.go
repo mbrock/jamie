@@ -16,23 +16,27 @@ type Venue struct {
 	ChannelID string
 }
 
+import (
+	"jamie/deepgram"
+	// ... other imports
+)
+
 type DiscordBot struct {
 	logger             *log.Logger
 	transcriptChannels sync.Map
 	discordToken       string
 	session            *discordgo.Session
-	deepgramToken      string
+	transcriptionService deepgram.LiveTranscriptionService
 }
 
 func (bot *DiscordBot) SetLogger(l *log.Logger) {
 	bot.logger = l
-	deepgram.SetLogger(l)
 }
 
-func NewDiscordBot(token string, deepgramToken string) (*DiscordBot, error) {
+func NewDiscordBot(token string, transcriptionService deepgram.LiveTranscriptionService) (*DiscordBot, error) {
 	bot := &DiscordBot{
 		discordToken:  token,
-		deepgramToken: deepgramToken,
+		transcriptionService: transcriptionService,
 		logger:        log.New(os.Stderr),
 	}
 
@@ -92,7 +96,7 @@ func (bot *DiscordBot) joinAllVoiceChannels(s *discordgo.Session, channelID Venu
 }
 
 func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channelID Venue) {
-	bot.logger.Info("Starting Deepgram stream", "guild", channelID.GuildID, "channel", channelID.ChannelID)
+	bot.logger.Info("Starting transcription stream", "guild", channelID.GuildID, "channel", channelID.ChannelID)
 
 	vsp := NewVoiceStreamProcessor(channelID.GuildID, channelID.ChannelID, bot.logger)
 
@@ -100,19 +104,20 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channel
 		vsp.HandleVoiceStateUpdate(vs)
 	})
 
-	dgClient, err := deepgram.NewDeepgramClient(bot.deepgramToken, channelID.GuildID, channelID.ChannelID, func(guildID, channelID, transcript string) {
-		bot.handleTranscript(Venue{GuildID: guildID, ChannelID: channelID}, transcript)
-	})
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err := bot.transcriptionService.Start(ctx)
 	if err != nil {
-		bot.logger.Error("Error creating Deepgram client", "error", err.Error())
+		bot.logger.Error("Failed to start transcription service", "error", err.Error())
 		return
 	}
 
-	bConnected := dgClient.Connect()
-	if !bConnected {
-		bot.logger.Error("Failed to connect to Deepgram")
-		return
-	}
+	go func() {
+		for transcript := range bot.transcriptionService.Transcriptions() {
+			bot.handleTranscript(channelID, transcript)
+		}
+	}()
 
 	for {
 		opus, ok := <-v.OpusRecv
@@ -120,9 +125,9 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channel
 			bot.logger.Info("Voice channel closed")
 			break
 		}
-		err := dgClient.WriteBinary(opus.Opus)
+		err := bot.transcriptionService.SendAudio(opus.Opus)
 		if err != nil {
-			bot.logger.Error("Failed to send audio to Deepgram", "error", err.Error())
+			bot.logger.Error("Failed to send audio to transcription service", "error", err.Error())
 		}
 
 		err = vsp.ProcessVoicePacket(opus)
@@ -131,7 +136,7 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channel
 		}
 	}
 
-	dgClient.Stop()
+	bot.transcriptionService.Stop()
 }
 
 func (bot *DiscordBot) handleTranscript(channelID Venue, transcript string) {

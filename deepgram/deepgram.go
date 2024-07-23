@@ -9,8 +9,6 @@ import (
 	api "github.com/deepgram/deepgram-go-sdk/pkg/api/listen/v1/websocket/interfaces"
 	interfaces "github.com/deepgram/deepgram-go-sdk/pkg/client/interfaces"
 	"github.com/deepgram/deepgram-go-sdk/pkg/client/listen"
-
-	"jamie/db"
 )
 
 var logger *log.Logger
@@ -19,17 +17,13 @@ func SetLogger(l *log.Logger) {
 	logger = l
 }
 
-type TranscriptionCallback func(guildID, channelID, transcript string)
-
 type DeepgramClient struct {
-	client    *listen.WebSocketClient
-	callback  TranscriptionCallback
-	sb        strings.Builder
-	guildID   string
-	channelID string
+	client         *listen.WebSocketClient
+	sb             strings.Builder
+	transcriptions chan string
 }
 
-func NewDeepgramClient(token string, guildID, channelID string, callback TranscriptionCallback) (*DeepgramClient, error) {
+func NewDeepgramClient(token string) (*DeepgramClient, error) {
 	ctx := context.Background()
 	cOptions := &interfaces.ClientOptions{
 		EnableKeepAlive: true,
@@ -64,16 +58,21 @@ func NewDeepgramClient(token string, guildID, channelID string, callback Transcr
 	return dgClient, nil
 }
 
-func (c *DeepgramClient) Connect() bool {
+func (c *DeepgramClient) Start(ctx context.Context) error {
 	return c.client.Connect()
 }
 
-func (c *DeepgramClient) WriteBinary(data []byte) error {
+func (c *DeepgramClient) Stop() error {
+	c.client.Stop()
+	return nil
+}
+
+func (c *DeepgramClient) SendAudio(data []byte) error {
 	return c.client.WriteBinary(data)
 }
 
-func (c *DeepgramClient) Stop() {
-	c.client.Stop()
+func (c *DeepgramClient) Transcriptions() <-chan string {
+	return c.transcriptions
 }
 
 func (c *DeepgramClient) Message(mr *api.MessageResponse) error {
@@ -91,14 +90,8 @@ func (c *DeepgramClient) Message(mr *api.MessageResponse) error {
 			transcript := strings.TrimSpace(c.sb.String())
 			logger.Info("Transcript", "text", transcript)
 
-			// Store the transcript in the database
-			err := db.SaveTranscript(c.guildID, c.channelID, transcript)
-			if err != nil {
-				logger.Error("Failed to save transcript to database", "error", err.Error())
-			}
-
-			// Call the callback function with the transcript
-			c.callback(c.guildID, c.channelID, transcript)
+			// Send the transcript through the channel
+			c.transcriptions <- transcript
 
 			c.sb.Reset()
 		}

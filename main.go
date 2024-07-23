@@ -49,8 +49,12 @@ func main() {
 
 	go startHTTPServer()
 
-	var err error
-	bot, err = discord.NewDiscordBot(DiscordToken, DeepgramToken)
+	transcriptionService, err := deepgram.NewDeepgramClient(DeepgramToken)
+	if err != nil {
+		logger.Fatal("Error creating Deepgram client", "error", err.Error())
+	}
+
+	bot, err = discord.NewDiscordBot(DiscordToken, transcriptionService)
 	if err != nil {
 		logger.Fatal("Error starting Discord bot", "error", err.Error())
 	}
