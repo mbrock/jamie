@@ -1,18 +1,7 @@
 package discord
 
 import (
-	"fmt"
-	"sync"
-	"time"
-
-	"github.com/bwmarrin/discordgo"
-	"github.com/charmbracelet/log"
-	"github.com/google/uuid"
-
-	"jamie/db"
-)
-
-import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -26,22 +15,22 @@ import (
 )
 
 type VoiceStreamProcessor struct {
-	guildID      string
-	channelID    string
-	logger       *log.Logger
-	ssrcToUser   sync.Map
-	ssrcToStream sync.Map
+	guildID              string
+	channelID            string
+	logger               *log.Logger
+	ssrcToUser           sync.Map
+	ssrcToStream         sync.Map
 	transcriptionService speech.LiveTranscriptionService
-	session      *discordgo.Session
+	session              *discordgo.Session
 }
 
 func NewVoiceStreamProcessor(guildID, channelID string, logger *log.Logger, transcriptionService speech.LiveTranscriptionService, session *discordgo.Session) *VoiceStreamProcessor {
 	return &VoiceStreamProcessor{
-		guildID:   guildID,
-		channelID: channelID,
-		logger:    logger,
+		guildID:              guildID,
+		channelID:            channelID,
+		logger:               logger,
 		transcriptionService: transcriptionService,
-		session:   session,
+		session:              session,
 	}
 }
 
