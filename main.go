@@ -83,10 +83,10 @@ func startHTTPServer(httpLogger *log.Logger) {
 	mux.HandleFunc("GET /", handleRoot)
 	mux.HandleFunc("GET /guild/{guildID}/channel/{channelID}/{format}", handleGuildRequest)
 
-	httpLogger.Info("start http server", "port", HttpPort)
+	httpLogger.Info("boot", "port", HttpPort)
 	err := http.ListenAndServe(":"+HttpPort, mux)
 	if err != nil {
-		httpLogger.Error("http server error", "error", err.Error())
+		httpLogger.Error("error", "error", err.Error())
 	}
 }
 

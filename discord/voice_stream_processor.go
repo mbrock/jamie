@@ -61,7 +61,7 @@ func (vsp *VoiceStreamProcessor) getOrCreateStream(opus *discordgo.Packet) (Voic
 	streamID := uuid.New().String()
 	userID, ok := vsp.ssrcToUser.Load(opus.SSRC)
 	if !ok {
-		vsp.logger.Warn("user id not found", "ssrc", int(opus.SSRC))
+		vsp.logger.Debug("user id not found", "ssrc", int(opus.SSRC))
 		userID = "unknown"
 	}
 
@@ -99,8 +99,8 @@ func (vsp *VoiceStreamProcessor) HandleVoiceStateUpdate(v *discordgo.VoiceSpeaki
 	vsp.logger.Info("voice state update",
 		"user_id", v.UserID,
 		"speaking", v.Speaking,
-		"ssrc", int(v.SSRC))
-	vsp.ssrcToUser.Store(v.SSRC, v.UserID)
+		"ssrc", v.SSRC)
+	vsp.ssrcToUser.Store(uint32(v.SSRC), v.UserID)
 }
 
 func (vsp *VoiceStreamProcessor) GetUserIDFromSSRC(ssrc uint32) (string, bool) {

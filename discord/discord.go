@@ -45,7 +45,7 @@ func NewDiscordBot(token string, transcriptionService speech.LiveTranscriptionSe
 	}
 
 	bot.session = dg
-	bot.logger.Info("running")
+	bot.logger.Info("boot", "user", bot.session.State.User.Username, "name", bot.session.State.User.GlobalName)
 	return bot, nil
 }
 
@@ -86,7 +86,7 @@ func (bot *DiscordBot) joinAllVoiceChannels(s *discordgo.Session, channelID Venu
 }
 
 func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channelID Venue) {
-	bot.logger.Info("start transcription", "guild", channelID.GuildID, "channel", channelID.ChannelID)
+	bot.logger.Info("hark", "guild", channelID.GuildID, "channel", channelID.ChannelID)
 
 	vsp := NewVoiceStreamProcessor(channelID.GuildID, channelID.ChannelID, bot.logger)
 
@@ -99,7 +99,7 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channel
 
 	session, err := bot.transcriptionService.Start(ctx)
 	if err != nil {
-		bot.logger.Error("start transcription", "error", err.Error())
+		bot.logger.Error("hark", "error", err.Error())
 		return
 	}
 	defer session.Stop()
@@ -116,6 +116,7 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channel
 			bot.logger.Info("voice channel closed")
 			break
 		}
+
 		err := session.SendAudio(opus.Opus)
 		if err != nil {
 			bot.logger.Error("send audio", "error", err.Error())
