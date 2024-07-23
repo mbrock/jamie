@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/charmbracelet/log"
 
@@ -103,7 +102,7 @@ func handleTranscriptHTML(w http.ResponseWriter, r *http.Request, guildID, chann
 <head>
 	<title>Voice Channel Transcript</title>
 	<style>
-		body { font-family: Arial, sans-serif; }
+		body { font-family: helvetica, sans-serif; }
 		.transcript { margin-bottom: 10px; }
 	</style>
 </head>
