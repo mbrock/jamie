@@ -2,6 +2,7 @@ package discord
 
 import (
 	"fmt"
+	"os"
 	"sync"
 	"time"
 
@@ -45,7 +46,7 @@ func NewDiscordBot(token string, deepgramToken string) (*DiscordBot, error) {
 	bot := &DiscordBot{
 		discordToken:  token,
 		deepgramToken: deepgramToken,
-		logger:        log.New(),
+		logger:        log.New(os.Stderr),
 	}
 
 	dg, err := discordgo.New("Bot " + token)
@@ -103,8 +104,8 @@ func (bot *DiscordBot) joinAllVoiceChannels(s *discordgo.Session, guildID string
 	return nil
 }
 
-func voiceStateUpdate(state *VoiceState, _ *discordgo.VoiceConnection, v *discordgo.VoiceSpeakingUpdate) {
-	logger.Info("Voice state update", "userID", v.UserID, "speaking", v.Speaking, "SSRC", v.SSRC)
+func (bot *DiscordBot) voiceStateUpdate(state *VoiceState, _ *discordgo.VoiceConnection, v *discordgo.VoiceSpeakingUpdate) {
+	bot.logger.Info("Voice state update", "userID", v.UserID, "speaking", v.Speaking, "SSRC", v.SSRC)
 	state.ssrcToUser.Store(v.SSRC, v.UserID)
 }
 
@@ -208,11 +209,6 @@ func (bot *DiscordBot) GetTranscriptChannel(guildID, channelID string) chan stri
 	key := fmt.Sprintf("%s:%s", guildID, channelID)
 	ch, _ := bot.transcriptChannels.LoadOrStore(key, make(chan string))
 	return ch.(chan string)
-}
-
-func (bot *DiscordBot) voiceStateUpdate(state *VoiceState, _ *discordgo.VoiceConnection, v *discordgo.VoiceSpeakingUpdate) {
-	bot.logger.Info("Voice state update", "userID", v.UserID, "speaking", v.Speaking, "SSRC", v.SSRC)
-	state.ssrcToUser.Store(v.SSRC, v.UserID)
 }
 
 func (state *VoiceState) GetUserIDFromSSRC(ssrc uint32) (string, bool) {
