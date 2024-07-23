@@ -98,26 +98,18 @@ func (s *DeepgramSession) Message(mr *api.MessageResponse) error {
 	s.sb.WriteString(" ")
 
 	if mr.IsFinal {
-		if s.currentTrans == nil {
-			s.currentTrans = make(chan string)
-			s.transcriptions <- s.currentTrans
-		}
-		s.currentTrans <- s.sb.String()
+		transcript := strings.TrimSpace(s.sb.String())
+		logger.Info("Transcript", "text", transcript)
+
+		// Create a new channel for this transcription
+		transcriptChan := make(chan string)
+		s.transcriptions <- transcriptChan
+
+		// Send the transcript and close the channel
+		transcriptChan <- transcript
+		close(transcriptChan)
 
 		if mr.SpeechFinal {
-			transcript := strings.TrimSpace(s.sb.String())
-			logger.Info("Transcript", "text", transcript)
-
-			// Send the final transcript and close the current channel
-			if s.currentTrans != nil {
-				s.currentTrans <- transcript
-				close(s.currentTrans)
-			}
-
-			// Create a new channel for the next transcription
-			s.currentTrans = make(chan string)
-			s.transcriptions <- s.currentTrans
-
 			s.sb.Reset()
 		}
 	}
