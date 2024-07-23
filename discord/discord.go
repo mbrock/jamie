@@ -21,6 +21,10 @@ type DiscordBot struct {
 	transcriptChannels sync.Map
 }
 
+func (bot *DiscordBot) Close() {
+	bot.session.Close()
+}
+
 type VoiceStream struct {
 	UserID             string
 	StreamID           string
