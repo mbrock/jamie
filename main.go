@@ -161,9 +161,16 @@ func handleTranscriptStream(w http.ResponseWriter, r *http.Request, guildID, cha
 	// Start streaming new transcripts
 	for {
 		select {
-		case transcript := <-transcriptChan:
-			writeTranscript(transcript)
-			flusher.Flush()
+		case singleTranscriptChan := <-transcriptChan:
+			// For now, we'll only send the last string in each chan
+			var lastTranscript string
+			for transcript := range singleTranscriptChan {
+				lastTranscript = transcript
+			}
+			if lastTranscript != "" {
+				writeTranscript(lastTranscript)
+				flusher.Flush()
+			}
 		case <-r.Context().Done():
 			return
 		}

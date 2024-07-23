@@ -17,7 +17,7 @@ type Venue struct {
 
 type DiscordBot struct {
 	logger               *log.Logger
-	transcriptChannels   sync.Map
+	transcriptChannels   sync.Map // map[string]chan chan string
 	discordToken         string
 	session              *discordgo.Session
 	transcriptionService speech.LiveTranscriptionService
@@ -132,6 +132,14 @@ func (bot *DiscordBot) startDeepgramStream(v *discordgo.VoiceConnection, channel
 func (bot *DiscordBot) handleTranscript(channelID Venue, transcriptChan <-chan string) {
 	key := fmt.Sprintf("%s:%s", channelID.GuildID, channelID.ChannelID)
 
+	// Create a new channel for this transcription
+	singleTranscriptChan := make(chan string)
+
+	// Send the channel to the transcriptChannels
+	if ch, ok := bot.transcriptChannels.Load(key); ok {
+		ch.(chan chan string) <- singleTranscriptChan
+	}
+
 	for transcript := range transcriptChan {
 		// Send the transcript to Discord
 		_, err := bot.session.ChannelMessageSend(channelID.ChannelID, transcript)
@@ -140,14 +148,15 @@ func (bot *DiscordBot) handleTranscript(channelID Venue, transcriptChan <-chan s
 		}
 
 		// Send the transcript to the channel
-		if ch, ok := bot.transcriptChannels.Load(key); ok {
-			ch.(chan string) <- transcript
-		}
+		singleTranscriptChan <- transcript
 	}
+
+	// Close the channel when we're done
+	close(singleTranscriptChan)
 }
 
-func (bot *DiscordBot) GetTranscriptChannel(channelID Venue) chan string {
+func (bot *DiscordBot) GetTranscriptChannel(channelID Venue) chan chan string {
 	key := fmt.Sprintf("%s:%s", channelID.GuildID, channelID.ChannelID)
-	ch, _ := bot.transcriptChannels.LoadOrStore(key, make(chan string))
-	return ch.(chan string)
+	ch, _ := bot.transcriptChannels.LoadOrStore(key, make(chan chan string))
+	return ch.(chan chan string)
 }
