@@ -3,6 +3,7 @@ package discord
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -122,7 +123,7 @@ func (vsp *VoiceStreamProcessor) handleTranscriptions(stream *VoiceStream) {
 
 			if endsWithPunctuation(currentTranscript) || len(currentTranscript) > 1000 {
 				// Send or edit the message
-				formattedTranscript := fmt.Sprintf("%s: %s", emoji, currentTranscript)
+				formattedTranscript := fmt.Sprintf("%s %s", emoji, currentTranscript)
 				if lastMessageID == "" {
 					msg, err := vsp.session.ChannelMessageSend(vsp.channelID, formattedTranscript)
 					if err != nil {
@@ -150,7 +151,7 @@ func (vsp *VoiceStreamProcessor) handleTranscriptions(stream *VoiceStream) {
 
 	// Send any remaining transcript
 	if currentTranscript != "" {
-		formattedTranscript := fmt.Sprintf("%s: %s", emoji, currentTranscript)
+		formattedTranscript := fmt.Sprintf("%s %s", emoji, currentTranscript)
 		_, err := vsp.session.ChannelMessageSend(vsp.channelID, formattedTranscript)
 		if err != nil {
 			vsp.logger.Error("send final message", "error", err.Error())
@@ -166,24 +167,24 @@ func endsWithPunctuation(s string) bool {
 	return lastChar == '.' || lastChar == '?' || lastChar == '!'
 }
 
-func (vsp *VoiceStreamProcessor) getUsernameFromID(userID string) string {
-	if userID == "" {
-		return "Unknown User"
-	}
+// func (vsp *VoiceStreamProcessor) getUsernameFromID(userID string) string {
+// 	if userID == "" {
+// 		return "Unknown User"
+// 	}
 
-	if cachedName, ok := vsp.userCache.Load(userID); ok {
-		return cachedName.(string)
-	}
+// 	if cachedName, ok := vsp.userCache.Load(userID); ok {
+// 		return cachedName.(string)
+// 	}
 
-	user, err := vsp.session.User(userID)
-	if err != nil {
-		vsp.logger.Error("fetch user", "error", err.Error())
-		return userID // Fallback to userID if we can't fetch the user
-	}
+// 	user, err := vsp.session.User(userID)
+// 	if err != nil {
+// 		vsp.logger.Error("fetch user", "error", err.Error())
+// 		return userID // Fallback to userID if we can't fetch the user
+// 	}
 
-	vsp.userCache.Store(userID, user.Username)
-	return user.Username
-}
+// 	vsp.userCache.Store(userID, user.Username)
+// 	return user.Username
+// }
 
 // Helper function to generate a consistent emoji based on the stream ID
 func getEmojiFromStreamID(streamID string) string {
