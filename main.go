@@ -149,6 +149,7 @@ func createLoggers() (mainLogger, discordLogger, deepgramLogger, sqlLogger *log.
 	discordLogger = logger.WithPrefix("yap")
 	deepgramLogger = logger.WithPrefix("ear")
 	sqlLogger = logger.WithPrefix("sql")
+	sqlLogger.SetLevel(logLevel)
 
 	return
 }
