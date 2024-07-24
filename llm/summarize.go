@@ -3,6 +3,7 @@ package llm
 import (
 	"context"
 	"fmt"
+	"io"
 	"jamie/db"
 	"strings"
 	"time"
@@ -11,21 +12,21 @@ import (
 )
 
 func SummarizeTranscript(
-	openaiAPIKey string,
+	apiKey string,
 	duration time.Duration,
 	promptName string,
-) (string, error) {
+) (<-chan string, error) {
 	// Get transcriptions for the specified duration
 	transcriptions, err := db.GetDB().GetTranscriptionsForDuration(duration)
 	if err != nil {
-		return "", fmt.Errorf("get transcriptions for duration: %w", err)
+		return nil, fmt.Errorf("get transcriptions for duration: %w", err)
 	}
 
 	if len(transcriptions) == 0 {
-		return fmt.Sprintf(
-			"No transcriptions found for the last %s",
+		return nil, fmt.Errorf(
+			"no transcriptions found for the last %s",
 			duration,
-		), nil
+		)
 	}
 
 	// Format transcriptions
@@ -42,7 +43,7 @@ func SummarizeTranscript(
 	}
 
 	// Create OpenAI client
-	client := openai.NewClient(openaiAPIKey)
+	client := openai.NewClient(apiKey)
 	ctx := context.Background()
 
 	// Get the system prompt
@@ -50,7 +51,7 @@ func SummarizeTranscript(
 	if promptName != "" {
 		systemPrompt, err = db.GetDB().GetSystemPrompt(promptName)
 		if err != nil {
-			return "", fmt.Errorf("get system prompt: %w", err)
+			return nil, fmt.Errorf("get system prompt: %w", err)
 		}
 	} else {
 		systemPrompt = "Analyze the following transcript and provide a narrative synopsis. " +
@@ -58,10 +59,8 @@ func SummarizeTranscript(
 			"Emphasize key words and salient concepts with CAPS."
 	}
 
-	// Prepare the chat completion request
 	req := openai.ChatCompletionRequest{
-		Model:     openai.GPT4o,
-		MaxTokens: 500,
+		Model: openai.GPT3Dot5Turbo,
 		Messages: []openai.ChatCompletionMessage{
 			{
 				Role:    openai.ChatMessageRoleSystem,
@@ -72,14 +71,40 @@ func SummarizeTranscript(
 				Content: formattedTranscript.String(),
 			},
 		},
+		MaxTokens: 500,
+		Stream:    true,
 	}
 
-	// Send the request to OpenAI
-	resp, err := client.CreateChatCompletion(ctx, req)
+	stream, err := client.CreateChatCompletionStream(ctx, req)
 	if err != nil {
-		return "", fmt.Errorf("OpenAI API error: %w", err)
+		return nil, fmt.Errorf(
+			"error creating chat completion stream: %w",
+			err,
+		)
 	}
 
-	summary := resp.Choices[0].Message.Content
-	return summary, nil
+	summaryChannel := make(chan string, 50)
+
+	go func() {
+		defer close(summaryChannel)
+		defer stream.Close()
+
+		for {
+			response, err := stream.Recv()
+			if err != nil {
+				if err == io.EOF {
+					return
+				}
+				summaryChannel <- fmt.Sprintf("Stream error: %v", err)
+				return
+			}
+
+			if len(response.Choices) > 0 &&
+				response.Choices[0].Delta.Content != "" {
+				summaryChannel <- response.Choices[0].Delta.Content
+			}
+		}
+	}()
+
+	return summaryChannel, nil
 }

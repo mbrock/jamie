@@ -2,5 +2,5 @@
 /main
 /.env
 /voice
-*.db# Ignore the compiled binary
-./jamie
+*.db
+jamie

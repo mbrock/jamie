@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -117,10 +118,14 @@ func runSummarizeTranscript(cmd *cobra.Command, args []string) {
 		mainLogger.Fatal("missing OPENAI_API_KEY or --openai-api-key=")
 	}
 
-	summary, err := llm.SummarizeTranscript(openaiAPIKey, 24*time.Hour, "")
+	summaryChan, err := llm.SummarizeTranscript(
+		openaiAPIKey,
+		24*time.Hour,
+		"",
+	)
 	if err != nil {
 		mainLogger.Fatal(
-			"failed to summarize transcript",
+			"failed to start summary generation",
 			"error",
 			err.Error(),
 		)
@@ -134,9 +139,31 @@ func runSummarizeTranscript(cmd *cobra.Command, args []string) {
 		mainLogger.Fatal("failed to create renderer", "error", err.Error())
 	}
 
-	renderedSummary, err := renderer.Render(summary)
+	var fullSummary strings.Builder
+	for chunk := range summaryChan {
+		fullSummary.WriteString(chunk)
+
+		// Render and print the current chunk
+		renderedChunk, err := renderer.Render(chunk)
+		if err != nil {
+			mainLogger.Error(
+				"failed to render summary chunk",
+				"error",
+				err.Error(),
+			)
+			continue
+		}
+		fmt.Print(renderedChunk)
+	}
+
+	// Final rendering of the full summary (optional, as we've been printing chunks)
+	renderedSummary, err := renderer.Render(fullSummary.String())
 	if err != nil {
-		mainLogger.Fatal("failed to render summary", "error", err.Error())
+		mainLogger.Fatal(
+			"failed to render full summary",
+			"error",
+			err.Error(),
+		)
 	}
 
 	fmt.Print(renderedSummary)

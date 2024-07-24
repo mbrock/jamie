@@ -323,20 +323,14 @@ func (bot *Bot) speechRecognitionLoop(
 	streamID string,
 	session stt.LiveTranscriptionSession,
 ) {
-	for {
-		select {
-		case segmentDrafts, ok := <-session.Receive():
-			if !ok {
-				bot.log.Info(
-					"Speech recognition session closed",
-					"streamID",
-					streamID,
-				)
-				return
-			}
-			bot.processSegment(streamID, segmentDrafts)
-		}
+	for segmentDrafts := range session.Receive() {
+		bot.processSegment(streamID, segmentDrafts)
 	}
+	bot.log.Info(
+		"Speech recognition session closed",
+		"streamID",
+		streamID,
+	)
 }
 
 func (bot *Bot) processSegment(streamID string, segmentDrafts <-chan string) {
@@ -475,15 +469,50 @@ func (bot *Bot) handleSummaryCommand(
 	}
 
 	// Generate summary
-	summary, err := llm.SummarizeTranscript(bot.openaiAPIKey, duration, promptName)
+	summaryChan, err := llm.SummarizeTranscript(
+		bot.openaiAPIKey,
+		duration,
+		promptName,
+	)
 	if err != nil {
-		return fmt.Errorf("failed to generate summary: %w", err)
+		return fmt.Errorf("failed to start summary generation: %w", err)
 	}
 
-	// Send summary to the channel
-	_, err = s.ChannelMessageSend(m.ChannelID, summary)
+	// Send initial message
+	message, err := s.ChannelMessageSend(m.ChannelID, "Generating summary...")
 	if err != nil {
-		return fmt.Errorf("failed to send summary message: %w", err)
+		return fmt.Errorf("failed to send initial message: %w", err)
+	}
+
+	// Accumulate and update summary
+	var fullSummary strings.Builder
+	for chunk := range summaryChan {
+		fullSummary.WriteString(chunk)
+
+		_, err = s.ChannelMessageEdit(
+			m.ChannelID,
+			message.ID,
+			fullSummary.String(),
+		)
+		if err != nil {
+			bot.log.Error(
+				"failed to update summary message",
+				"error",
+				err,
+			)
+		}
+
+		time.Sleep(2 * time.Second)
+	}
+
+	// Send final summary
+	_, err = s.ChannelMessageEdit(
+		m.ChannelID,
+		message.ID,
+		fullSummary.String(),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to send final summary message: %w", err)
 	}
 
 	return nil
@@ -506,7 +535,10 @@ func (bot *Bot) handlePromptCommand(
 		return fmt.Errorf("failed to set system prompt: %w", err)
 	}
 
-	_, err = s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("System prompt '%s' has been set.", name))
+	_, err = s.ChannelMessageSend(
+		m.ChannelID,
+		fmt.Sprintf("System prompt '%s' has been set.", name),
+	)
 	if err != nil {
 		return fmt.Errorf("failed to send confirmation message: %w", err)
 	}
@@ -525,7 +557,10 @@ func (bot *Bot) handleListPromptsCommand(
 	}
 
 	if len(prompts) == 0 {
-		_, err = s.ChannelMessageSend(m.ChannelID, "No system prompts have been set.")
+		_, err = s.ChannelMessageSend(
+			m.ChannelID,
+			"No system prompts have been set.",
+		)
 		if err != nil {
 			return fmt.Errorf("failed to send message: %w", err)
 		}
