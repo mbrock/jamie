@@ -145,10 +145,7 @@ func runDiscord(cmd *cobra.Command, args []string) {
 }
 
 func createLoggers() (mainLogger, discordLogger, deepgramLogger, sqlLogger *log.Logger) {
-	logLevel := log.InfoLevel
-	if os.Getenv("LOG_LEVEL") == "debug" {
-		logLevel = log.DebugLevel
-	}
+	logLevel := log.DebugLevel
 
 	logger.SetLevel(logLevel)
 	logger.SetReportCaller(true)
@@ -157,8 +154,11 @@ func createLoggers() (mainLogger, discordLogger, deepgramLogger, sqlLogger *log.
 	})
 
 	mainLogger = logger.WithPrefix("app")
+	mainLogger.SetLevel(logLevel)
 	discordLogger = logger.WithPrefix("yap")
+	discordLogger.SetLevel(logLevel)
 	deepgramLogger = logger.WithPrefix("ear")
+	deepgramLogger.SetLevel(logLevel)
 	sqlLogger = logger.WithPrefix("sql")
 	sqlLogger.SetLevel(logLevel)
 
