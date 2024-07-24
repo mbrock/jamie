@@ -2,11 +2,15 @@ package db
 
 import (
 	"database/sql"
+	"embed"
 	"log"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
+
+//go:embed schema.sql
+var schemaFS embed.FS
 
 var db *sql.DB
 
@@ -17,52 +21,12 @@ func InitDB() {
 		log.Fatal(err)
 	}
 
-	createTranscriptsTable := `
-		CREATE TABLE IF NOT EXISTS transcripts (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			guild_id TEXT,
-			channel_id TEXT,
-			transcript TEXT,
-			timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
-		);
-	`
-
-	createDiscordVoicePacketTable := `
-		CREATE TABLE IF NOT EXISTS discord_voice_packet (
-			id INTEGER PRIMARY KEY AUTOINCREMENT,
-			stream_id TEXT,
-			packet BLOB,
-			relative_sequence INTEGER,
-			relative_opus_timestamp INTEGER,
-			receive_time INTEGER,
-			FOREIGN KEY (stream_id) REFERENCES discord_voice_stream(stream_id)
-		);
-	`
-
-	createVoiceStreamTable := `
-		CREATE TABLE IF NOT EXISTS discord_voice_stream (
-			stream_id TEXT PRIMARY KEY,
-			guild_id TEXT,
-			channel_id TEXT,
-			ssrc INTEGER,
-			user_id TEXT,
-			first_opus_timestamp INTEGER,
-			first_receive_time INTEGER,
-			first_sequence INTEGER
-		);
-	`
-
-	_, err = db.Exec(createTranscriptsTable)
+	schemaSQL, err := schemaFS.ReadFile("schema.sql")
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	_, err = db.Exec(createDiscordVoicePacketTable)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	_, err = db.Exec(createVoiceStreamTable)
+	_, err = db.Exec(string(schemaSQL))
 	if err != nil {
 		log.Fatal(err)
 	}
