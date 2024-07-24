@@ -1,13 +1,13 @@
 package web
 
 import (
-	"fmt"
 	"html/template"
 	"net/http"
 	"time"
 
-	"github.com/charmbracelet/log"
 	"jamie/db"
+
+	"github.com/charmbracelet/log"
 )
 
 type Handler struct {
@@ -31,7 +31,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (h *Handler) handleIndex(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handleIndex(w http.ResponseWriter, _ *http.Request) {
 	transcriptions, err := h.db.GetRecentTranscriptions(50)
 	if err != nil {
 		h.logger.Error("failed to get transcriptions", "error", err.Error())
