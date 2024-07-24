@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,6 +14,7 @@ import (
 	"jamie/db"
 	"jamie/discordbot"
 	"jamie/stt"
+	"jamie/web"
 )
 
 var (
@@ -23,21 +25,17 @@ var (
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.AddCommand(discordCmd)
+	rootCmd.AddCommand(webCmd)
 
 	// Add persistent flags
 	rootCmd.PersistentFlags().String("discord-token", "", "Discord bot token")
-	rootCmd.PersistentFlags().
-		String("deepgram-api-key", "", "Deepgram API key")
+	rootCmd.PersistentFlags().String("deepgram-api-key", "", "Deepgram API key")
+	rootCmd.PersistentFlags().Int("web-port", 8080, "Web server port")
 
 	// Bind flags to viper
-	viper.BindPFlag(
-		"discord_token",
-		rootCmd.PersistentFlags().Lookup("discord-token"),
-	)
-	viper.BindPFlag(
-		"deepgram_api_key",
-		rootCmd.PersistentFlags().Lookup("deepgram-api-key"),
-	)
+	viper.BindPFlag("discord_token", rootCmd.PersistentFlags().Lookup("discord-token"))
+	viper.BindPFlag("deepgram_api_key", rootCmd.PersistentFlags().Lookup("deepgram-api-key"))
+	viper.BindPFlag("web_port", rootCmd.PersistentFlags().Lookup("web-port"))
 }
 
 func initConfig() {
@@ -64,6 +62,12 @@ var discordCmd = &cobra.Command{
 	Use:   "discord",
 	Short: "Start the Discord bot",
 	Run:   runDiscord,
+}
+
+var webCmd = &cobra.Command{
+	Use:   "web",
+	Short: "Start the web server",
+	Run:   runWeb,
 }
 
 func main() {
@@ -142,6 +146,42 @@ func runDiscord(cmd *cobra.Command, args []string) {
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
+}
+
+func runWeb(cmd *cobra.Command, args []string) {
+	mainLogger, _, _, sqlLogger := createLoggers()
+
+	db.InitDB(sqlLogger)
+	defer db.Close()
+
+	// Load and apply migrations
+	migrations, err := db.LoadMigrations("db")
+	if err != nil {
+		mainLogger.Fatal("load migrations", "error", err.Error())
+	}
+
+	mainLogger.Info("Starting database migration process...")
+	err = db.Migrate(db.GetDB().DB, migrations, sqlLogger)
+	if err != nil {
+		mainLogger.Error("apply migrations", "error", err.Error())
+		os.Exit(1)
+	}
+
+	mainLogger.Info("Preparing database statements...")
+	err = db.GetDB().PrepareStatements()
+	if err != nil {
+		mainLogger.Fatal("prepare statements", "error", err.Error())
+	}
+	mainLogger.Info("Database statements prepared successfully")
+
+	port := viper.GetInt("web_port")
+	handler := web.NewHandler(db.GetDB(), mainLogger)
+	
+	mainLogger.Info("Starting web server", "port", port)
+	err = http.ListenAndServe(fmt.Sprintf(":%d", port), handler)
+	if err != nil {
+		mainLogger.Fatal("failed to start web server", "error", err.Error())
+	}
 }
 
 func createLoggers() (mainLogger, discordLogger, deepgramLogger, sqlLogger *log.Logger) {

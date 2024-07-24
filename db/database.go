@@ -247,6 +247,37 @@ func SaveRecognition(
 	return err
 }
 
+func (db *DB) GetRecentTranscriptions(limit int) ([]web.Transcription, error) {
+	query := `
+		SELECT s.emoji, r.text, r.created_at
+		FROM recognitions r
+		JOIN speakers s ON r.stream = s.stream
+		ORDER BY r.created_at DESC
+		LIMIT ?
+	`
+	rows, err := db.Query(query, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var transcriptions []web.Transcription
+	for rows.Next() {
+		var t web.Transcription
+		err := rows.Scan(&t.Emoji, &t.Text, &t.Timestamp)
+		if err != nil {
+			return nil, err
+		}
+		transcriptions = append(transcriptions, t)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return transcriptions, nil
+}
+
 func Close() {
 	for _, stmt := range db.stmts {
 		stmt.Close()
