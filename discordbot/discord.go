@@ -190,16 +190,12 @@ func (bot *Bot) getOrCreateVoiceStream(
 
 	if errors.Is(err, sql.ErrNoRows) {
 		streamID = etc.Gensym()
-		err = db.CreateStreamForDiscordChannel(streamID, guildID, channelID, packet.Sequence, uint16(packet.Timestamp))
+		speakerID := etc.Gensym()
+		discordID := fmt.Sprintf("%d", packet.SSRC) // Using SSRC as a unique identifier for the Discord user
+		emoji := txt.RandomAvatar()
+		err = db.CreateStreamForDiscordChannel(streamID, guildID, channelID, packet.Sequence, uint16(packet.Timestamp), speakerID, discordID, emoji)
 		if err != nil {
 			return "", fmt.Errorf("failed to create new stream: %w", err)
-		}
-
-		speakerID := etc.Gensym()
-		emoji := txt.RandomAvatar()
-		err = db.CreateSpeakerForStream(speakerID, streamID, emoji)
-		if err != nil {
-			return "", fmt.Errorf("failed to create speaker: %w", err)
 		}
 
 		bot.log.Info(
@@ -339,7 +335,10 @@ func (bot *Bot) handleVoiceStateUpdate(
 	} else {
 		// User joined or moved to a voice channel
 		streamID := etc.Gensym()
-		err := db.CreateStreamForDiscordChannel(streamID, v.GuildID, v.ChannelID, 0, uint16(0))
+		speakerID := etc.Gensym()
+		discordID := v.UserID
+		emoji := txt.RandomAvatar()
+		err := db.CreateStreamForDiscordChannel(streamID, v.GuildID, v.ChannelID, 0, uint16(0), speakerID, discordID, emoji)
 		if err != nil {
 			bot.log.Error("failed to create new stream for user join", "error", err.Error())
 		}
