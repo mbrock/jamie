@@ -14,4 +14,8 @@ migrate:
 clean:
 	rm -f jamie
 
-.PHONY: build run migrate clean
+# Drop the database
+drop:
+	rm -f 001.db
+
+.PHONY: build run migrate clean drop
