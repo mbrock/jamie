@@ -97,7 +97,7 @@ func runDiscord(cmd *cobra.Command, args []string) {
 	}
 
 	mainLogger.Info("Starting database migration process...")
-	err = db.Migrate(db.GetDB(), migrations, sqlLogger)
+	err = db.Migrate(db.GetDB().DB, migrations, sqlLogger)
 	if err != nil {
 		mainLogger.Error("apply migrations", "error", err.Error())
 		fmt.Print("An error occurred during migration. Do you want to continue? (y/n): ")
