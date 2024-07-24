@@ -17,7 +17,6 @@ import (
 	"time"
 
 	discordsdk "github.com/bwmarrin/discordgo"
-	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/log"
 	"github.com/haguro/elevenlabs-go"
 	"github.com/pion/rtp"
@@ -727,9 +726,15 @@ func (bot *Bot) handleGenerateAudioCommand(
 	m *discordsdk.MessageCreate,
 	args []string,
 ) error {
-	streamID, startTime, endTime, err := getAudioGenerationParams(args, bot.db)
+	streamID, startTime, endTime, err := db.GetAudioGenerationParams(
+		args,
+		bot.db,
+	)
 	if err != nil {
-		return fmt.Errorf("failed to get audio generation parameters: %w", err)
+		return fmt.Errorf(
+			"failed to get audio generation parameters: %w",
+			err,
+		)
 	}
 
 	// Generate the audio
@@ -752,7 +757,11 @@ func (bot *Bot) handleGenerateAudioCommand(
 	tempFile.Close()
 
 	// Send the audio file as an attachment
-	_, err = s.ChannelFileSend(m.ChannelID, "audio.ogg", bytes.NewReader(oggData))
+	_, err = s.ChannelFileSend(
+		m.ChannelID,
+		"audio.ogg",
+		bytes.NewReader(oggData),
+	)
 	if err != nil {
 		return fmt.Errorf("send audio file: %w", err)
 	}
