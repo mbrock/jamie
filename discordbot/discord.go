@@ -16,6 +16,8 @@ import (
 	"github.com/charmbracelet/log"
 )
 
+type CommandHandler func(*discordsdk.Session, *discordsdk.MessageCreate, []string) error
+
 type Bot struct {
 	log                      *log.Logger
 	conn                     *discordsdk.Session
@@ -23,6 +25,7 @@ type Bot struct {
 	db                       *db.DB
 	sessions                 map[string]stt.LiveTranscriptionSession
 	openaiAPIKey             string
+	commands                 map[string]CommandHandler
 }
 
 func NewBot(
@@ -37,7 +40,10 @@ func NewBot(
 		db:                       db.GetDB(),
 		sessions:                 make(map[string]stt.LiveTranscriptionSession),
 		openaiAPIKey:             openaiAPIKey,
+		commands:                 make(map[string]CommandHandler),
 	}
+
+	bot.registerCommands()
 
 	dg, err := discordsdk.New("Bot " + discordToken)
 	if err != nil {
@@ -60,6 +66,11 @@ func NewBot(
 		bot.conn.State.User.Username,
 	)
 	return bot, nil
+}
+
+func (bot *Bot) registerCommands() {
+	bot.commands["summary"] = bot.handleSummaryCommand
+	// Add more commands here as needed
 }
 
 func (bot *Bot) Close() error {
@@ -87,23 +98,28 @@ func (bot *Bot) handleMessageCreate(s *discordsdk.Session, m *discordsdk.Message
 		return
 	}
 
-	// Check if the message is the summary command
-	if m.Content == "!summary" {
-		bot.log.Info("Summary command received", "channel", m.ChannelID)
+	// Check if the message starts with the command prefix
+	if !strings.HasPrefix(m.Content, "!") {
+		return
+	}
 
-		// Generate summary
-		summary, err := llm.SummarizeTranscript(bot.openaiAPIKey)
-		if err != nil {
-			bot.log.Error("Failed to generate summary", "error", err.Error())
-			s.ChannelMessageSend(m.ChannelID, "Sorry, I couldn't generate a summary at this time.")
-			return
-		}
+	// Split the message into command and arguments
+	args := strings.Fields(m.Content[1:])
+	if len(args) == 0 {
+		return
+	}
 
-		// Send summary to the channel
-		_, err = s.ChannelMessageSend(m.ChannelID, summary)
-		if err != nil {
-			bot.log.Error("Failed to send summary message", "error", err.Error())
-		}
+	commandName := args[0]
+	handler, exists := bot.commands[commandName]
+	if !exists {
+		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Unknown command: %s", commandName))
+		return
+	}
+
+	err := handler(s, m, args[1:])
+	if err != nil {
+		bot.log.Error("Command execution failed", "command", commandName, "error", err.Error())
+		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Error executing command: %s", err.Error()))
 	}
 }
 
@@ -368,4 +384,21 @@ func (bot *Bot) handleVoiceStateUpdate(
 			bot.log.Error("failed to create new stream for user join", "error", err.Error())
 		}
 	}
+}
+func (bot *Bot) handleSummaryCommand(s *discordsdk.Session, m *discordsdk.MessageCreate, args []string) error {
+	bot.log.Info("Summary command received", "channel", m.ChannelID)
+
+	// Generate summary
+	summary, err := llm.SummarizeTranscript(bot.openaiAPIKey)
+	if err != nil {
+		return fmt.Errorf("failed to generate summary: %w", err)
+	}
+
+	// Send summary to the channel
+	_, err = s.ChannelMessageSend(m.ChannelID, summary)
+	if err != nil {
+		return fmt.Errorf("failed to send summary message: %w", err)
+	}
+
+	return nil
 }
