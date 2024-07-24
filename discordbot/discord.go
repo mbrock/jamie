@@ -26,9 +26,9 @@ type UserStream struct {
 	UserID    UserID
 	ChannelID ChannelID
 	GuildID   GuildID
-	Emoji     string
 
-	FirstPacketTiming PacketTiming
+	Beginning PacketTiming
+	Emoji     string
 
 	SpeechRecognitionSession stt.LiveTranscriptionSession
 	bot                      *Bot
@@ -201,8 +201,8 @@ func (bot *Bot) processVoicePacket(
 		return fmt.Errorf("failed to get or create voice stream: %w", err)
 	}
 
-	relativeOpusTimestamp := packet.Timestamp - stream.FirstPacketTiming.SampleIndex
-	relativeSequence := packet.Sequence - stream.FirstPacketTiming.PacketIndex
+	relativeOpusTimestamp := packet.Timestamp - stream.Beginning.SampleIndex
+	relativeSequence := packet.Sequence - stream.Beginning.PacketIndex
 	receiveTime := time.Now().UnixNano()
 
 	err = db.SaveDiscordVoicePacket(
@@ -239,22 +239,22 @@ func (bot *Bot) getOrCreateVoiceStream(
 	if !exists {
 		streamID := UserStreamID(etc.Gensym())
 
-		transcriptionSession, err := bot.speechRecognitionService.Start(context.Background())
+		speechRecognitionSession, err := bot.speechRecognitionService.Start(context.Background())
 		if err != nil {
 			return nil, fmt.Errorf("failed to start SpeechRecognitionService session: %w", err)
 		}
 
 		stream = &UserStream{
-			ID: streamID,
-			FirstPacketTiming: PacketTiming{
+			ID:        streamID,
+			GuildID:   guildID,
+			ChannelID: channelID,
+			Emoji:     txt.RandomAvatar(),
+			Beginning: PacketTiming{
+				PacketIndex: packet.Sequence,
 				SampleIndex: packet.Timestamp,
 				ReceivedAt:  time.Now().UnixNano(),
-				PacketIndex: packet.Sequence,
 			},
-			SpeechRecognitionSession: transcriptionSession,
-			Emoji:                    txt.RandomAvatar(),
-			GuildID:                  guildID,
-			ChannelID:                channelID,
+			SpeechRecognitionSession: speechRecognitionSession,
 			bot:                      bot,
 		}
 
@@ -271,9 +271,9 @@ func (bot *Bot) getOrCreateVoiceStream(
 		string(stream.ID),
 		string(stream.UserID),
 		packet.SSRC,
-		stream.FirstPacketTiming.SampleIndex,
-		stream.FirstPacketTiming.ReceivedAt,
-		stream.FirstPacketTiming.PacketIndex,
+		stream.Beginning.SampleIndex,
+		stream.Beginning.ReceivedAt,
+		stream.Beginning.PacketIndex,
 	)
 	if err != nil {
 		return nil, fmt.Errorf(
@@ -292,21 +292,21 @@ func (bot *Bot) getOrCreateVoiceStream(
 		stream.ID,
 	)
 
-	go stream.listen()
+	go stream.SpeechRecognitionLoop()
 
 	return stream, nil
 }
 
-func (s *UserStream) listen() {
-	for phrase := range s.SpeechRecognitionSession.Read() {
-		s.handlePhrase(phrase)
+func (s *UserStream) SpeechRecognitionLoop() {
+	for segment := range s.SpeechRecognitionSession.Receive() {
+		s.ProcessSegment(segment)
 	}
 }
 
-func (s *UserStream) handlePhrase(phrase <-chan string) {
+func (s *UserStream) ProcessSegment(segmentDrafts <-chan string) {
 	var final string
 
-	for draft := range phrase {
+	for draft := range segmentDrafts {
 		final = draft
 	}
 

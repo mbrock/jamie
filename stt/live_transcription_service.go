@@ -7,7 +7,7 @@ import (
 type LiveTranscriptionSession interface {
 	Stop() error
 	SendAudio(data []byte) error
-	Read() <-chan chan string
+	Receive() <-chan chan string
 }
 
 type SpeechRecognitionService interface {
