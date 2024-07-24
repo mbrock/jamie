@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"fmt"
 
 	"jamie/etc"
 
@@ -128,7 +129,13 @@ func (db *DB) PrepareStatements() error {
 		sqlLogger.Info("Preparing statement", "name", name)
 		stmt, err := db.Prepare(query)
 		if err != nil {
-			sqlLogger.Error("Failed to prepare statement", "name", name, "error", err)
+			sqlLogger.Error(
+				"Failed to prepare statement",
+				"name",
+				name,
+				"error",
+				err,
+			)
 			return err
 		}
 		db.stmts[name] = stmt
@@ -143,37 +150,98 @@ func GetDB() *DB {
 }
 
 func CreateStream(id string, packetSeqOffset int, sampleIdxOffset int) error {
-	_, err := db.execWithLog(context.Background(), "insertStream", id, packetSeqOffset, sampleIdxOffset)
+	_, err := db.execWithLog(
+		context.Background(),
+		"insertStream",
+		id,
+		packetSeqOffset,
+		sampleIdxOffset,
+	)
 	return err
 }
 
-func SavePacket(id string, stream string, packetSeq int, sampleIdx int, payload []byte) error {
-	_, err := db.execWithLog(context.Background(), "insertPacket", id, stream, packetSeq, sampleIdx, payload)
+func SavePacket(
+	id string,
+	stream string,
+	packetSeq int,
+	sampleIdx int,
+	payload []byte,
+) error {
+	_, err := db.execWithLog(
+		context.Background(),
+		"insertPacket",
+		id,
+		stream,
+		packetSeq,
+		sampleIdx,
+		payload,
+	)
 	return err
 }
 
 func CreateSpeaker(id, stream, emoji string) error {
-	_, err := db.execWithLog(context.Background(), "insertSpeaker", id, stream, emoji)
+	_, err := db.execWithLog(
+		context.Background(),
+		"insertSpeaker",
+		id,
+		stream,
+		emoji,
+	)
 	return err
 }
 
 func CreateDiscordSpeaker(id, speaker, discordID string) error {
-	_, err := db.execWithLog(context.Background(), "insertDiscordSpeaker", id, speaker, discordID)
+	_, err := db.execWithLog(
+		context.Background(),
+		"insertDiscordSpeaker",
+		id,
+		speaker,
+		discordID,
+	)
 	return err
 }
 
-func CreateDiscordChannelStream(id, stream, discordGuild, discordChannel string) error {
-	_, err := db.execWithLog(context.Background(), "insertDiscordChannelStream", id, stream, discordGuild, discordChannel)
+func CreateDiscordChannelStream(
+	id, stream, discordGuild, discordChannel string,
+) error {
+	_, err := db.execWithLog(
+		context.Background(),
+		"insertDiscordChannelStream",
+		id,
+		stream,
+		discordGuild,
+		discordChannel,
+	)
 	return err
 }
 
 func CreateAttribution(id, stream, speaker string) error {
-	_, err := db.execWithLog(context.Background(), "insertAttribution", id, stream, speaker)
+	_, err := db.execWithLog(
+		context.Background(),
+		"insertAttribution",
+		id,
+		stream,
+		speaker,
+	)
 	return err
 }
 
-func SaveRecognition(id, stream string, sampleIdx, sampleLen int, text string, confidence float64) error {
-	_, err := db.execWithLog(context.Background(), "insertRecognition", id, stream, sampleIdx, sampleLen, text, confidence)
+func SaveRecognition(
+	id, stream string,
+	sampleIdx, sampleLen int,
+	text string,
+	confidence float64,
+) error {
+	_, err := db.execWithLog(
+		context.Background(),
+		"insertRecognition",
+		id,
+		stream,
+		sampleIdx,
+		sampleLen,
+		text,
+		confidence,
+	)
 	return err
 }
 
@@ -186,13 +254,21 @@ func Close() {
 	}
 }
 
-func (db *DB) execWithLog(ctx context.Context, stmtName string, args ...interface{}) (sql.Result, error) {
+func (db *DB) execWithLog(
+	ctx context.Context,
+	stmtName string,
+	args ...interface{},
+) (sql.Result, error) {
 	stmt := db.stmts[stmtName]
 	sqlLogger.Debug("Executing SQL statement", "name", stmtName, "args", args)
 	return stmt.ExecContext(ctx, args...)
 }
 
-func (db *DB) queryRowWithLog(ctx context.Context, stmtName string, args ...interface{}) *sql.Row {
+func (db *DB) queryRowWithLog(
+	ctx context.Context,
+	stmtName string,
+	args ...interface{},
+) *sql.Row {
 	stmt := db.stmts[stmtName]
 	sqlLogger.Debug("Executing SQL query", "name", stmtName, "args", args)
 	return stmt.QueryRowContext(ctx, args...)
@@ -200,25 +276,51 @@ func (db *DB) queryRowWithLog(ctx context.Context, stmtName string, args ...inte
 
 func GetStreamForDiscordChannel(guildID, channelID string) (string, error) {
 	var streamID string
-	err := db.queryRowWithLog(context.Background(), "selectStreamForDiscordChannel", guildID, channelID).Scan(&streamID)
+	row := db.queryRowWithLog(
+		context.Background(),
+		"selectStreamForDiscordChannel",
+		guildID,
+		channelID,
+	)
+	if row == nil {
+		return "", fmt.Errorf("no row returned from query")
+	}
+	err := row.Scan(&streamID)
 	return streamID, err
 }
 
-func CreateStreamForDiscordChannel(streamID, guildID, channelID string, packetSequence, packetTimestamp uint16) error {
+func CreateStreamForDiscordChannel(
+	streamID, guildID, channelID string,
+	packetSequence, packetTimestamp uint16,
+) error {
 	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
 
-	sqlLogger.Debug("Executing SQL statement in transaction", "name", "insertStreamForDiscordChannel", "args", []interface{}{streamID, packetSequence, packetTimestamp})
-	_, err = tx.Stmt(db.stmts["insertStreamForDiscordChannel"]).Exec(streamID, packetSequence, packetTimestamp)
+	sqlLogger.Debug(
+		"Executing SQL statement in transaction",
+		"name",
+		"insertStreamForDiscordChannel",
+		"args",
+		[]interface{}{streamID, packetSequence, packetTimestamp},
+	)
+	_, err = tx.Stmt(db.stmts["insertStreamForDiscordChannel"]).
+		Exec(streamID, packetSequence, packetTimestamp)
 	if err != nil {
 		return err
 	}
 
-	sqlLogger.Debug("Executing SQL statement in transaction", "name", "insertDiscordChannelStreamForStream", "args", []interface{}{etc.Gensym(), streamID, guildID, channelID})
-	_, err = tx.Stmt(db.stmts["insertDiscordChannelStreamForStream"]).Exec(etc.Gensym(), streamID, guildID, channelID)
+	sqlLogger.Debug(
+		"Executing SQL statement in transaction",
+		"name",
+		"insertDiscordChannelStreamForStream",
+		"args",
+		[]interface{}{etc.Gensym(), streamID, guildID, channelID},
+	)
+	_, err = tx.Stmt(db.stmts["insertDiscordChannelStreamForStream"]).
+		Exec(etc.Gensym(), streamID, guildID, channelID)
 	if err != nil {
 		return err
 	}
@@ -227,45 +329,70 @@ func CreateStreamForDiscordChannel(streamID, guildID, channelID string, packetSe
 }
 
 func CreateSpeakerForStream(speakerID, streamID, emoji string) error {
-	_, err := db.execWithLog(context.Background(), "insertSpeakerForStream", speakerID, streamID, emoji)
+	_, err := db.execWithLog(
+		context.Background(),
+		"insertSpeakerForStream",
+		speakerID,
+		streamID,
+		emoji,
+	)
 	return err
 }
 
 func CheckSpeechRecognitionSessionExists(streamID string) (bool, error) {
 	var exists bool
-	err := db.queryRowWithLog(context.Background(), "checkSpeechRecognitionSessionExists", streamID).Scan(&exists)
+	err := db.queryRowWithLog(context.Background(), "checkSpeechRecognitionSessionExists", streamID).
+		Scan(&exists)
 	return exists, err
 }
 
 func SaveSpeechRecognitionSession(streamID, sessionData string) error {
-	_, err := db.execWithLog(context.Background(), "insertSpeechRecognitionSession", streamID, sessionData)
+	_, err := db.execWithLog(
+		context.Background(),
+		"insertSpeechRecognitionSession",
+		streamID,
+		sessionData,
+	)
 	return err
 }
 
 func GetSpeechRecognitionSession(streamID string) (string, error) {
 	var sessionData string
-	err := db.queryRowWithLog(context.Background(), "getSpeechRecognitionSession", streamID).Scan(&sessionData)
+	err := db.queryRowWithLog(context.Background(), "getSpeechRecognitionSession", streamID).
+		Scan(&sessionData)
 	return sessionData, err
 }
 
 func GetChannelAndEmojiForStream(streamID string) (string, string, error) {
 	var channelID, emoji string
-	err := db.queryRowWithLog(context.Background(), "selectChannelAndEmojiForStream", streamID).Scan(&channelID, &emoji)
+	err := db.queryRowWithLog(context.Background(), "selectChannelAndEmojiForStream", streamID).
+		Scan(&channelID, &emoji)
 	return channelID, emoji, err
 }
 
 func UpdateSpeakerEmoji(streamID, newEmoji string) error {
-	_, err := db.execWithLog(context.Background(), "updateSpeakerEmoji", newEmoji, streamID)
+	_, err := db.execWithLog(
+		context.Background(),
+		"updateSpeakerEmoji",
+		newEmoji,
+		streamID,
+	)
 	return err
 }
 
 func GetChannelIDForStream(streamID string) (string, error) {
 	var channelID string
-	err := db.queryRowWithLog(context.Background(), "selectChannelIDForStream", streamID).Scan(&channelID)
+	err := db.queryRowWithLog(context.Background(), "selectChannelIDForStream", streamID).
+		Scan(&channelID)
 	return channelID, err
 }
 
 func EndStreamForChannel(guildID, channelID string) error {
-	_, err := db.execWithLog(context.Background(), "updateStreamEndTimeForChannel", guildID, channelID)
+	_, err := db.execWithLog(
+		context.Background(),
+		"updateStreamEndTimeForChannel",
+		guildID,
+		channelID,
+	)
 	return err
 }
