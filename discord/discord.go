@@ -27,6 +27,8 @@ type UserSpeechStream struct {
 	InitialSequence      uint16
 	TranscriptionSession speech.LiveTranscriptionSession
 	Avatar               string
+	ChannelInfo          ChannelInfo
+	bot                  *Bot
 }
 
 type Bot struct {
@@ -234,6 +236,8 @@ func (bot *Bot) getOrCreateVoiceStream(
 		InitialSequence:      packet.Sequence,
 		TranscriptionSession: transcriptionSession,
 		Avatar:               getRandomAvatar(),
+		ChannelInfo:          channelInfo,
+		bot:                  bot,
 	}
 
 	bot.mut.Lock()
@@ -267,16 +271,13 @@ func (bot *Bot) getOrCreateVoiceStream(
 		streamID,
 	)
 
-	go bot.transcribeUserSpeechStream(stream, channelInfo)
+	go stream.listen()
 
 	return stream, nil
 }
 
-func (bot *Bot) transcribeUserSpeechStream(
-	stream *UserSpeechStream,
-	inn ChannelInfo,
-) {
-	for phrase := range stream.TranscriptionSession.Read() {
+func (s *UserSpeechStream) listen() {
+	for phrase := range s.TranscriptionSession.Read() {
 		var final string
 
 		for draft := range phrase {
@@ -285,17 +286,17 @@ func (bot *Bot) transcribeUserSpeechStream(
 
 		if final != "" {
 			if strings.EqualFold(final, "Change my identity.") {
-				bot.handleAvatarChangeRequest(stream, inn)
+				s.handleAvatarChangeRequest()
 				continue
 			}
 
-			_, err := bot.con.ChannelMessageSend(
-				inn.ChannelID,
-				fmt.Sprintf("%s %s", stream.Avatar, final),
+			_, err := s.bot.con.ChannelMessageSend(
+				s.ChannelInfo.ChannelID,
+				fmt.Sprintf("%s %s", s.Avatar, final),
 			)
 
 			if err != nil {
-				bot.log.Error(
+				s.bot.log.Error(
 					"failed to send transcribed message",
 					"error",
 					err.Error(),
@@ -303,12 +304,12 @@ func (bot *Bot) transcribeUserSpeechStream(
 			}
 
 			err = db.SaveTranscript(
-				inn.GuildID,
-				inn.ChannelID,
+				s.ChannelInfo.GuildID,
+				s.ChannelInfo.ChannelID,
 				final,
 			)
 			if err != nil {
-				bot.log.Error(
+				s.bot.log.Error(
 					"failed to save transcript to database",
 					"error",
 					err.Error(),
@@ -318,17 +319,14 @@ func (bot *Bot) transcribeUserSpeechStream(
 	}
 }
 
-func (bot *Bot) handleAvatarChangeRequest(
-	stream *UserSpeechStream,
-	inn ChannelInfo,
-) {
-	stream.Avatar = getRandomAvatar()
-	_, err := bot.con.ChannelMessageSend(
-		inn.ChannelID,
-		fmt.Sprintf("You are now %s.", stream.Avatar),
+func (s *UserSpeechStream) handleAvatarChangeRequest() {
+	s.Avatar = getRandomAvatar()
+	_, err := s.bot.con.ChannelMessageSend(
+		s.ChannelInfo.ChannelID,
+		fmt.Sprintf("You are now %s.", s.Avatar),
 	)
 	if err != nil {
-		bot.log.Error(
+		s.bot.log.Error(
 			"failed to send identity change message",
 			"error",
 			err.Error(),
