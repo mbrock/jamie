@@ -59,3 +59,10 @@ CREATE TABLE IF NOT EXISTS recognitions (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (stream) REFERENCES streams(id)
 );
+
+CREATE TABLE IF NOT EXISTS speech_recognition_sessions (
+    stream TEXT PRIMARY KEY,
+    session_data TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (stream) REFERENCES streams(id)
+);

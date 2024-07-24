@@ -101,6 +101,8 @@ func (db *DB) prepareStatements() error {
 			SELECT EXISTS(SELECT 1 FROM speech_recognition_sessions WHERE stream = ?)`,
 		"insertSpeechRecognitionSession": `
 			INSERT INTO speech_recognition_sessions (stream, session_data) VALUES (?, ?)`,
+		"getSpeechRecognitionSession": `
+			SELECT session_data FROM speech_recognition_sessions WHERE stream = ?`,
 		"selectChannelAndEmojiForStream": `
 			SELECT dcs.discord_channel, s.emoji 
 			FROM discord_channel_streams dcs
@@ -220,6 +222,12 @@ func CheckSpeechRecognitionSessionExists(streamID string) (bool, error) {
 func SaveSpeechRecognitionSession(streamID, sessionData string) error {
 	_, err := db.stmts["insertSpeechRecognitionSession"].Exec(streamID, sessionData)
 	return err
+}
+
+func GetSpeechRecognitionSession(streamID string) (string, error) {
+	var sessionData string
+	err := db.stmts["getSpeechRecognitionSession"].QueryRow(streamID).Scan(&sessionData)
+	return sessionData, err
 }
 
 func GetChannelAndEmojiForStream(streamID string) (string, string, error) {
