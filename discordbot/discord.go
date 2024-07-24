@@ -4,7 +4,8 @@ import (
 	"context"
 	"fmt"
 	"jamie/db"
-	"jamie/speech"
+	"jamie/stt"
+	"jamie/txt"
 	"strings"
 	"sync"
 	"time"
@@ -29,39 +30,39 @@ type UserStream struct {
 
 	FirstPacketTiming PacketTiming
 
-	SpeechRecognitionSession speech.LiveTranscriptionSession
+	SpeechRecognitionSession stt.LiveTranscriptionSession
 	bot                      *Bot
 }
 
 type (
-	UserID        string
-	ChannelID     string
-	GuildID       string
-	UserStreamID  string
+	UserID       string
+	ChannelID    string
+	GuildID      string
+	UserStreamID string
 )
 
 type Bot struct {
-	logger            *log.Logger
-	session           *discordsdk.Session
-	transcriber       speech.SpeechRecognitionService
-	userSpeechStreams map[uint32]*UserStream
-	peerMap           map[uint32]UserID
-	mutex             sync.RWMutex
+	logger                   *log.Logger
+	session                  *discordsdk.Session
+	speechRecognitionService stt.SpeechRecognitionService
+	userStreams              map[uint32]*UserStream
+	peerMap                  map[uint32]UserID
+	mutex                    sync.RWMutex
 }
 
 func NewBot(
-	token string,
-	asr speech.SpeechRecognitionService,
+	discordToken string,
+	speechRecognitionService stt.SpeechRecognitionService,
 	logger *log.Logger,
 ) (*Bot, error) {
 	bot := &Bot{
-		transcriber:       asr,
-		logger:            logger,
-		userSpeechStreams: make(map[uint32]*UserStream),
-		peerMap:           make(map[uint32]UserID),
+		speechRecognitionService: speechRecognitionService,
+		logger:                   logger,
+		userStreams:              make(map[uint32]*UserStream),
+		peerMap:                  make(map[uint32]UserID),
 	}
 
-	dg, err := discordsdk.New("Bot " + token)
+	dg, err := discordsdk.New("Bot " + discordToken)
 	if err != nil {
 		return nil, fmt.Errorf("error creating Discord session: %w", err)
 	}
@@ -227,7 +228,7 @@ func (bot *Bot) getOrCreateVoiceStream(
 	channelID ChannelID,
 ) (*UserStream, error) {
 	bot.mutex.RLock()
-	stream, exists := bot.userSpeechStreams[packet.SSRC]
+	stream, exists := bot.userStreams[packet.SSRC]
 	bot.mutex.RUnlock()
 
 	if exists {
@@ -240,7 +241,7 @@ func (bot *Bot) getOrCreateVoiceStream(
 	userIDStr := bot.peerMap[packet.SSRC]
 	bot.mutex.RUnlock()
 
-	transcriptionSession, err := bot.transcriber.Start(context.Background())
+	transcriptionSession, err := bot.speechRecognitionService.Start(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("failed to start SpeechRecognitionService session: %w", err)
 	}
@@ -254,14 +255,14 @@ func (bot *Bot) getOrCreateVoiceStream(
 			PacketIndex: packet.Sequence,
 		},
 		SpeechRecognitionSession: transcriptionSession,
-		Emoji:                    getRandomAvatar(),
+		Emoji:                    txt.RandomAvatar(),
 		GuildID:                  guildID,
 		ChannelID:                channelID,
 		bot:                      bot,
 	}
 
 	bot.mutex.Lock()
-	bot.userSpeechStreams[packet.SSRC] = stream
+	bot.userStreams[packet.SSRC] = stream
 	bot.mutex.Unlock()
 
 	err = db.CreateVoiceStream(
@@ -344,7 +345,7 @@ func (s *UserStream) handlePhrase(phrase <-chan string) {
 }
 
 func (s *UserStream) handleAvatarChangeRequest() {
-	s.Emoji = getRandomAvatar()
+	s.Emoji = txt.RandomAvatar()
 	_, err := s.bot.session.ChannelMessageSend(
 		string(s.ChannelID),
 		fmt.Sprintf("You are now %s.", s.Emoji),
@@ -356,13 +357,4 @@ func (s *UserStream) handleAvatarChangeRequest() {
 			err.Error(),
 		)
 	}
-}
-
-var avatars = []string{
-	"😀", "😎", "🤖", "👽", "🐱", "🐶", "🦄", "🐸", "🦉", "🦋",
-	"🌈", "🌟", "🍎", "🍕", "🎸", "🚀", "🧙", "🧛", "🧜", "🧚",
-}
-
-func getRandomAvatar() string {
-	return avatars[time.Now().UnixNano()%int64(len(avatars))]
 }

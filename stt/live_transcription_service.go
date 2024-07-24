@@ -1,4 +1,4 @@
-package speech
+package stt
 
 import (
 	"context"
@@ -10,6 +10,6 @@ type LiveTranscriptionSession interface {
 	Read() <-chan chan string
 }
 
-type ASR interface {
+type SpeechRecognitionService interface {
 	Start(ctx context.Context) (LiveTranscriptionSession, error)
 }

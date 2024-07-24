@@ -11,13 +11,13 @@ import (
 	"github.com/spf13/viper"
 
 	"jamie/db"
-	"jamie/discord"
-	"jamie/speech"
+	"jamie/discordbot"
+	"jamie/stt"
 )
 
 var (
 	logger *log.Logger
-	bot    *discord.Bot
+	bot    *discordbot.Bot
 )
 
 func init() {
@@ -90,7 +90,7 @@ func runDiscord(cmd *cobra.Command, args []string) {
 	db.InitDB()
 	defer db.Close()
 
-	transcriptionService, err := speech.NewDeepgramClient(
+	transcriptionService, err := stt.NewDeepgramClient(
 		deepgramAPIKey,
 		deepgramLogger,
 	)
@@ -98,7 +98,7 @@ func runDiscord(cmd *cobra.Command, args []string) {
 		mainLogger.Fatal("create deepgram client", "error", err.Error())
 	}
 
-	bot, err = discord.NewBot(
+	bot, err = discordbot.NewBot(
 		discordToken,
 		transcriptionService,
 		discordLogger,
