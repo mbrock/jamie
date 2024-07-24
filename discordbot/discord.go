@@ -3,6 +3,7 @@ package discordbot
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"jamie/db"
 	"jamie/etc"
@@ -191,7 +192,7 @@ func (bot *Bot) getOrCreateVoiceStream(
 		guildID, channelID, packet.SSRC,
 	).Scan(&streamID)
 
-	if err == sql.ErrNoRows {
+	if errors.Is(err, sql.ErrNoRows) {
 		streamID = etc.Gensym()
 		_, err = bot.db.Exec(
 			"INSERT INTO streams (id, discord_guild, discord_channel, ssrc, packet_seq_offset, sample_idx_offset) VALUES (?, ?, ?, ?, ?, ?)",
