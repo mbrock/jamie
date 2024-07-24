@@ -1,13 +1,16 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/charmbracelet/log"
+	"github.com/sashabaranov/go-openai"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -26,16 +29,19 @@ func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.AddCommand(discordCmd)
 	rootCmd.AddCommand(webCmd)
+	rootCmd.AddCommand(openaiChatCmd)
 
 	// Add persistent flags
 	rootCmd.PersistentFlags().String("discord-token", "", "Discord bot token")
 	rootCmd.PersistentFlags().String("deepgram-api-key", "", "Deepgram API key")
 	rootCmd.PersistentFlags().Int("web-port", 8080, "Web server port")
+	rootCmd.PersistentFlags().String("openai-api-key", "", "OpenAI API key")
 
 	// Bind flags to viper
 	viper.BindPFlag("discord_token", rootCmd.PersistentFlags().Lookup("discord-token"))
 	viper.BindPFlag("deepgram_api_key", rootCmd.PersistentFlags().Lookup("deepgram-api-key"))
 	viper.BindPFlag("web_port", rootCmd.PersistentFlags().Lookup("web-port"))
+	viper.BindPFlag("openai_api_key", rootCmd.PersistentFlags().Lookup("openai-api-key"))
 }
 
 func initConfig() {
@@ -70,10 +76,58 @@ var webCmd = &cobra.Command{
 	Run:   runWeb,
 }
 
+var openaiChatCmd = &cobra.Command{
+	Use:   "chat",
+	Short: "Start an OpenAI chat session",
+	Run:   runOpenAIChat,
+}
+
 func main() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
+	}
+}
+
+func runOpenAIChat(cmd *cobra.Command, args []string) {
+	openaiAPIKey := viper.GetString("openai_api_key")
+	if openaiAPIKey == "" {
+		logger.Fatal("missing OPENAI_API_KEY or --openai-api-key=")
+	}
+
+	client := openai.NewClient(openaiAPIKey)
+	ctx := context.Background()
+
+	req := openai.ChatCompletionRequest{
+		Model: openai.GPT3Dot5Turbo,
+		Messages: []openai.ChatCompletionMessage{
+			{
+				Role:    openai.ChatMessageRoleUser,
+				Content: "Tell me a short joke about programming.",
+			},
+		},
+		Stream: true,
+	}
+
+	stream, err := client.CreateChatCompletionStream(ctx, req)
+	if err != nil {
+		logger.Fatal("ChatCompletionStream error", "error", err)
+	}
+	defer stream.Close()
+
+	fmt.Printf("AI: ")
+	for {
+		response, err := stream.Recv()
+		if err == io.EOF {
+			fmt.Println("\nStream finished")
+			return
+		}
+
+		if err != nil {
+			logger.Fatal("Stream error", "error", err)
+		}
+
+		fmt.Printf("%s", response.Choices[0].Delta.Content)
 	}
 }
 
