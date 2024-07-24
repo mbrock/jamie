@@ -14,11 +14,6 @@ import (
 	"github.com/google/uuid"
 )
 
-type ChannelInfo struct {
-	GuildID   string
-	ChannelID string
-}
-
 type UserSpeechStream struct {
 	UserID               string
 	StreamID             string
@@ -27,7 +22,8 @@ type UserSpeechStream struct {
 	InitialSequence      uint16
 	TranscriptionSession speech.LiveTranscriptionSession
 	Avatar               string
-	ChannelInfo          ChannelInfo
+	GuildID              string
+	ChannelID            string
 	bot                  *Bot
 }
 
@@ -137,7 +133,7 @@ func (bot *Bot) joinAllVoiceChannels(guildID string) error {
 
 func (bot *Bot) handleVoiceConnection(
 	vc *dis.VoiceConnection,
-	channelInfo ChannelInfo,
+	guildID, channelID string,
 ) {
 
 	vc.AddHandler(bot.handleVoiceSpeakingUpdate)
@@ -149,7 +145,7 @@ func (bot *Bot) handleVoiceConnection(
 			break
 		}
 
-		err := bot.processVoicePacket(packet, channelInfo)
+		err := bot.processVoicePacket(packet, guildID, channelID)
 		if err != nil {
 			bot.logger.Error(
 				"failed to process voice packet",
@@ -180,9 +176,9 @@ func (bot *Bot) handleVoiceSpeakingUpdate(
 
 func (bot *Bot) processVoicePacket(
 	packet *dis.Packet,
-	channelInfo ChannelInfo,
+	guildID, channelID string,
 ) error {
-	stream, err := bot.getOrCreateVoiceStream(packet, channelInfo)
+	stream, err := bot.getOrCreateVoiceStream(packet, guildID, channelID)
 	if err != nil {
 		return fmt.Errorf("failed to get or create voice stream: %w", err)
 	}
@@ -215,7 +211,7 @@ func (bot *Bot) processVoicePacket(
 
 func (bot *Bot) getOrCreateVoiceStream(
 	packet *dis.Packet,
-	channelInfo ChannelInfo,
+	guildID, channelID string,
 ) (*UserSpeechStream, error) {
 	bot.mutex.RLock()
 	stream, exists := bot.streams[packet.SSRC]
@@ -244,7 +240,8 @@ func (bot *Bot) getOrCreateVoiceStream(
 		InitialSequence:      packet.Sequence,
 		TranscriptionSession: transcriptionSession,
 		Avatar:               getRandomAvatar(),
-		ChannelInfo:          channelInfo,
+		GuildID:              guildID,
+		ChannelID:            channelID,
 		bot:                  bot,
 	}
 
@@ -253,8 +250,8 @@ func (bot *Bot) getOrCreateVoiceStream(
 	bot.mutex.Unlock()
 
 	err = db.CreateVoiceStream(
-		channelInfo.GuildID,
-		channelInfo.ChannelID,
+		guildID,
+		channelID,
 		streamID,
 		userIDStr,
 		packet.SSRC,
@@ -299,7 +296,7 @@ func (s *UserSpeechStream) listen() {
 			}
 
 			_, err := s.bot.session.ChannelMessageSend(
-				s.ChannelInfo.ChannelID,
+				s.ChannelID,
 				fmt.Sprintf("%s %s", s.Avatar, final),
 			)
 
@@ -312,8 +309,8 @@ func (s *UserSpeechStream) listen() {
 			}
 
 			err = db.SaveTranscript(
-				s.ChannelInfo.GuildID,
-				s.ChannelInfo.ChannelID,
+				s.GuildID,
+				s.ChannelID,
 				final,
 			)
 			if err != nil {
