@@ -1,10 +1,12 @@
 package discordbot
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"jamie/db"
 	"jamie/etc"
 	"jamie/llm"
@@ -15,6 +17,10 @@ import (
 
 	discordsdk "github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
+	"github.com/haguro/elevenlabs-go"
+	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
+	"github.com/tosone/minimp3"
+	"layeh.com/gopus"
 )
 
 type CommandHandler func(*discordsdk.Session, *discordsdk.MessageCreate, []string) error
@@ -27,6 +33,7 @@ type Bot struct {
 	sessions                 map[string]stt.LiveTranscriptionSession
 	openaiAPIKey             string
 	commands                 map[string]CommandHandler
+	elevenLabsAPIKey         string
 }
 
 func NewBot(
@@ -34,6 +41,7 @@ func NewBot(
 	speechRecognitionService stt.SpeechRecognitionService,
 	logger *log.Logger,
 	openaiAPIKey string,
+	elevenLabsAPIKey string,
 ) (*Bot, error) {
 	bot := &Bot{
 		speechRecognitionService: speechRecognitionService,
@@ -42,8 +50,9 @@ func NewBot(
 		sessions: make(
 			map[string]stt.LiveTranscriptionSession,
 		),
-		openaiAPIKey: openaiAPIKey,
-		commands:     make(map[string]CommandHandler),
+		openaiAPIKey:     openaiAPIKey,
+		commands:         make(map[string]CommandHandler),
+		elevenLabsAPIKey: elevenLabsAPIKey,
 	}
 
 	bot.registerCommands()
@@ -75,6 +84,7 @@ func (bot *Bot) registerCommands() {
 	bot.commands["summary"] = bot.handleSummaryCommand
 	bot.commands["prompt"] = bot.handlePromptCommand
 	bot.commands["listprompts"] = bot.handleListPromptsCommand
+	bot.commands["audio"] = bot.handleAudioCommand
 }
 
 func (bot *Bot) Close() error {
@@ -183,20 +193,50 @@ func (bot *Bot) handleVoiceConnection(
 ) {
 	vc.AddHandler(bot.handleVoiceSpeakingUpdate)
 
-	for {
-		packet, ok := <-vc.OpusRecv
-		if !ok {
-			bot.log.Info("voice channel closed")
-			break
-		}
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
 
-		err := bot.processVoicePacket(packet, guildID, channelID)
-		if err != nil {
-			bot.log.Error(
-				"failed to process voice packet",
-				"error",
-				err.Error(),
-			)
+	// Generate speech
+	mp3Data, err := bot.textToSpeech("hello")
+	if err != nil {
+		bot.log.Error("Failed to generate speech", "error", err)
+		return
+	}
+
+	// Convert to Opus packets
+	opusPackets, err := convertToOpus(mp3Data)
+	if err != nil {
+		bot.log.Error("Failed to convert to Opus", "error", err)
+		return
+	}
+
+	for {
+		select {
+		case <-ticker.C:
+
+			// Send Opus packets in the background
+			go func() {
+				vc.Speaking(true)
+				defer vc.Speaking(false)
+				for _, packet := range opusPackets {
+					vc.OpusSend <- packet
+				}
+			}()
+
+		case packet, ok := <-vc.OpusRecv:
+			if !ok {
+				bot.log.Info("voice channel closed")
+				return
+			}
+
+			err := bot.processVoicePacket(packet, guildID, channelID)
+			if err != nil {
+				bot.log.Error(
+					"failed to process voice packet",
+					"error",
+					err.Error(),
+				)
+			}
 		}
 	}
 }
@@ -591,4 +631,135 @@ func (bot *Bot) handleListPromptsCommand(
 	}
 
 	return nil
+}
+
+func (bot *Bot) handleAudioCommand(
+	s *discordsdk.Session,
+	m *discordsdk.MessageCreate,
+	args []string,
+) error {
+	if len(args) < 2 {
+		return fmt.Errorf("usage: !audio <stream_id> <duration>")
+	}
+
+	streamID := args[0]
+	durationStr := args[1]
+
+	duration, err := time.ParseDuration(durationStr)
+	if err != nil {
+		return fmt.Errorf("invalid duration format: %w", err)
+	}
+
+	endTime := time.Now()
+	startTime := endTime.Add(-duration)
+
+	oggData, err := bot.GenerateOggOpusBlob(streamID, startTime, endTime)
+	if err != nil {
+		return fmt.Errorf("failed to generate OGG Opus blob: %w", err)
+	}
+
+	// Send the OGG Opus blob as a file
+	_, err = s.ChannelFileSendWithMessage(
+		m.ChannelID,
+		"audio.ogg",
+		bytes.NewReader(oggData),
+		m.ID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to send audio file: %w", err)
+	}
+
+	return nil
+}
+
+func (bot *Bot) GenerateOggOpusBlob(
+	streamID string,
+	startTime, endTime time.Time,
+) ([]byte, error) {
+	// Fetch packets from the database
+	packets, err := bot.db.GetPacketsForStreamInTimeRange(
+		streamID,
+		startTime,
+		endTime,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("fetch packets: %w", err)
+	}
+
+	// Create a buffer to store the OGG Opus data
+	var oggBuffer bytes.Buffer
+
+	// Create an OGG writer
+	// Assuming 48kHz sample rate and 2 channels (stereo) for Opus
+	oggWriter, err := oggwriter.NewWith(&oggBuffer, 48000, 2)
+	if err != nil {
+		return nil, fmt.Errorf("create OGG writer: %w", err)
+	}
+
+	// Write packets to the OGG writer
+	for _, packet := range packets {
+		if err := oggWriter.WriteOpus(packet); err != nil {
+			return nil, fmt.Errorf("write Opus packet: %w", err)
+		}
+	}
+
+	// Close the OGG writer to finalize the file
+	if err := oggWriter.Close(); err != nil {
+		return nil, fmt.Errorf("close OGG writer: %w", err)
+	}
+
+	return oggBuffer.Bytes(), nil
+}
+
+func (bot *Bot) textToSpeech(text string) ([]byte, error) {
+	elevenlabs.SetAPIKey(bot.elevenLabsAPIKey)
+
+	ttsReq := elevenlabs.TextToSpeechRequest{
+		Text:    text,
+		ModelID: "eleven_monolingual_v1",
+	}
+
+	audio, err := elevenlabs.TextToSpeech("pNInz6obpgDQGcFmaJgB", ttsReq)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate speech: %w", err)
+	}
+
+	return audio, nil
+}
+
+func convertToOpus(mp3Data []byte) ([][]byte, error) {
+	encoder, err := gopus.NewEncoder(48000, 2, gopus.Audio)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Opus encoder: %w", err)
+	}
+
+	decoder, err := minimp3.NewDecoder(bytes.NewReader(mp3Data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create MP3 decoder: %w", err)
+	}
+
+	var opusPackets [][]byte
+	for {
+		var pcm = make([]byte, 1024)
+		_, err := decoder.Read(pcm)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			break
+		}
+
+		pcmInt16 := make([]int16, len(pcm)/2)
+		for i := 0; i < len(pcm); i += 2 {
+			pcmInt16[i/2] = int16(pcm[i]) | int16(pcm[i+1])<<8
+		}
+
+		opusData, err := encoder.Encode(pcmInt16, 960, 32000)
+		if err != nil {
+			return nil, fmt.Errorf("failed to encode Opus: %w", err)
+		}
+		opusPackets = append(opusPackets, opusData)
+	}
+
+	return opusPackets, nil
 }

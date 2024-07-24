@@ -42,6 +42,8 @@ func init() {
 		String("deepgram-api-key", "", "Deepgram API key")
 	rootCmd.PersistentFlags().Int("web-port", 8080, "Web server port")
 	rootCmd.PersistentFlags().String("openai-api-key", "", "OpenAI API key")
+	rootCmd.PersistentFlags().
+		String("elevenlabs-api-key", "", "ElevenLabs API key")
 
 	// Bind flags to viper
 	viper.BindPFlag(
@@ -56,6 +58,10 @@ func init() {
 	viper.BindPFlag(
 		"openai_api_key",
 		rootCmd.PersistentFlags().Lookup("openai-api-key"),
+	)
+	viper.BindPFlag(
+		"elevenlabs_api_key",
+		rootCmd.PersistentFlags().Lookup("elevenlabs-api-key"),
 	)
 }
 
@@ -223,6 +229,7 @@ func runDiscord(cmd *cobra.Command, args []string) {
 
 	discordToken := viper.GetString("discord_token")
 	deepgramAPIKey := viper.GetString("deepgram_api_key")
+	elevenlabsAPIKey := viper.GetString("elevenlabs_api_key")
 
 	if discordToken == "" {
 		mainLogger.Fatal("missing DISCORD_TOKEN or --discord-token=")
@@ -230,6 +237,12 @@ func runDiscord(cmd *cobra.Command, args []string) {
 
 	if deepgramAPIKey == "" {
 		mainLogger.Fatal("missing DEEPGRAM_API_KEY or --deepgram-api-key=")
+	}
+
+	if elevenlabsAPIKey == "" {
+		mainLogger.Fatal(
+			"missing ELEVENLABS_API_KEY or --elevenlabs-api-key=",
+		)
 	}
 
 	err := db.InitDB(sqlLogger)
@@ -258,6 +271,7 @@ func runDiscord(cmd *cobra.Command, args []string) {
 		transcriptionService,
 		discordLogger,
 		openaiAPIKey,
+		elevenlabsAPIKey,
 	)
 	if err != nil {
 		mainLogger.Fatal("start discord bot", "error", err.Error())

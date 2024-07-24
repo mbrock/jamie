@@ -161,6 +161,11 @@ func (db *DB) PrepareStatements() error {
 				FROM discord_channel_streams
 				WHERE discord_guild = ? AND discord_channel = ?
 			) AND ended_at IS NULL`,
+		"getPacketsForStreamInTimeRange": `
+			SELECT payload
+			FROM packets
+			WHERE stream = ? AND created_at BETWEEN ? AND ?
+			ORDER BY sample_idx ASC`,
 	}
 
 	for name, query := range statements {
@@ -657,6 +662,7 @@ func (db *DB) ListSystemPrompts() (map[string]string, error) {
 	}
 	return prompts, rows.Err()
 }
+
 func RunMigrations(logger *log.Logger) error {
 	migrations, err := LoadMigrations("db")
 	if err != nil {
@@ -669,18 +675,37 @@ func RunMigrations(logger *log.Logger) error {
 		return fmt.Errorf("apply migrations: %w", err)
 	}
 
-	// // Check if system_prompts table exists
-	// var tableExists bool
-	// err = db.QueryRow("SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type='table' AND name='system_prompts')").Scan(&tableExists)
-	// if err != nil {
-	// 	return fmt.Errorf("check system_prompts table: %w", err)
-	// }
-
-	// // If system_prompts table doesn't exist, create it
-	// if !tableExists {
-
-	//	}
-
 	logger.Info("Database migration process completed")
 	return nil
+}
+
+func (db *DB) GetPacketsForStreamInTimeRange(
+	streamID string,
+	startTime, endTime time.Time,
+) ([][]byte, error) {
+	rows, err := db.Query(
+		db.stmts["getPacketsForStreamInTimeRange"].Query(),
+		streamID,
+		startTime,
+		endTime,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query packets: %w", err)
+	}
+	defer rows.Close()
+
+	var packets [][]byte
+	for rows.Next() {
+		var payload []byte
+		if err := rows.Scan(&payload); err != nil {
+			return nil, fmt.Errorf("scan packet payload: %w", err)
+		}
+		packets = append(packets, payload)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate packets: %w", err)
+	}
+
+	return packets, nil
 }
