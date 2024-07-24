@@ -2,7 +2,8 @@ CREATE TABLE IF NOT EXISTS streams (
     id TEXT PRIMARY KEY,
     packet_seq_offset INTEGER,
     sample_idx_offset INTEGER,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    ended_at DATETIME
 );
 
 CREATE TABLE IF NOT EXISTS packets (
