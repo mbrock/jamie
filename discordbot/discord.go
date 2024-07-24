@@ -727,71 +727,9 @@ func (bot *Bot) handleGenerateAudioCommand(
 	m *discordsdk.MessageCreate,
 	args []string,
 ) error {
-	var streamID string
-	var startTimeStr, endTimeStr string
-	var startTime, endTime time.Time
-
-	if len(args) == 3 {
-		// If all arguments are provided, use them directly
-		streamID = args[0]
-		var err error
-		startTime, err = time.Parse(time.RFC3339, args[1])
-		if err != nil {
-			return fmt.Errorf("invalid start time format. Use RFC3339 format: %w", err)
-		}
-		endTime, err = time.Parse(time.RFC3339, args[2])
-		if err != nil {
-			return fmt.Errorf("invalid end time format. Use RFC3339 format: %w", err)
-		}
-	} else {
-		// If arguments are not provided, use interactive selection
-		streams, err := bot.db.GetRecentStreams()
-		if err != nil {
-			return fmt.Errorf("failed to get recent streams: %w", err)
-		}
-
-		streamOptions := make([]huh.Option[string], len(streams))
-		for i, stream := range streams {
-			streamOptions[i] = huh.NewOption(stream.Description, stream.ID)
-		}
-
-		form := huh.NewForm(
-			huh.NewGroup(
-				huh.NewSelect[string]().
-					Title("Choose a stream").
-					Options(streamOptions...).
-					Value(&streamID),
-				huh.NewInput().
-					Title("Start time (YYYY-MM-DD HH:MM:SS)").
-					Validate(func(s string) error {
-						_, err := time.Parse("2006-01-02 15:04:05", s)
-						return err
-					}).
-					Value(&startTimeStr),
-				huh.NewInput().
-					Title("End time (YYYY-MM-DD HH:MM:SS)").
-					Validate(func(s string) error {
-						_, err := time.Parse("2006-01-02 15:04:05", s)
-						return err
-					}).
-					Value(&endTimeStr),
-			),
-		)
-
-		err = form.Run()
-		if err != nil {
-			return fmt.Errorf("form error: %w", err)
-		}
-
-		// Parse the time strings after form submission
-		startTime, err = time.Parse("2006-01-02 15:04:05", startTimeStr)
-		if err != nil {
-			return fmt.Errorf("invalid start time format: %w", err)
-		}
-		endTime, err = time.Parse("2006-01-02 15:04:05", endTimeStr)
-		if err != nil {
-			return fmt.Errorf("invalid end time format: %w", err)
-		}
+	streamID, startTime, endTime, err := getAudioGenerationParams(args, bot.db)
+	if err != nil {
+		return fmt.Errorf("failed to get audio generation parameters: %w", err)
 	}
 
 	// Generate the audio
