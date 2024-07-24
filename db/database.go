@@ -292,6 +292,7 @@ func GetStreamForDiscordChannel(guildID, channelID string) (string, error) {
 func CreateStreamForDiscordChannel(
 	streamID, guildID, channelID string,
 	packetSequence, packetTimestamp uint16,
+	speakerID, discordID, emoji string,
 ) error {
 	tx, err := db.Begin()
 	if err != nil {
@@ -321,6 +322,32 @@ func CreateStreamForDiscordChannel(
 	)
 	_, err = tx.Stmt(db.stmts["insertDiscordChannelStreamForStream"]).
 		Exec(etc.Gensym(), streamID, guildID, channelID)
+	if err != nil {
+		return err
+	}
+
+	sqlLogger.Debug(
+		"Executing SQL statement in transaction",
+		"name",
+		"insertSpeakerForStream",
+		"args",
+		[]interface{}{speakerID, streamID, emoji},
+	)
+	_, err = tx.Stmt(db.stmts["insertSpeakerForStream"]).
+		Exec(speakerID, streamID, emoji)
+	if err != nil {
+		return err
+	}
+
+	sqlLogger.Debug(
+		"Executing SQL statement in transaction",
+		"name",
+		"insertDiscordSpeaker",
+		"args",
+		[]interface{}{etc.Gensym(), speakerID, discordID},
+	)
+	_, err = tx.Stmt(db.stmts["insertDiscordSpeaker"]).
+		Exec(etc.Gensym(), speakerID, discordID)
 	if err != nil {
 		return err
 	}
