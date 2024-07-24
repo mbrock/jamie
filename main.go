@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -132,9 +131,7 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	defer db.Close()
 
 	// Fetch recent streams
-	streams, err := db.GetDB().
-		GetRecentStreams("", "", 10)
-		// Assuming we don't need guild and channel IDs for this
+	streams, err := db.GetDB().GetRecentStreams("", "", 10)
 	if err != nil {
 		mainLogger.Fatal("fetch recent streams", "error", err.Error())
 	}
@@ -154,7 +151,6 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	}
 
 	var selectedStreamID string
-	var startTime, endTime time.Time
 
 	form := huh.NewForm(
 		huh.NewGroup(
@@ -162,39 +158,6 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 				Title("Choose a stream").
 				Options(huh.NewOptions(streamOptions...)...).
 				Value(&selectedStreamID),
-
-			huh.NewInput().
-				Title("Enter the start time (RFC3339 format)").
-				Placeholder("e.g., 2023-04-01T12:00:00Z").
-				Validate(func(s string) error {
-					t, err := time.Parse(time.RFC3339, s)
-					if err != nil {
-						return errors.New(
-							"invalid time format, please use RFC3339",
-						)
-					}
-					startTime = t
-					return nil
-				}),
-
-			huh.NewInput().
-				Title("Enter the end time (RFC3339 format)").
-				Placeholder("e.g., 2023-04-01T13:00:00Z").
-				Validate(func(s string) error {
-					t, err := time.Parse(time.RFC3339, s)
-					if err != nil {
-						return errors.New(
-							"invalid time format, please use RFC3339",
-						)
-					}
-					endTime = t
-					if endTime.Before(startTime) {
-						return errors.New(
-							"end time must be after start time",
-						)
-					}
-					return nil
-				}),
 		),
 	)
 
@@ -202,6 +165,56 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	if err != nil {
 		mainLogger.Fatal("form input", "error", err.Error())
 	}
+
+	// Fetch transcriptions for the selected stream
+	transcriptions, err := db.GetDB().
+		GetTranscriptionsForStream(selectedStreamID)
+	if err != nil {
+		mainLogger.Fatal("fetch transcriptions", "error", err.Error())
+	}
+
+	if len(transcriptions) == 0 {
+		mainLogger.Fatal("no transcriptions found for the selected stream")
+	}
+
+	// Prepare transcription options for selection
+	startOptions := make([]string, len(transcriptions))
+	for i, t := range transcriptions {
+		startOptions[i] = fmt.Sprintf(
+			"%s: %s",
+			t.Timestamp.Format(time.RFC3339),
+			t.Text,
+		)
+	}
+
+	var startIndex, endIndex int
+
+	timeSelectionForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[int]().
+				Title("Choose start transcription").
+				Options(huh.NewOptions(startOptions...)...).
+				Value(&startIndex),
+			huh.NewSelect[int]().
+				Title("Choose end transcription").
+				Options(huh.NewOptions(startOptions...)...).
+				Value(&endIndex),
+		),
+	)
+
+	err = timeSelectionForm.Run()
+	if err != nil {
+		mainLogger.Fatal("time selection form input", "error", err.Error())
+	}
+
+	if endIndex < startIndex {
+		mainLogger.Fatal(
+			"end transcription must be after start transcription",
+		)
+	}
+
+	startTime := transcriptions[startIndex].Timestamp
+	endTime := transcriptions[endIndex].Timestamp
 
 	oggData, err := generateOggOpusBlob(selectedStreamID, startTime, endTime)
 	if err != nil {
