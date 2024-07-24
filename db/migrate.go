@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/charmbracelet/log"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -64,22 +65,22 @@ func LoadMigrations(dir string) ([]Migration, error) {
 	return migrations, nil
 }
 
-func Migrate(db *sql.DB, migrations []Migration) error {
+func Migrate(db *sql.DB, migrations []Migration, logger *log.Logger) error {
 	var currentVersion int
 	err := db.QueryRow("PRAGMA user_version").Scan(&currentVersion)
 	if err != nil {
 		return err
 	}
 
-	fmt.Printf("Current database version: %d\n", currentVersion)
+	logger.Info("Current database version", "version", currentVersion)
 
 	for _, migration := range migrations {
 		if migration.Version <= currentVersion {
-			fmt.Printf("Skipping migration %d (already applied)\n", migration.Version)
+			logger.Info("Skipping migration (already applied)", "version", migration.Version)
 			continue
 		}
 
-		fmt.Printf("New migration found: version %d\n", migration.Version)
+		logger.Info("New migration found", "version", migration.Version)
 		fmt.Print("Do you want to apply this migration? (y/n): ")
 		var response string
 		_, err := fmt.Scanln(&response)
@@ -88,11 +89,11 @@ func Migrate(db *sql.DB, migrations []Migration) error {
 		}
 
 		if response != "y" && response != "Y" {
-			fmt.Println("Migration skipped.")
+			logger.Info("Migration skipped", "version", migration.Version)
 			continue
 		}
 
-		fmt.Printf("Applying migration %d...\n", migration.Version)
+		logger.Info("Applying migration", "version", migration.Version)
 
 		tx, err := db.Begin()
 		if err != nil {
@@ -124,9 +125,9 @@ func Migrate(db *sql.DB, migrations []Migration) error {
 			return fmt.Errorf("error committing transaction: %w", err)
 		}
 
-		fmt.Printf("Successfully migrated to version %d\n", migration.Version)
+		logger.Info("Successfully migrated", "version", migration.Version)
 	}
 
-	fmt.Println("Migration process completed.")
+	logger.Info("Migration process completed")
 	return nil
 }
