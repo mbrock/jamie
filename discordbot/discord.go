@@ -19,7 +19,7 @@ type Bot struct {
 	log                      *log.Logger
 	conn                     *discordsdk.Session
 	speechRecognitionService stt.SpeechRecognitionService
-	db                       *sql.DB
+	db                       *db.DB
 }
 
 func NewBot(
@@ -190,7 +190,7 @@ func (bot *Bot) getOrCreateVoiceStream(
 
 	if errors.Is(err, sql.ErrNoRows) {
 		streamID = etc.Gensym()
-		err = db.CreateStreamForDiscordChannel(streamID, guildID, channelID, packet.Sequence, packet.Timestamp)
+		err = db.CreateStreamForDiscordChannel(streamID, guildID, channelID, packet.Sequence, uint16(packet.Timestamp))
 		if err != nil {
 			return "", fmt.Errorf("failed to create new stream: %w", err)
 		}
@@ -339,7 +339,7 @@ func (bot *Bot) handleVoiceStateUpdate(
 	} else {
 		// User joined or moved to a voice channel
 		streamID := etc.Gensym()
-		err := db.CreateStreamForDiscordChannel(streamID, v.GuildID, v.ChannelID, 0, 0)
+		err := db.CreateStreamForDiscordChannel(streamID, v.GuildID, v.ChannelID, 0, uint16(0))
 		if err != nil {
 			bot.log.Error("failed to create new stream for user join", "error", err.Error())
 		}
