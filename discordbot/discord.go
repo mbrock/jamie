@@ -659,11 +659,10 @@ func (bot *Bot) handleAudioCommand(
 	}
 
 	// Send the OGG Opus blob as a file
-	_, err = s.ChannelFileSendWithMessage(
+	_, err = s.ChannelFileSend(
 		m.ChannelID,
 		"audio.ogg",
 		bytes.NewReader(oggData),
-		m.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to send audio file: %w", err)
@@ -698,7 +697,7 @@ func (bot *Bot) GenerateOggOpusBlob(
 
 	// Write packets to the OGG writer
 	for _, packet := range packets {
-		if err := oggWriter.WriteOpus(packet); err != nil {
+		if _, err := oggWriter.Write(packet); err != nil {
 			return nil, fmt.Errorf("write Opus packet: %w", err)
 		}
 	}
