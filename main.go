@@ -131,7 +131,9 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	defer db.Close()
 
 	// Fetch recent streams
-	streams, err := db.GetDB().GetRecentStreams("", "", 100) // Increased limit to 100
+	streams, err := db.GetDB().
+		GetRecentStreams("", "", 100)
+		// Increased limit to 100
 	if err != nil {
 		mainLogger.Fatal("fetch recent streams", "error", err.Error())
 	}
@@ -143,12 +145,15 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	}
 
 	// Prepare stream options for selection
-	streamOptions := make([]string, len(streams))
+	streamOptions := make([]huh.Option[string], len(streams))
 	for i, stream := range streams {
-		streamOptions[i] = fmt.Sprintf(
-			"%s (%s)",
+		streamOptions[i] = huh.NewOption(
+			fmt.Sprintf(
+				"%s (%s)",
+				stream.ID,
+				stream.CreatedAt.Format(time.RFC3339),
+			),
 			stream.ID,
-			stream.CreatedAt.Format(time.RFC3339),
 		)
 	}
 
@@ -158,7 +163,7 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 		huh.NewGroup(
 			huh.NewSelect[string]().
 				Title("Choose a stream").
-				Options(huh.NewOptions(streamOptions...)...).
+				Options(streamOptions...).
 				Value(&selectedStreamID),
 		),
 	)
