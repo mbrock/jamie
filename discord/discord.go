@@ -20,30 +20,29 @@ type ChannelInfo struct {
 }
 
 type VoiceStream struct {
-	UserID            string
-	StreamID          string
-	InitialTimestamp  uint32
-	InitialReceiveTime int64
-	InitialSequence   uint16
+	UserID               string
+	StreamID             string
+	InitialTimestamp     uint32
+	InitialReceiveTime   int64
+	InitialSequence      uint16
 	TranscriptionSession speech.LiveTranscriptionSession
+	Avatar               string
 }
 
 type DiscordBot struct {
-	log                *log.Logger
-	api                *discordgo.Session
-	asr                speech.ASR
-	transcriptChannels *sync.Map
-	voiceStreams       *sync.Map
-	userIDMap          *sync.Map
+	log          *log.Logger
+	api          *discordgo.Session
+	asr          speech.ASR
+	voiceStreams *sync.Map
+	userIDMap    *sync.Map
 }
 
 func NewDiscordBot(token string, asr speech.ASR, logger *log.Logger) (*DiscordBot, error) {
 	bot := &DiscordBot{
-		asr:                asr,
-		log:                logger,
-		transcriptChannels: &sync.Map{},
-		voiceStreams:       &sync.Map{},
-		userIDMap:          &sync.Map{},
+		asr:          asr,
+		log:          logger,
+		voiceStreams: &sync.Map{},
+		userIDMap:    &sync.Map{},
 	}
 
 	dg, err := discordgo.New("Bot " + token)
@@ -165,12 +164,13 @@ func (bot *DiscordBot) getOrCreateVoiceStream(packet *discordgo.Packet, channelI
 	}
 
 	stream := &VoiceStream{
-		UserID:            userIDStr,
-		StreamID:          streamID,
-		InitialTimestamp:  packet.Timestamp,
-		InitialReceiveTime: time.Now().UnixNano(),
-		InitialSequence:   packet.Sequence,
+		UserID:               userIDStr,
+		StreamID:             streamID,
+		InitialTimestamp:     packet.Timestamp,
+		InitialReceiveTime:   time.Now().UnixNano(),
+		InitialSequence:      packet.Sequence,
 		TranscriptionSession: transcriptionSession,
+		Avatar:               getRandomAvatar(),
 	}
 
 	bot.voiceStreams.Store(packet.SSRC, stream)
@@ -197,8 +197,6 @@ func (bot *DiscordBot) getOrCreateVoiceStream(packet *discordgo.Packet, channelI
 }
 
 func (bot *DiscordBot) handleTranscription(stream *VoiceStream, channelInfo ChannelInfo) {
-	avatar := getAvatarForStream(stream.StreamID)
-
 	for transcriptChan := range stream.TranscriptionSession.Read() {
 		var transcript string
 
@@ -210,10 +208,10 @@ func (bot *DiscordBot) handleTranscription(stream *VoiceStream, channelInfo Chan
 			transcript = strings.TrimSpace(transcript)
 
 			if strings.EqualFold(transcript, "Change my identity.") {
-				avatar = getNewAvatar(avatar)
+				stream.Avatar = getRandomAvatar()
 				_, err := bot.api.ChannelMessageSend(
 					channelInfo.ChannelID,
-					fmt.Sprintf("You are now %s.", avatar),
+					fmt.Sprintf("You are now %s.", stream.Avatar),
 				)
 				if err != nil {
 					bot.log.Error("failed to send identity change message", "error", err.Error())
@@ -223,7 +221,7 @@ func (bot *DiscordBot) handleTranscription(stream *VoiceStream, channelInfo Chan
 
 			_, err := bot.api.ChannelMessageSend(
 				channelInfo.ChannelID,
-				fmt.Sprintf("%s %s", avatar, transcript),
+				fmt.Sprintf("%s %s", stream.Avatar, transcript),
 			)
 
 			if err != nil {
@@ -238,44 +236,11 @@ func (bot *DiscordBot) handleTranscription(stream *VoiceStream, channelInfo Chan
 	}
 }
 
-func (bot *DiscordBot) GetTranscriptChannel(channelInfo ChannelInfo) chan chan string {
-	key := fmt.Sprintf("%s:%s", channelInfo.GuildID, channelInfo.ChannelID)
-	ch, _ := bot.transcriptChannels.LoadOrStore(key, make(chan chan string))
-	return ch.(chan chan string)
+var avatars = []string{
+	"😀", "😎", "🤖", "👽", "🐱", "🐶", "🦄", "🐸", "🦉", "🦋",
+	"🌈", "🌟", "🍎", "🍕", "🎸", "🚀", "🧙", "🧛", "🧜", "🧚",
 }
 
-func getAvatarForStream(streamID string) string {
-	avatars := []string{
-		"😀", "😎", "🤖", "👽", "🐱", "🐶", "🦄", "🐸", "🦉", "🦋",
-		"🌈", "🌟", "🍎", "🍕", "🎸", "🚀", "🧙", "🧛", "🧜", "🧚",
-		"🧝", "🦸", "🦹", "🥷", "👨‍🚀", "👩‍🔬", "🕵️", "👨‍🍳", "🧑‍🎨", "👩‍🏫",
-		"🧑‍🌾", "🧑‍🏭",
-	}
-
-	index := 0
-	for i := 0; i < 4 && i < len(streamID); i++ {
-		index += int(streamID[i])
-	}
-
-	return avatars[index%len(avatars)]
-}
-
-func getNewAvatar(currentAvatar string) string {
-	avatars := []string{
-		"😀", "😎", "🤖", "👽", "🐱", "🐶", "🦄", "🐸", "🦉", "🦋",
-		"🌈", "🌟", "🍎", "🍕", "🎸", "🚀", "🧙", "🧛", "🧜", "🧚",
-		"🧝", "🦸", "🦹", "🥷", "👨‍🚀", "👩‍🔬", "🕵️", "👨‍🍳", "🧑‍🎨", "👩‍🏫",
-		"🧑‍🌾", "🧑‍🏭",
-	}
-
-	currentIndex := -1
-	for i, avatar := range avatars {
-		if avatar == currentAvatar {
-			currentIndex = i
-			break
-		}
-	}
-
-	newIndex := (currentIndex + 1) % len(avatars)
-	return avatars[newIndex]
+func getRandomAvatar() string {
+	return avatars[time.Now().UnixNano()%int64(len(avatars))]
 }
