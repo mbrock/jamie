@@ -186,40 +186,18 @@ func (bot *Bot) getOrCreateVoiceStream(
 	packet *discordsdk.Packet,
 	guildID, channelID string,
 ) (string, error) {
-	var streamID string
-	err := bot.db.QueryRow(`
-		SELECT s.id 
-		FROM streams s
-		JOIN discord_channel_streams dcs ON s.id = dcs.stream
-		WHERE dcs.discord_guild = ? AND dcs.discord_channel = ?
-		ORDER BY s.created_at DESC
-		LIMIT 1
-	`, guildID, channelID).Scan(&streamID)
+	streamID, err := db.GetStreamForDiscordChannel(guildID, channelID)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		streamID = etc.Gensym()
-		_, err = bot.db.Exec(
-			"INSERT INTO streams (id, packet_seq_offset, sample_idx_offset) VALUES (?, ?, ?)",
-			streamID, packet.Sequence, packet.Timestamp,
-		)
+		err = db.CreateStreamForDiscordChannel(streamID, guildID, channelID, packet.Sequence, packet.Timestamp)
 		if err != nil {
 			return "", fmt.Errorf("failed to create new stream: %w", err)
 		}
 
-		_, err = bot.db.Exec(
-			"INSERT INTO discord_channel_streams (id, stream, discord_guild, discord_channel) VALUES (?, ?, ?, ?)",
-			etc.Gensym(), streamID, guildID, channelID,
-		)
-		if err != nil {
-			return "", fmt.Errorf("failed to create discord channel stream: %w", err)
-		}
-
 		speakerID := etc.Gensym()
 		emoji := txt.RandomAvatar()
-		_, err = bot.db.Exec(
-			"INSERT INTO speakers (id, stream, emoji) VALUES (?, ?, ?)",
-			speakerID, streamID, emoji,
-		)
+		err = db.CreateSpeakerForStream(speakerID, streamID, emoji)
 		if err != nil {
 			return "", fmt.Errorf("failed to create speaker: %w", err)
 		}
@@ -237,13 +215,8 @@ func (bot *Bot) getOrCreateVoiceStream(
 
 func (bot *Bot) getSpeechRecognitionSession(streamID string) (stt.LiveTranscriptionSession, error) {
 	var session stt.LiveTranscriptionSession
-	var exists bool
 
-	err := bot.db.QueryRow(
-		"SELECT EXISTS(SELECT 1 FROM speech_recognition_sessions WHERE stream = ?)",
-		streamID,
-	).Scan(&exists)
-
+	exists, err := db.CheckSpeechRecognitionSessionExists(streamID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check for existing speech recognition session: %w", err)
 	}
@@ -254,10 +227,7 @@ func (bot *Bot) getSpeechRecognitionSession(streamID string) (stt.LiveTranscript
 			return nil, fmt.Errorf("failed to start speech recognition session: %w", err)
 		}
 
-		_, err = bot.db.Exec(
-			"INSERT INTO speech_recognition_sessions (stream, session_data) VALUES (?, ?)",
-			streamID, "placeholder", // You might want to serialize the session data
-		)
+		err = db.SaveSpeechRecognitionSession(streamID, "placeholder") // You might want to serialize the session data
 		if err != nil {
 			return nil, fmt.Errorf("failed to save speech recognition session: %w", err)
 		}
@@ -293,15 +263,7 @@ func (bot *Bot) processSegment(streamID string, segmentDrafts <-chan string) {
 			return
 		}
 
-		var channelID string
-		var emoji string
-		err := bot.db.QueryRow(`
-			SELECT dcs.discord_channel, s.emoji 
-			FROM discord_channel_streams dcs
-			JOIN streams st ON dcs.stream = st.id
-			JOIN speakers s ON st.id = s.stream
-			WHERE st.id = ?
-		`, streamID).Scan(&channelID, &emoji)
+		channelID, emoji, err := db.GetChannelAndEmojiForStream(streamID)
 		if err != nil {
 			bot.log.Error("failed to get channel and emoji", "error", err.Error())
 			return
@@ -335,20 +297,13 @@ func (bot *Bot) processSegment(streamID string, segmentDrafts <-chan string) {
 func (bot *Bot) handleAvatarChangeRequest(streamID string) {
 	newEmoji := txt.RandomAvatar()
 
-	_, err := bot.db.Exec(
-		"UPDATE speakers SET emoji = ? WHERE stream = ?",
-		newEmoji, streamID,
-	)
+	err := db.UpdateSpeakerEmoji(streamID, newEmoji)
 	if err != nil {
 		bot.log.Error("failed to update speaker emoji", "error", err.Error())
 		return
 	}
 
-	var channelID string
-	err = bot.db.QueryRow(
-		"SELECT discord_channel FROM streams WHERE id = ?",
-		streamID,
-	).Scan(&channelID)
+	channelID, err := db.GetChannelIDForStream(streamID)
 	if err != nil {
 		bot.log.Error("failed to get channel ID", "error", err.Error())
 		return
@@ -377,36 +332,16 @@ func (bot *Bot) handleVoiceStateUpdate(
 
 	if v.ChannelID == "" {
 		// User left a voice channel
-		_, err := bot.db.Exec(`
-			UPDATE streams s
-			SET ended_at = CURRENT_TIMESTAMP
-			WHERE s.id IN (
-				SELECT dcs.stream
-				FROM discord_channel_streams dcs
-				WHERE dcs.discord_guild = ? AND dcs.discord_channel = ?
-			) AND s.ended_at IS NULL
-		`, v.GuildID, v.ChannelID)
+		err := db.EndStreamForChannel(v.GuildID, v.ChannelID)
 		if err != nil {
 			bot.log.Error("failed to update stream end time", "error", err.Error())
 		}
 	} else {
 		// User joined or moved to a voice channel
 		streamID := etc.Gensym()
-		_, err := bot.db.Exec(
-			"INSERT INTO streams (id) VALUES (?)",
-			streamID,
-		)
+		err := db.CreateStreamForDiscordChannel(streamID, v.GuildID, v.ChannelID, 0, 0)
 		if err != nil {
 			bot.log.Error("failed to create new stream for user join", "error", err.Error())
-			return
-		}
-		
-		_, err = bot.db.Exec(
-			"INSERT INTO discord_channel_streams (id, stream, discord_guild, discord_channel) VALUES (?, ?, ?, ?)",
-			etc.Gensym(), streamID, v.GuildID, v.ChannelID,
-		)
-		if err != nil {
-			bot.log.Error("failed to create discord channel stream for user join", "error", err.Error())
 		}
 	}
 }

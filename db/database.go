@@ -171,3 +171,109 @@ func Close() {
 		db.Close()
 	}
 }
+
+func GetStreamForDiscordChannel(guildID, channelID string) (string, error) {
+	var streamID string
+	err := db.QueryRow(`
+		SELECT s.id 
+		FROM streams s
+		JOIN discord_channel_streams dcs ON s.id = dcs.stream
+		WHERE dcs.discord_guild = ? AND dcs.discord_channel = ?
+		ORDER BY s.created_at DESC
+		LIMIT 1
+	`, guildID, channelID).Scan(&streamID)
+	return streamID, err
+}
+
+func CreateStreamForDiscordChannel(streamID, guildID, channelID string, packetSequence, packetTimestamp uint16) error {
+	tx, err := db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.Exec(
+		"INSERT INTO streams (id, packet_seq_offset, sample_idx_offset) VALUES (?, ?, ?)",
+		streamID, packetSequence, packetTimestamp,
+	)
+	if err != nil {
+		return err
+	}
+
+	_, err = tx.Exec(
+		"INSERT INTO discord_channel_streams (id, stream, discord_guild, discord_channel) VALUES (?, ?, ?, ?)",
+		etc.Gensym(), streamID, guildID, channelID,
+	)
+	if err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+func CreateSpeakerForStream(speakerID, streamID, emoji string) error {
+	_, err := db.Exec(
+		"INSERT INTO speakers (id, stream, emoji) VALUES (?, ?, ?)",
+		speakerID, streamID, emoji,
+	)
+	return err
+}
+
+func CheckSpeechRecognitionSessionExists(streamID string) (bool, error) {
+	var exists bool
+	err := db.QueryRow(
+		"SELECT EXISTS(SELECT 1 FROM speech_recognition_sessions WHERE stream = ?)",
+		streamID,
+	).Scan(&exists)
+	return exists, err
+}
+
+func SaveSpeechRecognitionSession(streamID, sessionData string) error {
+	_, err := db.Exec(
+		"INSERT INTO speech_recognition_sessions (stream, session_data) VALUES (?, ?)",
+		streamID, sessionData,
+	)
+	return err
+}
+
+func GetChannelAndEmojiForStream(streamID string) (string, string, error) {
+	var channelID, emoji string
+	err := db.QueryRow(`
+		SELECT dcs.discord_channel, s.emoji 
+		FROM discord_channel_streams dcs
+		JOIN streams st ON dcs.stream = st.id
+		JOIN speakers s ON st.id = s.stream
+		WHERE st.id = ?
+	`, streamID).Scan(&channelID, &emoji)
+	return channelID, emoji, err
+}
+
+func UpdateSpeakerEmoji(streamID, newEmoji string) error {
+	_, err := db.Exec(
+		"UPDATE speakers SET emoji = ? WHERE stream = ?",
+		newEmoji, streamID,
+	)
+	return err
+}
+
+func GetChannelIDForStream(streamID string) (string, error) {
+	var channelID string
+	err := db.QueryRow(
+		"SELECT discord_channel FROM discord_channel_streams WHERE stream = ?",
+		streamID,
+	).Scan(&channelID)
+	return channelID, err
+}
+
+func EndStreamForChannel(guildID, channelID string) error {
+	_, err := db.Exec(`
+		UPDATE streams s
+		SET ended_at = CURRENT_TIMESTAMP
+		WHERE s.id IN (
+			SELECT dcs.stream
+			FROM discord_channel_streams dcs
+			WHERE dcs.discord_guild = ? AND dcs.discord_channel = ?
+		) AND s.ended_at IS NULL
+	`, guildID, channelID)
+	return err
+}
