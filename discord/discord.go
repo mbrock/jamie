@@ -100,10 +100,7 @@ func (bot *Bot) joinVoiceChannel(guildID, channelID string) error {
 	}
 
 	bot.logger.Info("joined voice channel", "channel", channelID)
-	go bot.handleVoiceConnection(
-		vc,
-		ChannelInfo{GuildID: guildID, ChannelID: channelID},
-	)
+	go bot.handleVoiceConnection(vc, guildID, channelID)
 	return nil
 }
 
@@ -327,7 +324,7 @@ func (s *UserSpeechStream) listen() {
 func (s *UserSpeechStream) handleAvatarChangeRequest() {
 	s.Avatar = getRandomAvatar()
 	_, err := s.bot.session.ChannelMessageSend(
-		s.ChannelInfo.ChannelID,
+		s.ChannelID,
 		fmt.Sprintf("You are now %s.", s.Avatar),
 	)
 	if err != nil {
