@@ -563,3 +563,38 @@ func (db *DB) GetTodayTranscriptions() ([]Transcription, error) {
 
 	return transcriptions, nil
 }
+func (db *DB) GetTranscriptionsForDuration(duration time.Duration) ([]Transcription, error) {
+	query := `
+		SELECT s.emoji, r.text, r.created_at
+		FROM recognitions r
+		JOIN speakers s ON r.stream = s.stream
+		WHERE r.created_at >= datetime('now', ?)
+		ORDER BY r.created_at ASC
+	`
+	rows, err := db.Query(query, fmt.Sprintf("-%d seconds", int(duration.Seconds())))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var transcriptions []Transcription
+	for rows.Next() {
+		var t Transcription
+		var timestampStr string
+		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr)
+		if err != nil {
+			return nil, err
+		}
+		t.Timestamp, err = time.Parse(time.RFC3339, timestampStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse timestamp: %w", err)
+		}
+		transcriptions = append(transcriptions, t)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return transcriptions, nil
+}

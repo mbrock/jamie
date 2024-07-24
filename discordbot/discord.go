@@ -386,10 +386,23 @@ func (bot *Bot) handleVoiceStateUpdate(
 	}
 }
 func (bot *Bot) handleSummaryCommand(s *discordsdk.Session, m *discordsdk.MessageCreate, args []string) error {
-	bot.log.Info("Summary command received", "channel", m.ChannelID)
+	bot.log.Info("Summary command received", "channel", m.ChannelID, "args", args)
+
+	var timeRange string
+	if len(args) > 0 {
+		timeRange = args[0]
+	} else {
+		timeRange = "24h" // Default to last 24 hours if no time range is specified
+	}
+
+	// Parse the time range
+	duration, err := time.ParseDuration(timeRange)
+	if err != nil {
+		return fmt.Errorf("invalid time range format: %w", err)
+	}
 
 	// Generate summary
-	summary, err := llm.SummarizeTranscript(bot.openaiAPIKey)
+	summary, err := llm.SummarizeTranscript(bot.openaiAPIKey, duration)
 	if err != nil {
 		return fmt.Errorf("failed to generate summary: %w", err)
 	}
