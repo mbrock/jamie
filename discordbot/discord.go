@@ -49,8 +49,7 @@ type Bot struct {
 
 	speechRecognitionService stt.SpeechRecognitionService
 
-	userStreams      map[uint32]*UserStream
-	userStreamRoutes map[uint32]UserID
+	userStreams map[uint32]*UserStream
 }
 
 func NewBot(
@@ -62,7 +61,6 @@ func NewBot(
 		speechRecognitionService: speechRecognitionService,
 		log:                      logger,
 		userStreams:              make(map[uint32]*UserStream),
-		userStreamRoutes:         make(map[uint32]UserID),
 	}
 
 	dg, err := discordsdk.New("Bot " + discordToken)
@@ -176,7 +174,7 @@ func (bot *Bot) handleVoiceSpeakingUpdate(
 	v *discordsdk.VoiceSpeakingUpdate,
 ) {
 	bot.log.Info(
-		"userStreamRoutes",
+		"userStreams",
 		"ssrc",
 		v.SSRC,
 		"userID",
@@ -185,7 +183,11 @@ func (bot *Bot) handleVoiceSpeakingUpdate(
 		v.Speaking,
 	)
 	bot.mu.Lock()
-	bot.userStreamRoutes[uint32(v.SSRC)] = UserID(v.UserID)
+	if _, exists := bot.userStreams[uint32(v.SSRC)]; !exists {
+		bot.userStreams[uint32(v.SSRC)] = &UserStream{
+			UserID: UserID(v.UserID),
+		}
+	}
 	bot.mu.Unlock()
 }
 
@@ -230,43 +232,38 @@ func (bot *Bot) getOrCreateVoiceStream(
 	guildID GuildID,
 	channelID ChannelID,
 ) (*UserStream, error) {
-	bot.mu.RLock()
-	stream, exists := bot.userStreams[packet.SSRC]
-	bot.mu.RUnlock()
-
-	if exists {
-		return stream, nil
-	}
-
-	streamID := UserStreamID(uuid.New().String())
-
-	bot.mu.RLock()
-	userIDStr := bot.userStreamRoutes[packet.SSRC]
-	bot.mu.RUnlock()
-
-	transcriptionSession, err := bot.speechRecognitionService.Start(context.Background())
-	if err != nil {
-		return nil, fmt.Errorf("failed to start SpeechRecognitionService session: %w", err)
-	}
-
-	stream = &UserStream{
-		UserID: userIDStr,
-		ID:     streamID,
-		FirstPacketTiming: PacketTiming{
-			SampleIndex: packet.Timestamp,
-			ReceivedAt:  time.Now().UnixNano(),
-			PacketIndex: packet.Sequence,
-		},
-		SpeechRecognitionSession: transcriptionSession,
-		Emoji:                    txt.RandomAvatar(),
-		GuildID:                  guildID,
-		ChannelID:                channelID,
-		bot:                      bot,
-	}
-
 	bot.mu.Lock()
-	bot.userStreams[packet.SSRC] = stream
-	bot.mu.Unlock()
+	defer bot.mu.Unlock()
+
+	stream, exists := bot.userStreams[packet.SSRC]
+	if !exists {
+		streamID := UserStreamID(uuid.New().String())
+
+		transcriptionSession, err := bot.speechRecognitionService.Start(context.Background())
+		if err != nil {
+			return nil, fmt.Errorf("failed to start SpeechRecognitionService session: %w", err)
+		}
+
+		stream = &UserStream{
+			ID:     streamID,
+			FirstPacketTiming: PacketTiming{
+				SampleIndex: packet.Timestamp,
+				ReceivedAt:  time.Now().UnixNano(),
+				PacketIndex: packet.Sequence,
+			},
+			SpeechRecognitionSession: transcriptionSession,
+			Emoji:                    txt.RandomAvatar(),
+			GuildID:                  guildID,
+			ChannelID:                channelID,
+			bot:                      bot,
+		}
+
+		bot.userStreams[packet.SSRC] = stream
+	}
+
+	if stream.UserID == "" {
+		bot.log.Warn("UserID not set for stream", "ssrc", packet.SSRC)
+	}
 
 	err = db.CreateVoiceStream(
 		string(guildID),
