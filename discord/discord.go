@@ -15,20 +15,20 @@ import (
 )
 
 type PacketTiming struct {
-	Timestamp   uint32
-	ReceiveTime int64
-	Sequence    uint16
+	Off uint32
+	Cal int64
+	Seq uint16
 }
 
 type UserSpeechStream struct {
-	UserID               string
-	StreamID             string
-	InitialPacket        PacketTiming
-	TranscriptionSession speech.LiveTranscriptionSession
-	Avatar               string
-	GuildID              string
-	ChannelID            string
-	bot                  *Bot
+	SID    string
+	UID    string
+	CID    string
+	GID    string
+	Avatar string
+	T0     PacketTiming
+	API    speech.LiveTranscriptionSession
+	bot    *Bot
 }
 
 type Bot struct {
@@ -189,7 +189,7 @@ func (bot *Bot) processVoicePacket(
 	receiveTime := time.Now().UnixNano()
 
 	err = db.SaveDiscordVoicePacket(
-		stream.StreamID,
+		stream.SID,
 		packet.Opus,
 		relativeSequence,
 		relativeOpusTimestamp,
@@ -202,7 +202,7 @@ func (bot *Bot) processVoicePacket(
 		)
 	}
 
-	err = stream.TranscriptionSession.SendAudio(packet.Opus)
+	err = stream.API.SendAudio(packet.Opus)
 	if err != nil {
 		return fmt.Errorf("failed to send audio to ASR service: %w", err)
 	}
@@ -234,18 +234,18 @@ func (bot *Bot) getOrCreateVoiceStream(
 	}
 
 	stream = &UserSpeechStream{
-		UserID:   userIDStr,
-		StreamID: streamID,
-		InitialPacket: PacketTiming{
-			Timestamp:   packet.Timestamp,
-			ReceiveTime: time.Now().UnixNano(),
-			Sequence:    packet.Sequence,
+		UID: userIDStr,
+		SID: streamID,
+		T0: PacketTiming{
+			Off: packet.Timestamp,
+			Cal: time.Now().UnixNano(),
+			Seq: packet.Sequence,
 		},
-		TranscriptionSession: transcriptionSession,
-		Avatar:               getRandomAvatar(),
-		GuildID:              guildID,
-		ChannelID:            channelID,
-		bot:                  bot,
+		API:    transcriptionSession,
+		Avatar: getRandomAvatar(),
+		GID:    guildID,
+		CID:    channelID,
+		bot:    bot,
 	}
 
 	bot.mutex.Lock()
@@ -258,9 +258,9 @@ func (bot *Bot) getOrCreateVoiceStream(
 		streamID,
 		userIDStr,
 		packet.SSRC,
-		stream.InitialPacket.Timestamp,
-		stream.InitialPacket.ReceiveTime,
-		stream.InitialPacket.Sequence,
+		stream.T0.Off,
+		stream.T0.Cal,
+		stream.T0.Seq,
 	)
 	if err != nil {
 		return nil, fmt.Errorf(
@@ -285,7 +285,7 @@ func (bot *Bot) getOrCreateVoiceStream(
 }
 
 func (s *UserSpeechStream) listen() {
-	for phrase := range s.TranscriptionSession.Read() {
+	for phrase := range s.API.Read() {
 		s.handlePhrase(phrase)
 	}
 }
@@ -304,7 +304,7 @@ func (s *UserSpeechStream) handlePhrase(phrase <-chan string) {
 		}
 
 		_, err := s.bot.session.ChannelMessageSend(
-			s.ChannelID,
+			s.CID,
 			fmt.Sprintf("%s %s", s.Avatar, final),
 		)
 
@@ -317,8 +317,8 @@ func (s *UserSpeechStream) handlePhrase(phrase <-chan string) {
 		}
 
 		err = db.SaveTranscript(
-			s.GuildID,
-			s.ChannelID,
+			s.GID,
+			s.CID,
 			final,
 		)
 		if err != nil {
@@ -334,7 +334,7 @@ func (s *UserSpeechStream) handlePhrase(phrase <-chan string) {
 func (s *UserSpeechStream) handleAvatarChangeRequest() {
 	s.Avatar = getRandomAvatar()
 	_, err := s.bot.session.ChannelMessageSend(
-		s.ChannelID,
+		s.CID,
 		fmt.Sprintf("You are now %s.", s.Avatar),
 	)
 	if err != nil {
