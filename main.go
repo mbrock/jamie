@@ -108,6 +108,8 @@ func runSummarizeTranscript(cmd *cobra.Command, args []string) {
 	}
 	defer db.Close()
 
+	mainLogger.Info("Database initialized successfully")
+
 	// Get today's transcriptions
 	transcriptions, err := db.GetDB().GetTodayTranscriptions()
 	if err != nil {
@@ -232,39 +234,13 @@ func runDiscord(cmd *cobra.Command, args []string) {
 		mainLogger.Fatal("missing DEEPGRAM_API_KEY or --deepgram-api-key=")
 	}
 
-	db.InitDB(sqlLogger)
+	err := db.InitDB(sqlLogger)
+	if err != nil {
+		mainLogger.Fatal("initialize database", "error", err.Error())
+	}
 	defer db.Close()
 
-	// Load and apply migrations
-	migrations, err := db.LoadMigrations("db")
-	if err != nil {
-		mainLogger.Fatal("load migrations", "error", err.Error())
-	}
-
-	mainLogger.Info("Starting database migration process...")
-	err = db.Migrate(db.GetDB().DB, migrations, sqlLogger)
-	if err != nil {
-		mainLogger.Error("apply migrations", "error", err.Error())
-		fmt.Print(
-			"An error occurred during migration. Do you want to continue? (y/n): ",
-		)
-		var response string
-		_, err := fmt.Scanln(&response)
-		if err != nil {
-			mainLogger.Fatal("error reading user input", "error", err.Error())
-		}
-		if response != "y" && response != "Y" {
-			mainLogger.Fatal("migration process aborted by user")
-		}
-		mainLogger.Warn("Continuing despite migration errors...")
-	}
-
-	mainLogger.Info("Preparing database statements...")
-	err = db.GetDB().PrepareStatements()
-	if err != nil {
-		mainLogger.Fatal("prepare statements", "error", err.Error())
-	}
-	mainLogger.Info("Database statements prepared successfully")
+	mainLogger.Info("Database initialized successfully")
 
 	transcriptionService, err := stt.NewDeepgramClient(
 		deepgramAPIKey,

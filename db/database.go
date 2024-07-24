@@ -41,6 +41,17 @@ func InitDB(logger *log.Logger) error {
 
 	sqlLogger = logger
 
+	// Load and apply migrations
+	migrations, err := LoadMigrations("db")
+	if err != nil {
+		return fmt.Errorf("failed to load migrations: %w", err)
+	}
+
+	err = Migrate(db.DB, migrations, sqlLogger)
+	if err != nil {
+		return fmt.Errorf("failed to apply migrations: %w", err)
+	}
+
 	err = db.PrepareStatements()
 	if err != nil {
 		return fmt.Errorf("failed to prepare statements: %w", err)

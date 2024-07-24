@@ -17,17 +17,5 @@ func main() {
 	}
 	defer db.Close()
 
-	// Load and apply migrations
-	migrations, err := db.LoadMigrations("db")
-	if err != nil {
-		logger.Fatal("load migrations", "error", err.Error())
-	}
-
-	logger.Info("Starting database migration process...")
-	err = db.Migrate(db.GetDB().DB, migrations, sqlLogger)
-	if err != nil {
-		logger.Fatal("apply migrations", "error", err.Error())
-	}
-
-	logger.Info("Migrations applied successfully")
+	logger.Info("Database initialized and migrations applied successfully")
 }
