@@ -132,7 +132,9 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	defer db.Close()
 
 	// Fetch recent streams
-	streams, err := db.GetDB().GetRecentStreams("", "", 10) // Assuming we don't need guild and channel IDs for this
+	streams, err := db.GetDB().
+		GetRecentStreams("", "", 10)
+		// Assuming we don't need guild and channel IDs for this
 	if err != nil {
 		mainLogger.Fatal("fetch recent streams", "error", err.Error())
 	}
@@ -144,7 +146,11 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	// Prepare stream options for selection
 	streamOptions := make([]string, len(streams))
 	for i, stream := range streams {
-		streamOptions[i] = fmt.Sprintf("%s (%s)", stream.ID, stream.CreatedAt.Format(time.RFC3339))
+		streamOptions[i] = fmt.Sprintf(
+			"%s (%s)",
+			stream.ID,
+			stream.CreatedAt.Format(time.RFC3339),
+		)
 	}
 
 	var selectedStreamID string
@@ -204,7 +210,7 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 
 	outputFileName := fmt.Sprintf(
 		"audio_%s_%s_%s.ogg",
-		streamID,
+		selectedStreamID,
 		startTime.Format("20060102T150405"),
 		endTime.Format("20060102T150405"),
 	)
