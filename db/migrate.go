@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/log"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -76,19 +77,26 @@ func Migrate(db *sql.DB, migrations []Migration, logger *log.Logger) error {
 
 	for _, migration := range migrations {
 		if migration.Version <= currentVersion {
-			logger.Info("Skipping migration (already applied)", "version", migration.Version)
+			logger.Info(
+				"Skipping migration (already applied)",
+				"version",
+				migration.Version,
+			)
 			continue
 		}
 
-		logger.Info("New migration found", "version", migration.Version)
-		fmt.Print("Do you want to apply this migration? (y/n): ")
-		var response string
-		_, err := fmt.Scanln(&response)
+		var confirm bool
+		err := huh.NewConfirm().
+			Title(fmt.Sprintf("New migration found (version %d)", migration.Version)).
+			Description("Do you want to apply this migration?").
+			Value(&confirm).
+			Run()
+
 		if err != nil {
-			return fmt.Errorf("error reading user input: %w", err)
+			return fmt.Errorf("error getting user confirmation: %w", err)
 		}
 
-		if response != "y" && response != "Y" {
+		if !confirm {
 			logger.Info("Migration skipped", "version", migration.Version)
 			continue
 		}
@@ -114,7 +122,9 @@ func Migrate(db *sql.DB, migrations []Migration, logger *log.Logger) error {
 			return fmt.Errorf("error executing schema script: %w", err)
 		}
 
-		_, err = tx.Exec(fmt.Sprintf("PRAGMA user_version = %d", migration.Version))
+		_, err = tx.Exec(
+			fmt.Sprintf("PRAGMA user_version = %d", migration.Version),
+		)
 		if err != nil {
 			tx.Rollback()
 			return fmt.Errorf("error updating user_version: %w", err)
