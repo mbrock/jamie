@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/log"
 	"github.com/sashabaranov/go-openai"
 	"github.com/spf13/cobra"
@@ -16,6 +17,7 @@ import (
 
 	"jamie/db"
 	"jamie/discordbot"
+	"jamie/llm"
 	"jamie/stt"
 	"jamie/web"
 )
@@ -97,6 +99,42 @@ var summarizeTranscriptCmd = &cobra.Command{
 	Use:   "summarize",
 	Short: "Summarize today's transcript using OpenAI",
 	Run:   runSummarizeTranscript,
+}
+
+func runSummarizeTranscript(cmd *cobra.Command, args []string) {
+	mainLogger, _, _, sqlLogger := createLoggers()
+
+	err := db.InitDB(sqlLogger)
+	if err != nil {
+		mainLogger.Fatal("initialize database", "error", err.Error())
+	}
+	defer db.Close()
+
+	// Get OpenAI API key
+	openaiAPIKey := viper.GetString("openai_api_key")
+	if openaiAPIKey == "" {
+		mainLogger.Fatal("missing OPENAI_API_KEY or --openai-api-key=")
+	}
+
+	summary, err := llm.SummarizeTranscript(openaiAPIKey)
+	if err != nil {
+		mainLogger.Fatal("failed to summarize transcript", "error", err.Error())
+	}
+
+	renderer, err := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(62),
+	)
+	if err != nil {
+		mainLogger.Fatal("failed to create renderer", "error", err.Error())
+	}
+
+	renderedSummary, err := renderer.Render(summary)
+	if err != nil {
+		mainLogger.Fatal("failed to render summary", "error", err.Error())
+	}
+
+	fmt.Print(renderedSummary)
 }
 
 func main() {
