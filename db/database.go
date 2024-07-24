@@ -371,12 +371,12 @@ func (db *DB) GetRecentStreams(guildID, channelID string, limit int) ([]Stream, 
 	query := `
 		SELECT s.id, s.created_at
 		FROM streams s
-		JOIN discord_channel_streams dcs ON s.id = dcs.stream
-		WHERE dcs.discord_guild = ? AND dcs.discord_channel = ?
+		LEFT JOIN discord_channel_streams dcs ON s.id = dcs.stream
+		WHERE (dcs.discord_guild = ? OR ? = '') AND (dcs.discord_channel = ? OR ? = '')
 		ORDER BY s.created_at DESC
 		LIMIT ?
 	`
-	rows, err := db.Query(query, guildID, channelID, limit)
+	rows, err := db.Query(query, guildID, guildID, channelID, channelID, limit)
 	if err != nil {
 		return nil, err
 	}

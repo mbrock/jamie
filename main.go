@@ -131,10 +131,12 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	defer db.Close()
 
 	// Fetch recent streams
-	streams, err := db.GetDB().GetRecentStreams("", "", 10)
+	streams, err := db.GetDB().GetRecentStreams("", "", 100) // Increased limit to 100
 	if err != nil {
 		mainLogger.Fatal("fetch recent streams", "error", err.Error())
 	}
+
+	mainLogger.Info("Fetched streams", "count", len(streams))
 
 	if len(streams) == 0 {
 		mainLogger.Fatal("no recent streams found")
