@@ -728,7 +728,7 @@ func (bot *Bot) handleGenerateAudioCommand(
 	args []string,
 ) error {
 	var streamID string
-	var startTime, endTime time.Time
+	var startTimeStr, endTimeStr string
 
 	// Get available streams
 	streams, err := bot.db.GetRecentStreams()
@@ -755,14 +755,14 @@ func (bot *Bot) handleGenerateAudioCommand(
 					_, err := time.Parse("2006-01-02 15:04:05", s)
 					return err
 				}).
-				Value(&startTime),
+				Value(&startTimeStr),
 			huh.NewInput().
 				Title("End time (YYYY-MM-DD HH:MM:SS)").
 				Validate(func(s string) error {
 					_, err := time.Parse("2006-01-02 15:04:05", s)
 					return err
 				}).
-				Value(&endTime),
+				Value(&endTimeStr),
 		),
 	)
 
@@ -770,6 +770,16 @@ func (bot *Bot) handleGenerateAudioCommand(
 	err = form.Run()
 	if err != nil {
 		return fmt.Errorf("form error: %w", err)
+	}
+
+	// Parse time strings
+	startTime, err := time.Parse("2006-01-02 15:04:05", startTimeStr)
+	if err != nil {
+		return fmt.Errorf("invalid start time: %w", err)
+	}
+	endTime, err := time.Parse("2006-01-02 15:04:05", endTimeStr)
+	if err != nil {
+		return fmt.Errorf("invalid end time: %w", err)
 	}
 
 	// Generate the audio
@@ -792,7 +802,7 @@ func (bot *Bot) handleGenerateAudioCommand(
 	tempFile.Close()
 
 	// Send the audio file as an attachment
-	_, err = s.ChannelFileSend(m.ChannelID, "audio.ogg", tempFile.Name())
+	_, err = s.ChannelFileSend(m.ChannelID, "audio.ogg", bytes.NewReader(oggData))
 	if err != nil {
 		return fmt.Errorf("send audio file: %w", err)
 	}
