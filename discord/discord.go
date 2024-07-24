@@ -15,9 +15,9 @@ import (
 )
 
 type PacketTiming struct {
-	Off uint32
-	Cal int64
-	Seq uint16
+	Off uint32 // Offset: Initial Opus timestamp for the stream
+	Cal int64  // Calibration: Initial receive time (in nanoseconds) for the stream
+	Seq uint16 // Sequence: Initial sequence number for the stream
 }
 
 type UserSpeechStream struct {
