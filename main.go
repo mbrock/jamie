@@ -147,15 +147,15 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 		streamOptions[i] = fmt.Sprintf("%s (%s)", stream.ID, stream.CreatedAt.Format(time.RFC3339))
 	}
 
-	var selectedStreamIndex int
+	var selectedStreamID string
 	var startTime, endTime time.Time
 
 	form := huh.NewForm(
 		huh.NewGroup(
-			huh.NewSelect[int]().
+			huh.NewSelect[string]().
 				Title("Choose a stream").
 				Options(huh.NewOptions(streamOptions...)...).
-				Value(&selectedStreamIndex),
+				Value(&selectedStreamID),
 
 			huh.NewInput().
 				Title("Enter the start time (RFC3339 format)").
@@ -197,9 +197,7 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 		mainLogger.Fatal("form input", "error", err.Error())
 	}
 
-	streamID := streams[selectedStreamIndex].ID
-
-	oggData, err := generateOggOpusBlob(streamID, startTime, endTime)
+	oggData, err := generateOggOpusBlob(selectedStreamID, startTime, endTime)
 	if err != nil {
 		mainLogger.Fatal("generate OGG Opus blob", "error", err.Error())
 	}
