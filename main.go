@@ -117,7 +117,7 @@ func runSummarizeTranscript(cmd *cobra.Command, args []string) {
 		mainLogger.Fatal("missing OPENAI_API_KEY or --openai-api-key=")
 	}
 
-	summary, err := llm.SummarizeTranscript(openaiAPIKey, 24*time.Hour)
+	summary, err := llm.SummarizeTranscript(openaiAPIKey, 24*time.Hour, "")
 	if err != nil {
 		mainLogger.Fatal(
 			"failed to summarize transcript",
@@ -264,13 +264,13 @@ func runWeb(cmd *cobra.Command, args []string) {
 	// Add new migration for system_prompts table
 	systemPromptsTableMigration := db.Migration{
 		Version: len(migrations) + 1,
-		Up: `
+		Schema: `
 			CREATE TABLE IF NOT EXISTS system_prompts (
 				name TEXT PRIMARY KEY,
 				prompt TEXT NOT NULL
 			);
 		`,
-		Down: `
+		Migrate: `
 			DROP TABLE IF EXISTS system_prompts;
 		`,
 	}
