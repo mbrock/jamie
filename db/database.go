@@ -9,7 +9,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-//go:embed 002/schema.sql
+//go:embed 001/schema.sql
 var schemaFS embed.FS
 
 var db *sql.DB
