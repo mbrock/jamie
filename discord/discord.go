@@ -14,7 +14,7 @@ import (
 	"github.com/google/uuid"
 )
 
-type PacketInfo struct {
+type PacketTiming struct {
 	Timestamp   uint32
 	ReceiveTime int64
 	Sequence    uint16
@@ -23,7 +23,7 @@ type PacketInfo struct {
 type UserSpeechStream struct {
 	UserID               string
 	StreamID             string
-	InitialPacket        PacketInfo
+	InitialPacket        PacketTiming
 	TranscriptionSession speech.LiveTranscriptionSession
 	Avatar               string
 	GuildID              string
@@ -236,7 +236,7 @@ func (bot *Bot) getOrCreateVoiceStream(
 	stream = &UserSpeechStream{
 		UserID:   userIDStr,
 		StreamID: streamID,
-		InitialPacket: PacketInfo{
+		InitialPacket: PacketTiming{
 			Timestamp:   packet.Timestamp,
 			ReceiveTime: time.Now().UnixNano(),
 			Sequence:    packet.Sequence,
