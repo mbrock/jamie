@@ -394,6 +394,42 @@ func (db *DB) GetRecentStreams(guildID, channelID string, limit int) ([]Stream, 
 	return streams, rows.Err()
 }
 
+func (db *DB) GetTranscriptionsForStream(streamID string) ([]Transcription, error) {
+	query := `
+		SELECT s.emoji, r.text, r.created_at
+		FROM recognitions r
+		JOIN speakers s ON r.stream = s.stream
+		WHERE r.stream = ?
+		ORDER BY r.created_at ASC
+	`
+	rows, err := db.Query(query, streamID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var transcriptions []Transcription
+	for rows.Next() {
+		var t Transcription
+		var timestampStr string
+		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr)
+		if err != nil {
+			return nil, err
+		}
+		t.Timestamp, err = time.Parse(time.RFC3339, timestampStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse timestamp: %w", err)
+		}
+		transcriptions = append(transcriptions, t)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return transcriptions, nil
+}
+
 func Close() {
 	for _, stmt := range db.stmts {
 		stmt.Close()
