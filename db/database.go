@@ -9,14 +9,14 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-//go:embed schema.sql
+//go:embed 002/schema.sql
 var schemaFS embed.FS
 
 var db *sql.DB
 
 func InitDB() {
 	var err error
-	db, err = sql.Open("sqlite3", "./transcripts.db")
+	db, err = sql.Open("sqlite3", "./002.db")
 	if err != nil {
 		log.Fatal(err)
 	}
