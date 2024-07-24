@@ -598,3 +598,45 @@ func (db *DB) GetTranscriptionsForDuration(duration time.Duration) ([]Transcript
 
 	return transcriptions, nil
 }
+
+func (db *DB) SetSystemPrompt(name, prompt string) error {
+	query := `
+		INSERT OR REPLACE INTO system_prompts (name, prompt)
+		VALUES (?, ?)
+	`
+	_, err := db.Exec(query, name, prompt)
+	return err
+}
+
+func (db *DB) GetSystemPrompt(name string) (string, error) {
+	query := `
+		SELECT prompt FROM system_prompts WHERE name = ?
+	`
+	var prompt string
+	err := db.QueryRow(query, name).Scan(&prompt)
+	if err == sql.ErrNoRows {
+		return "", fmt.Errorf("no prompt found with name: %s", name)
+	}
+	return prompt, err
+}
+
+func (db *DB) ListSystemPrompts() (map[string]string, error) {
+	query := `
+		SELECT name, prompt FROM system_prompts
+	`
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	prompts := make(map[string]string)
+	for rows.Next() {
+		var name, prompt string
+		if err := rows.Scan(&name, &prompt); err != nil {
+			return nil, err
+		}
+		prompts[name] = prompt
+	}
+	return prompts, rows.Err()
+}

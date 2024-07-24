@@ -13,6 +13,7 @@ import (
 func SummarizeTranscript(
 	openaiAPIKey string,
 	duration time.Duration,
+	promptName string,
 ) (string, error) {
 	// Get transcriptions for the specified duration
 	transcriptions, err := db.GetDB().GetTranscriptionsForDuration(duration)
@@ -44,16 +45,27 @@ func SummarizeTranscript(
 	client := openai.NewClient(openaiAPIKey)
 	ctx := context.Background()
 
+	// Get the system prompt
+	var systemPrompt string
+	if promptName != "" {
+		systemPrompt, err = db.GetDB().GetSystemPrompt(promptName)
+		if err != nil {
+			return "", fmt.Errorf("get system prompt: %w", err)
+		}
+	} else {
+		systemPrompt = "Analyze the following transcript and provide a narrative synopsis. " +
+			"Write punchy single sentence paragraphs, each one prefixed by a relevant emoji, different ones. " +
+			"Emphasize key words and salient concepts with CAPS."
+	}
+
 	// Prepare the chat completion request
 	req := openai.ChatCompletionRequest{
 		Model:     openai.GPT4o,
 		MaxTokens: 500,
 		Messages: []openai.ChatCompletionMessage{
 			{
-				Role: openai.ChatMessageRoleSystem,
-				Content: "Analyze the following transcript and provide a narrative synopsis. " +
-					"Write punchy single sentence paragraphs, each one prefixed by a relevant emoji, different ones. " +
-					"Emphasize key words and salient concepts with CAPS.",
+				Role:    openai.ChatMessageRoleSystem,
+				Content: systemPrompt,
 			},
 			{
 				Role:    openai.ChatMessageRoleUser,

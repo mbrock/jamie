@@ -261,6 +261,25 @@ func runWeb(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
+	// Add new migration for system_prompts table
+	systemPromptsTableMigration := db.Migration{
+		Version: len(migrations) + 1,
+		Up: `
+			CREATE TABLE IF NOT EXISTS system_prompts (
+				name TEXT PRIMARY KEY,
+				prompt TEXT NOT NULL
+			);
+		`,
+		Down: `
+			DROP TABLE IF EXISTS system_prompts;
+		`,
+	}
+	err = db.Migrate(db.GetDB().DB, []db.Migration{systemPromptsTableMigration}, sqlLogger)
+	if err != nil {
+		mainLogger.Error("apply system_prompts migration", "error", err.Error())
+		os.Exit(1)
+	}
+
 	mainLogger.Info("Preparing database statements...")
 	err = db.GetDB().PrepareStatements()
 	if err != nil {

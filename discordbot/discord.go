@@ -73,7 +73,8 @@ func NewBot(
 
 func (bot *Bot) registerCommands() {
 	bot.commands["summary"] = bot.handleSummaryCommand
-	// Add more commands here as needed
+	bot.commands["prompt"] = bot.handlePromptCommand
+	bot.commands["listprompts"] = bot.handleListPromptsCommand
 }
 
 func (bot *Bot) Close() error {
@@ -458,21 +459,23 @@ func (bot *Bot) handleSummaryCommand(
 		args,
 	)
 
-	var timeRange string
-	if len(args) > 0 {
-		timeRange = args[0]
-	} else {
-		timeRange = "24h" // Default to last 24 hours if no time range is specified
+	if len(args) < 1 {
+		return fmt.Errorf("usage: !summary <duration> [prompt_name]")
 	}
 
-	// Parse the time range
+	timeRange := args[0]
 	duration, err := time.ParseDuration(timeRange)
 	if err != nil {
 		return fmt.Errorf("invalid time range format: %w", err)
 	}
 
+	var promptName string
+	if len(args) > 1 {
+		promptName = args[1]
+	}
+
 	// Generate summary
-	summary, err := llm.SummarizeTranscript(bot.openaiAPIKey, duration)
+	summary, err := llm.SummarizeTranscript(bot.openaiAPIKey, duration, promptName)
 	if err != nil {
 		return fmt.Errorf("failed to generate summary: %w", err)
 	}
@@ -481,6 +484,63 @@ func (bot *Bot) handleSummaryCommand(
 	_, err = s.ChannelMessageSend(m.ChannelID, summary)
 	if err != nil {
 		return fmt.Errorf("failed to send summary message: %w", err)
+	}
+
+	return nil
+}
+
+func (bot *Bot) handlePromptCommand(
+	s *discordsdk.Session,
+	m *discordsdk.MessageCreate,
+	args []string,
+) error {
+	if len(args) < 2 {
+		return fmt.Errorf("usage: !prompt <name> <prompt text>")
+	}
+
+	name := args[0]
+	prompt := strings.Join(args[1:], " ")
+
+	err := bot.db.SetSystemPrompt(name, prompt)
+	if err != nil {
+		return fmt.Errorf("failed to set system prompt: %w", err)
+	}
+
+	_, err = s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("System prompt '%s' has been set.", name))
+	if err != nil {
+		return fmt.Errorf("failed to send confirmation message: %w", err)
+	}
+
+	return nil
+}
+
+func (bot *Bot) handleListPromptsCommand(
+	s *discordsdk.Session,
+	m *discordsdk.MessageCreate,
+	args []string,
+) error {
+	prompts, err := bot.db.ListSystemPrompts()
+	if err != nil {
+		return fmt.Errorf("failed to list system prompts: %w", err)
+	}
+
+	if len(prompts) == 0 {
+		_, err = s.ChannelMessageSend(m.ChannelID, "No system prompts have been set.")
+		if err != nil {
+			return fmt.Errorf("failed to send message: %w", err)
+		}
+		return nil
+	}
+
+	var message strings.Builder
+	message.WriteString("Available system prompts:\n")
+	for name, prompt := range prompts {
+		message.WriteString(fmt.Sprintf("- %s: %s\n", name, prompt))
+	}
+
+	_, err = s.ChannelMessageSend(m.ChannelID, message.String())
+	if err != nil {
+		return fmt.Errorf("failed to send prompts list: %w", err)
 	}
 
 	return nil
