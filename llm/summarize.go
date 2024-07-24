@@ -63,10 +63,5 @@ func SummarizeTranscript(openaiAPIKey string) (string, error) {
 	}
 
 	summary := resp.Choices[0].Message.Content
-	renderedSummary, err := glamour.Render(summary, "dark")
-	if err != nil {
-		return "", fmt.Errorf("failed to render summary: %w", err)
-	}
-
-	return renderedSummary, nil
+	return summary, nil
 }
