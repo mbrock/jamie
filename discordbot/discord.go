@@ -266,15 +266,10 @@ func (bot *Bot) getOrCreateVoiceStream(
 		bot.log.Warn("UserID not set for stream", "ssrc", packet.SSRC)
 	}
 
-	err := db.CreateVoiceStream(
-		string(guildID),
-		string(channelID),
+	err := db.CreateStream(
 		string(stream.ID),
-		string(stream.UserID),
-		packet.SSRC,
-		stream.Beginning.SampleIndex,
-		stream.Beginning.ReceivedAt,
-		stream.Beginning.PacketIndex,
+		int(stream.Beginning.PacketIndex),
+		int(stream.Beginning.SampleIndex),
 	)
 	if err != nil {
 		return nil, fmt.Errorf(
