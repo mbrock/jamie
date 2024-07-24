@@ -118,8 +118,54 @@ var generateAudioCmd = &cobra.Command{
 }
 
 func runGenerateAudio(cmd *cobra.Command, args []string) {
-	// TODO: Implement the audio generation logic here
-	fmt.Println("Audio generation not yet implemented")
+	if len(args) < 3 {
+		fmt.Println("Usage: jamie generateaudio <stream_id> <start_time> <end_time>")
+		return
+	}
+
+	streamID := args[0]
+	startTime, err := time.Parse(time.RFC3339, args[1])
+	if err != nil {
+		fmt.Printf("Invalid start time format: %v\n", err)
+		return
+	}
+	endTime, err := time.Parse(time.RFC3339, args[2])
+	if err != nil {
+		fmt.Printf("Invalid end time format: %v\n", err)
+		return
+	}
+
+	mainLogger, _, _, sqlLogger := createLoggers()
+
+	err = db.InitDB(sqlLogger)
+	if err != nil {
+		mainLogger.Fatal("initialize database", "error", err.Error())
+	}
+	defer db.Close()
+
+	bot, err := discordbot.NewBot(
+		viper.GetString("discord_token"),
+		nil, // We don't need the speech recognition service for this command
+		mainLogger,
+		viper.GetString("openai_api_key"),
+		viper.GetString("elevenlabs_api_key"),
+	)
+	if err != nil {
+		mainLogger.Fatal("create bot instance", "error", err.Error())
+	}
+
+	oggData, err := bot.GenerateOggOpusBlob(streamID, startTime, endTime)
+	if err != nil {
+		mainLogger.Fatal("generate OGG Opus blob", "error", err.Error())
+	}
+
+	outputFileName := fmt.Sprintf("audio_%s_%s_%s.ogg", streamID, startTime.Format("20060102T150405"), endTime.Format("20060102T150405"))
+	err = os.WriteFile(outputFileName, oggData, 0644)
+	if err != nil {
+		mainLogger.Fatal("write audio file", "error", err.Error())
+	}
+
+	fmt.Printf("Audio file generated: %s\n", outputFileName)
 }
 
 func runSummarizeTranscript(cmd *cobra.Command, args []string) {
