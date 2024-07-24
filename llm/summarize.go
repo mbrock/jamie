@@ -5,11 +5,15 @@ import (
 	"fmt"
 	"jamie/db"
 	"strings"
+	"time"
 
 	"github.com/sashabaranov/go-openai"
 )
 
-func SummarizeTranscript(openaiAPIKey string, duration time.Duration) (string, error) {
+func SummarizeTranscript(
+	openaiAPIKey string,
+	duration time.Duration,
+) (string, error) {
 	// Get transcriptions for the specified duration
 	transcriptions, err := db.GetDB().GetTranscriptionsForDuration(duration)
 	if err != nil {
@@ -17,7 +21,10 @@ func SummarizeTranscript(openaiAPIKey string, duration time.Duration) (string, e
 	}
 
 	if len(transcriptions) == 0 {
-		return fmt.Sprintf("No transcriptions found for the last %s", duration), nil
+		return fmt.Sprintf(
+			"No transcriptions found for the last %s",
+			duration,
+		), nil
 	}
 
 	// Format transcriptions
@@ -46,8 +53,7 @@ func SummarizeTranscript(openaiAPIKey string, duration time.Duration) (string, e
 				Role: openai.ChatMessageRoleSystem,
 				Content: "Analyze the following transcript and provide a narrative synopsis. " +
 					"Write punchy single sentence paragraphs, each one prefixed by a relevant emoji, different ones. " +
-					"Emphasize key words and salient concepts with CAPS. " +
-					"Keep it real, authentic, and not too long. Write in lower case weird style.",
+					"Emphasize key words and salient concepts with CAPS.",
 			},
 			{
 				Role:    openai.ChatMessageRoleUser,

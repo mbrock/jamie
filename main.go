@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/log"
@@ -116,9 +117,13 @@ func runSummarizeTranscript(cmd *cobra.Command, args []string) {
 		mainLogger.Fatal("missing OPENAI_API_KEY or --openai-api-key=")
 	}
 
-	summary, err := llm.SummarizeTranscript(openaiAPIKey)
+	summary, err := llm.SummarizeTranscript(openaiAPIKey, 24*time.Hour)
 	if err != nil {
-		mainLogger.Fatal("failed to summarize transcript", "error", err.Error())
+		mainLogger.Fatal(
+			"failed to summarize transcript",
+			"error",
+			err.Error(),
+		)
 	}
 
 	renderer, err := glamour.NewTermRenderer(

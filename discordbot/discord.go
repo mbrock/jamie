@@ -11,6 +11,7 @@ import (
 	"jamie/stt"
 	"jamie/txt"
 	"strings"
+	"time"
 
 	discordsdk "github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
@@ -38,9 +39,11 @@ func NewBot(
 		speechRecognitionService: speechRecognitionService,
 		log:                      logger,
 		db:                       db.GetDB(),
-		sessions:                 make(map[string]stt.LiveTranscriptionSession),
-		openaiAPIKey:             openaiAPIKey,
-		commands:                 make(map[string]CommandHandler),
+		sessions: make(
+			map[string]stt.LiveTranscriptionSession,
+		),
+		openaiAPIKey: openaiAPIKey,
+		commands:     make(map[string]CommandHandler),
 	}
 
 	bot.registerCommands()
@@ -92,7 +95,10 @@ func (bot *Bot) handleGuildCreate(
 	}
 }
 
-func (bot *Bot) handleMessageCreate(s *discordsdk.Session, m *discordsdk.MessageCreate) {
+func (bot *Bot) handleMessageCreate(
+	s *discordsdk.Session,
+	m *discordsdk.MessageCreate,
+) {
 	// Ignore messages from the bot itself
 	if m.Author.ID == s.State.User.ID {
 		return
@@ -112,14 +118,26 @@ func (bot *Bot) handleMessageCreate(s *discordsdk.Session, m *discordsdk.Message
 	commandName := args[0]
 	handler, exists := bot.commands[commandName]
 	if !exists {
-		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Unknown command: %s", commandName))
+		s.ChannelMessageSend(
+			m.ChannelID,
+			fmt.Sprintf("Unknown command: %s", commandName),
+		)
 		return
 	}
 
 	err := handler(s, m, args[1:])
 	if err != nil {
-		bot.log.Error("Command execution failed", "command", commandName, "error", err.Error())
-		s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Error executing command: %s", err.Error()))
+		bot.log.Error(
+			"Command execution failed",
+			"command",
+			commandName,
+			"error",
+			err.Error(),
+		)
+		s.ChannelMessageSend(
+			m.ChannelID,
+			fmt.Sprintf("Error executing command: %s", err.Error()),
+		)
 	}
 }
 
@@ -225,7 +243,10 @@ func (bot *Bot) processVoicePacket(
 
 	err = session.SendAudio(packet.Opus)
 	if err != nil {
-		return fmt.Errorf("failed to send audio to speech recognition service: %w", err)
+		return fmt.Errorf(
+			"failed to send audio to speech recognition service: %w",
+			err,
+		)
 	}
 
 	return nil
@@ -235,14 +256,30 @@ func (bot *Bot) getOrCreateVoiceStream(
 	packet *discordsdk.Packet,
 	guildID, channelID string,
 ) (string, error) {
-	discordID := fmt.Sprintf("%d", packet.SSRC) // Using SSRC as a unique identifier for the Discord user
-	streamID, err := db.GetStreamForDiscordChannelAndSpeaker(guildID, channelID, discordID)
+	discordID := fmt.Sprintf(
+		"%d",
+		packet.SSRC,
+	) // Using SSRC as a unique identifier for the Discord user
+	streamID, err := db.GetStreamForDiscordChannelAndSpeaker(
+		guildID,
+		channelID,
+		discordID,
+	)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		streamID = etc.Gensym()
 		speakerID := etc.Gensym()
 		emoji := txt.RandomAvatar()
-		err = db.CreateStreamForDiscordChannel(streamID, guildID, channelID, packet.Sequence, uint16(packet.Timestamp), speakerID, discordID, emoji)
+		err = db.CreateStreamForDiscordChannel(
+			streamID,
+			guildID,
+			channelID,
+			packet.Sequence,
+			uint16(packet.Timestamp),
+			speakerID,
+			discordID,
+			emoji,
+		)
 		if err != nil {
 			return "", fmt.Errorf("failed to create new stream: %w", err)
 		}
@@ -260,13 +297,20 @@ func (bot *Bot) getOrCreateVoiceStream(
 	return streamID, nil
 }
 
-func (bot *Bot) getSpeechRecognitionSession(streamID string) (stt.LiveTranscriptionSession, error) {
+func (bot *Bot) getSpeechRecognitionSession(
+	streamID string,
+) (stt.LiveTranscriptionSession, error) {
 	session, exists := bot.sessions[streamID]
 	if !exists {
 		var err error
-		session, err = bot.speechRecognitionService.Start(context.Background())
+		session, err = bot.speechRecognitionService.Start(
+			context.Background(),
+		)
 		if err != nil {
-			return nil, fmt.Errorf("failed to start speech recognition session: %w", err)
+			return nil, fmt.Errorf(
+				"failed to start speech recognition session: %w",
+				err,
+			)
 		}
 		bot.sessions[streamID] = session
 		go bot.speechRecognitionLoop(streamID, session)
@@ -274,12 +318,19 @@ func (bot *Bot) getSpeechRecognitionSession(streamID string) (stt.LiveTranscript
 	return session, nil
 }
 
-func (bot *Bot) speechRecognitionLoop(streamID string, session stt.LiveTranscriptionSession) {
+func (bot *Bot) speechRecognitionLoop(
+	streamID string,
+	session stt.LiveTranscriptionSession,
+) {
 	for {
 		select {
 		case segmentDrafts, ok := <-session.Receive():
 			if !ok {
-				bot.log.Info("Speech recognition session closed", "streamID", streamID)
+				bot.log.Info(
+					"Speech recognition session closed",
+					"streamID",
+					streamID,
+				)
 				return
 			}
 			bot.processSegment(streamID, segmentDrafts)
@@ -302,7 +353,11 @@ func (bot *Bot) processSegment(streamID string, segmentDrafts <-chan string) {
 
 		channelID, emoji, err := db.GetChannelAndEmojiForStream(streamID)
 		if err != nil {
-			bot.log.Error("failed to get channel and emoji", "error", err.Error())
+			bot.log.Error(
+				"failed to get channel and emoji",
+				"error",
+				err.Error(),
+			)
 			return
 		}
 
@@ -371,7 +426,11 @@ func (bot *Bot) handleVoiceStateUpdate(
 		// User left a voice channel
 		err := db.EndStreamForChannel(v.GuildID, v.ChannelID)
 		if err != nil {
-			bot.log.Error("failed to update stream end time", "error", err.Error())
+			bot.log.Error(
+				"failed to update stream end time",
+				"error",
+				err.Error(),
+			)
 		}
 	} else {
 		// User joined or moved to a voice channel
@@ -385,8 +444,19 @@ func (bot *Bot) handleVoiceStateUpdate(
 		}
 	}
 }
-func (bot *Bot) handleSummaryCommand(s *discordsdk.Session, m *discordsdk.MessageCreate, args []string) error {
-	bot.log.Info("Summary command received", "channel", m.ChannelID, "args", args)
+
+func (bot *Bot) handleSummaryCommand(
+	s *discordsdk.Session,
+	m *discordsdk.MessageCreate,
+	args []string,
+) error {
+	bot.log.Info(
+		"Summary command received",
+		"channel",
+		m.ChannelID,
+		"args",
+		args,
+	)
 
 	var timeRange string
 	if len(args) > 0 {
