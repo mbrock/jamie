@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -13,6 +14,8 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/log"
+	"github.com/pion/rtp"
+	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
 	"github.com/sashabaranov/go-openai"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -143,18 +146,7 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	}
 	defer db.Close()
 
-	bot, err := discordbot.NewBot(
-		viper.GetString("discord_token"),
-		nil, // We don't need the speech recognition service for this command
-		mainLogger,
-		viper.GetString("openai_api_key"),
-		viper.GetString("elevenlabs_api_key"),
-	)
-	if err != nil {
-		mainLogger.Fatal("create bot instance", "error", err.Error())
-	}
-
-	oggData, err := bot.GenerateOggOpusBlob(streamID, startTime, endTime)
+	oggData, err := generateOggOpusBlob(streamID, startTime, endTime)
 	if err != nil {
 		mainLogger.Fatal("generate OGG Opus blob", "error", err.Error())
 	}
@@ -166,6 +158,46 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	}
 
 	fmt.Printf("Audio file generated: %s\n", outputFileName)
+}
+
+func generateOggOpusBlob(streamID string, startTime, endTime time.Time) ([]byte, error) {
+	// Fetch packets from the database
+	packets, err := db.GetDB().GetPacketsForStreamInTimeRange(streamID, startTime, endTime)
+	if err != nil {
+		return nil, fmt.Errorf("fetch packets: %w", err)
+	}
+
+	// Create a buffer to store the OGG Opus data
+	var oggBuffer bytes.Buffer
+
+	// Create an OGG writer
+	// Assuming 48kHz sample rate and 2 channels (stereo) for Opus
+	oggWriter, err := oggwriter.NewWith(&oggBuffer, 48000, 2)
+	if err != nil {
+		return nil, fmt.Errorf("create OGG writer: %w", err)
+	}
+
+	// Write packets to the OGG writer
+	for i, packet := range packets {
+		if err := oggWriter.WriteRTP(&rtp.Packet{
+			Header: rtp.Header{
+				Version:        2,
+				PayloadType:    111,
+				SequenceNumber: uint16(i),
+				Timestamp:      uint32(i * 960),
+			},
+			Payload: packet,
+		}); err != nil {
+			return nil, fmt.Errorf("write Opus packet: %w", err)
+		}
+	}
+
+	// Close the OGG writer to finalize the file
+	if err := oggWriter.Close(); err != nil {
+		return nil, fmt.Errorf("close OGG writer: %w", err)
+	}
+
+	return oggBuffer.Bytes(), nil
 }
 
 func runSummarizeTranscript(cmd *cobra.Command, args []string) {
