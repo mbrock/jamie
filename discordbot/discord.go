@@ -21,10 +21,10 @@ type PacketTiming struct {
 }
 
 type UserStream struct {
-	ID        string
+	ID        UserStreamID
 	UserID    UserID
-	ChannelID string
-	GuildID   string
+	ChannelID ChannelID
+	GuildID   GuildID
 	Emoji     string
 
 	FirstPacketTiming PacketTiming
@@ -33,7 +33,12 @@ type UserStream struct {
 	bot                      *Bot
 }
 
-type UserID string
+type (
+	UserID        string
+	ChannelID     string
+	GuildID       string
+	UserStreamID  string
+)
 
 type Bot struct {
 	logger            *log.Logger
@@ -96,7 +101,7 @@ func (bot *Bot) handleGuildCreate(
 	}
 }
 
-func (bot *Bot) joinVoiceChannel(guildID, channelID string) error {
+func (bot *Bot) joinVoiceChannel(guildID GuildID, channelID ChannelID) error {
 	vc, err := bot.session.ChannelVoiceJoin(
 		guildID,
 		channelID,
@@ -112,7 +117,7 @@ func (bot *Bot) joinVoiceChannel(guildID, channelID string) error {
 	return nil
 }
 
-func (bot *Bot) joinAllVoiceChannels(guildID string) error {
+func (bot *Bot) joinAllVoiceChannels(guildID GuildID) error {
 	channels, err := bot.session.GuildChannels(guildID)
 	if err != nil {
 		return fmt.Errorf("error getting guild channels: %w", err)
@@ -138,7 +143,8 @@ func (bot *Bot) joinAllVoiceChannels(guildID string) error {
 
 func (bot *Bot) handleVoiceConnection(
 	vc *discordsdk.VoiceConnection,
-	guildID, channelID string,
+	guildID GuildID,
+	channelID ChannelID,
 ) {
 
 	vc.AddHandler(bot.handleVoiceSpeakingUpdate)
@@ -181,7 +187,8 @@ func (bot *Bot) handleVoiceSpeakingUpdate(
 
 func (bot *Bot) processVoicePacket(
 	packet *discordsdk.Packet,
-	guildID, channelID string,
+	guildID GuildID,
+	channelID ChannelID,
 ) error {
 	stream, err := bot.getOrCreateVoiceStream(packet, guildID, channelID)
 	if err != nil {
@@ -216,7 +223,8 @@ func (bot *Bot) processVoicePacket(
 
 func (bot *Bot) getOrCreateVoiceStream(
 	packet *discordsdk.Packet,
-	guildID, channelID string,
+	guildID GuildID,
+	channelID ChannelID,
 ) (*UserStream, error) {
 	bot.mutex.RLock()
 	stream, exists := bot.userSpeechStreams[packet.SSRC]
@@ -226,7 +234,7 @@ func (bot *Bot) getOrCreateVoiceStream(
 		return stream, nil
 	}
 
-	streamID := uuid.New().String()
+	streamID := UserStreamID(uuid.New().String())
 
 	bot.mutex.RLock()
 	userIDStr := bot.peerMap[packet.SSRC]
