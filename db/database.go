@@ -50,6 +50,9 @@ func InitDB() {
 }
 
 func (db *DB) prepareStatements() error {
+	logger := log.New(os.Stdout)
+	sqlLogger := logger.With("component", "sql")
+
 	statements := map[string]string{
 		"insertStream": `
 			INSERT INTO streams (
@@ -139,11 +142,14 @@ func (db *DB) prepareStatements() error {
 	}
 
 	for name, query := range statements {
+		sqlLogger.Info("Preparing statement", "name", name)
 		stmt, err := db.Prepare(query)
 		if err != nil {
+			sqlLogger.Error("Failed to prepare statement", "name", name, "error", err)
 			return err
 		}
 		db.stmts[name] = stmt
+		sqlLogger.Info("Statement prepared successfully", "name", name)
 	}
 
 	return nil
