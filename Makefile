@@ -6,8 +6,12 @@ build:
 run: build
 	./jamie discord
 
+# Run migrations and prepare statements
+migrate:
+	go run cmd/migrate/main.go
+
 # Clean up build artifacts
 clean:
 	rm -f jamie
 
-.PHONY: build run clean
+.PHONY: build run migrate clean
