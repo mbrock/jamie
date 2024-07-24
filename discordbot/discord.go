@@ -205,12 +205,13 @@ func (bot *Bot) processVoicePacket(
 	relativeSequence := packet.Sequence - stream.Beginning.PacketIndex
 	receiveTime := time.Now().UnixNano()
 
-	err = db.SaveDiscordVoicePacket(
+	packetID := etc.Gensym()
+	err = db.SavePacket(
+		packetID,
 		string(stream.ID),
+		int(packet.Sequence),
+		int(packet.Timestamp),
 		packet.Opus,
-		relativeSequence,
-		relativeOpusTimestamp,
-		receiveTime,
 	)
 	if err != nil {
 		return fmt.Errorf(
