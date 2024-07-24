@@ -8,7 +8,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/sashabaranov/go-openai"
@@ -35,15 +34,25 @@ func init() {
 
 	// Add persistent flags
 	rootCmd.PersistentFlags().String("discord-token", "", "Discord bot token")
-	rootCmd.PersistentFlags().String("deepgram-api-key", "", "Deepgram API key")
+	rootCmd.PersistentFlags().
+		String("deepgram-api-key", "", "Deepgram API key")
 	rootCmd.PersistentFlags().Int("web-port", 8080, "Web server port")
 	rootCmd.PersistentFlags().String("openai-api-key", "", "OpenAI API key")
 
 	// Bind flags to viper
-	viper.BindPFlag("discord_token", rootCmd.PersistentFlags().Lookup("discord-token"))
-	viper.BindPFlag("deepgram_api_key", rootCmd.PersistentFlags().Lookup("deepgram-api-key"))
+	viper.BindPFlag(
+		"discord_token",
+		rootCmd.PersistentFlags().Lookup("discord-token"),
+	)
+	viper.BindPFlag(
+		"deepgram_api_key",
+		rootCmd.PersistentFlags().Lookup("deepgram-api-key"),
+	)
 	viper.BindPFlag("web_port", rootCmd.PersistentFlags().Lookup("web-port"))
-	viper.BindPFlag("openai_api_key", rootCmd.PersistentFlags().Lookup("openai-api-key"))
+	viper.BindPFlag(
+		"openai_api_key",
+		rootCmd.PersistentFlags().Lookup("openai-api-key"),
+	)
 }
 
 func initConfig() {
@@ -116,7 +125,12 @@ func runSummarizeTranscript(cmd *cobra.Command, args []string) {
 	// Format transcriptions
 	var formattedTranscript string
 	for _, t := range transcriptions {
-		formattedTranscript += fmt.Sprintf("%s %s: %s\n", t.Timestamp.Format("15:04:05"), t.Emoji, t.Text)
+		formattedTranscript += fmt.Sprintf(
+			"%s %s: %s\n",
+			t.Timestamp.Format("15:04:05"),
+			t.Emoji,
+			t.Text,
+		)
 	}
 
 	// Get OpenAI API key
@@ -306,7 +320,7 @@ func runWeb(cmd *cobra.Command, args []string) {
 
 	port := viper.GetInt("web_port")
 	handler := web.NewHandler(db.GetDB(), mainLogger)
-	
+
 	mainLogger.Info("Starting web server", "port", port)
 	err = http.ListenAndServe(fmt.Sprintf(":%d", port), handler)
 	if err != nil {
@@ -319,9 +333,11 @@ func createLoggers() (mainLogger, discordLogger, deepgramLogger, sqlLogger *log.
 
 	logger.SetLevel(logLevel)
 	logger.SetReportCaller(true)
-	logger.SetCallerFormatter(func(file string, line int, funcName string) string {
-		return fmt.Sprintf("%s:%d", file, line)
-	})
+	logger.SetCallerFormatter(
+		func(file string, line int, funcName string) string {
+			return fmt.Sprintf("%s:%d", file, line)
+		},
+	)
 
 	mainLogger = logger.WithPrefix("app")
 	mainLogger.SetLevel(logLevel)
