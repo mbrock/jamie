@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/charmbracelet/log"
@@ -151,6 +152,10 @@ func createLoggers() (mainLogger, discordLogger, deepgramLogger, sqlLogger *log.
 	}
 
 	logger.SetLevel(logLevel)
+	logger.SetReportCaller(true)
+	logger.SetCallerFormatter(func(file string, line int) string {
+		return fmt.Sprintf("%s:%d", filepath.Base(file), line)
+	})
 
 	mainLogger = logger.WithPrefix("app")
 	discordLogger = logger.WithPrefix("yap")
