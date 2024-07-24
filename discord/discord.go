@@ -32,12 +32,12 @@ type UserSpeechStream struct {
 }
 
 type Bot struct {
-	logger         *log.Logger
-	session        *dis.Session
-	transcriber    speech.ASR
-	voiceStreams   map[uint32]*UserSpeechStream
-	userIDTable    map[uint32]string
-	mutex          sync.RWMutex
+	logger      *log.Logger
+	session     *dis.Session
+	transcriber speech.ASR
+	streams     map[uint32]*UserSpeechStream
+	userIDTable map[uint32]string
+	mutex       sync.RWMutex
 }
 
 func NewBot(
@@ -46,10 +46,10 @@ func NewBot(
 	logger *log.Logger,
 ) (*Bot, error) {
 	bot := &Bot{
-		transcriber:    asr,
-		logger:         logger,
-		voiceStreams:   make(map[uint32]*UserSpeechStream),
-		userIDTable:    make(map[uint32]string),
+		transcriber: asr,
+		logger:      logger,
+		streams:     make(map[uint32]*UserSpeechStream),
+		userIDTable: make(map[uint32]string),
 	}
 
 	dg, err := dis.New("Bot " + token)
@@ -65,7 +65,11 @@ func NewBot(
 	}
 
 	bot.session = dg
-	bot.logger.Info("bot started", "username", bot.session.State.User.Username)
+	bot.logger.Info(
+		"bot started",
+		"username",
+		bot.session.State.User.Username,
+	)
 	return bot, nil
 }
 
@@ -80,7 +84,11 @@ func (bot *Bot) handleGuildCreate(
 	bot.logger.Info("joined guild", "guild", event.Guild.Name)
 	err := bot.joinAllVoiceChannels(event.Guild.ID)
 	if err != nil {
-		bot.logger.Error("failed to join voice channels", "error", err.Error())
+		bot.logger.Error(
+			"failed to join voice channels",
+			"error",
+			err.Error(),
+		)
 	}
 }
 
@@ -210,7 +218,7 @@ func (bot *Bot) getOrCreateVoiceStream(
 	channelInfo ChannelInfo,
 ) (*UserSpeechStream, error) {
 	bot.mutex.RLock()
-	stream, exists := bot.voiceStreams[packet.SSRC]
+	stream, exists := bot.streams[packet.SSRC]
 	bot.mutex.RUnlock()
 
 	if exists {
@@ -241,7 +249,7 @@ func (bot *Bot) getOrCreateVoiceStream(
 	}
 
 	bot.mutex.Lock()
-	bot.voiceStreams[packet.SSRC] = stream
+	bot.streams[packet.SSRC] = stream
 	bot.mutex.Unlock()
 
 	err = db.CreateVoiceStream(
