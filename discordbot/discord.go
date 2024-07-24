@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"jamie/db"
+	"jamie/etc"
 	"jamie/stt"
 	"jamie/txt"
 	"strings"
@@ -12,7 +13,6 @@ import (
 
 	discordsdk "github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
-	"github.com/google/uuid"
 )
 
 type PacketTiming struct {
@@ -237,7 +237,7 @@ func (bot *Bot) getOrCreateVoiceStream(
 
 	stream, exists := bot.userStreams[packet.SSRC]
 	if !exists {
-		streamID := UserStreamID(uuid.New().String())
+		streamID := UserStreamID(etc.Gensym())
 
 		transcriptionSession, err := bot.speechRecognitionService.Start(context.Background())
 		if err != nil {
@@ -245,7 +245,7 @@ func (bot *Bot) getOrCreateVoiceStream(
 		}
 
 		stream = &UserStream{
-			ID:     streamID,
+			ID: streamID,
 			FirstPacketTiming: PacketTiming{
 				SampleIndex: packet.Timestamp,
 				ReceivedAt:  time.Now().UnixNano(),
