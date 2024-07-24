@@ -184,8 +184,8 @@ func (bot *Bot) processVoicePacket(
 		return fmt.Errorf("failed to get or create voice stream: %w", err)
 	}
 
-	relativeOpusTimestamp := packet.Timestamp - stream.InitialTimestamp
-	relativeSequence := packet.Sequence - stream.InitialSequence
+	relativeOpusTimestamp := packet.Timestamp - stream.T0.Off
+	relativeSequence := packet.Sequence - stream.T0.Seq
 	receiveTime := time.Now().UnixNano()
 
 	err = db.SaveDiscordVoicePacket(
