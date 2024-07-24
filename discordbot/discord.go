@@ -20,6 +20,7 @@ type Bot struct {
 	conn                     *discordsdk.Session
 	speechRecognitionService stt.SpeechRecognitionService
 	db                       *db.DB
+	sessions                 map[string]stt.LiveTranscriptionSession
 }
 
 func NewBot(
@@ -31,6 +32,7 @@ func NewBot(
 		speechRecognitionService: speechRecognitionService,
 		log:                      logger,
 		db:                       db.GetDB(),
+		sessions:                 make(map[string]stt.LiveTranscriptionSession),
 	}
 
 	dg, err := discordsdk.New("Bot " + discordToken)
@@ -212,41 +214,19 @@ func (bot *Bot) getOrCreateVoiceStream(
 }
 
 func (bot *Bot) getSpeechRecognitionSession(streamID string) (stt.LiveTranscriptionSession, error) {
-	var session stt.LiveTranscriptionSession
-
-	exists, err := db.CheckSpeechRecognitionSessionExists(streamID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check for existing speech recognition session: %w", err)
-	}
-
+	session, exists := bot.sessions[streamID]
 	if !exists {
+		var err error
 		session, err = bot.speechRecognitionService.Start(context.Background())
 		if err != nil {
 			return nil, fmt.Errorf("failed to start speech recognition session: %w", err)
 		}
-
-		err = db.SaveSpeechRecognitionSession(streamID, "placeholder") // You might want to serialize the session data
-		if err != nil {
-			return nil, fmt.Errorf("failed to save speech recognition session: %w", err)
-		}
-
+		bot.sessions[streamID] = session
 		go bot.speechRecognitionLoop(streamID, session)
-	} else {
-		// In a real implementation, you'd retrieve the session data and reconstruct the session
-		session, err = bot.speechRecognitionService.Start(context.Background())
-		if err != nil {
-			return nil, fmt.Errorf("failed to recreate speech recognition session: %w", err)
-		}
 	}
-
 	return session, nil
 }
 
-func (bot *Bot) speechRecognitionLoop(streamID string, session stt.LiveTranscriptionSession) {
-	for segment := range session.Receive() {
-		bot.processSegment(streamID, segment)
-	}
-}
 
 func (bot *Bot) processSegment(streamID string, segmentDrafts <-chan string) {
 	var final string
