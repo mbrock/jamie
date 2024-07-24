@@ -164,8 +164,8 @@ func (db *DB) PrepareStatements() error {
 		"getPacketsForStreamInTimeRange": `
 			SELECT payload
 			FROM packets
-			WHERE stream = ? AND created_at BETWEEN ? AND ?
-			ORDER BY sample_idx ASC`,
+			WHERE stream = ? AND received_at BETWEEN ? AND ?
+			ORDER BY packet_seq ASC`,
 	}
 
 	for name, query := range statements {
