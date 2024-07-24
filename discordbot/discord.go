@@ -728,58 +728,59 @@ func (bot *Bot) handleGenerateAudioCommand(
 	args []string,
 ) error {
 	var streamID string
-	var startTimeStr, endTimeStr string
+	var startTime, endTime time.Time
 
-	// Get available streams
-	streams, err := bot.db.GetRecentStreams()
-	if err != nil {
-		return fmt.Errorf("failed to get recent streams: %w", err)
-	}
+	if len(args) == 3 {
+		// If all arguments are provided, use them directly
+		streamID = args[0]
+		var err error
+		startTime, err = time.Parse(time.RFC3339, args[1])
+		if err != nil {
+			return fmt.Errorf("invalid start time format. Use RFC3339 format: %w", err)
+		}
+		endTime, err = time.Parse(time.RFC3339, args[2])
+		if err != nil {
+			return fmt.Errorf("invalid end time format. Use RFC3339 format: %w", err)
+		}
+	} else {
+		// If arguments are not provided, use interactive selection
+		streams, err := bot.db.GetRecentStreams()
+		if err != nil {
+			return fmt.Errorf("failed to get recent streams: %w", err)
+		}
 
-	// Create options for stream selection
-	streamOptions := make([]huh.Option[string], len(streams))
-	for i, stream := range streams {
-		streamOptions[i] = huh.NewOption(stream.Description, stream.ID)
-	}
+		streamOptions := make([]huh.Option[string], len(streams))
+		for i, stream := range streams {
+			streamOptions[i] = huh.NewOption(stream.Description, stream.ID)
+		}
 
-	// Create the form
-	form := huh.NewForm(
-		huh.NewGroup(
-			huh.NewSelect[string]().
-				Title("Choose a stream").
-				Options(streamOptions...).
-				Value(&streamID),
-			huh.NewInput().
-				Title("Start time (YYYY-MM-DD HH:MM:SS)").
-				Validate(func(s string) error {
-					_, err := time.Parse("2006-01-02 15:04:05", s)
-					return err
-				}).
-				Value(&startTimeStr),
-			huh.NewInput().
-				Title("End time (YYYY-MM-DD HH:MM:SS)").
-				Validate(func(s string) error {
-					_, err := time.Parse("2006-01-02 15:04:05", s)
-					return err
-				}).
-				Value(&endTimeStr),
-		),
-	)
+		form := huh.NewForm(
+			huh.NewGroup(
+				huh.NewSelect[string]().
+					Title("Choose a stream").
+					Options(streamOptions...).
+					Value(&streamID),
+				huh.NewInput().
+					Title("Start time (YYYY-MM-DD HH:MM:SS)").
+					Validate(func(s string) error {
+						_, err := time.Parse("2006-01-02 15:04:05", s)
+						return err
+					}).
+					Value(&startTime),
+				huh.NewInput().
+					Title("End time (YYYY-MM-DD HH:MM:SS)").
+					Validate(func(s string) error {
+						_, err := time.Parse("2006-01-02 15:04:05", s)
+						return err
+					}).
+					Value(&endTime),
+			),
+		)
 
-	// Run the form
-	err = form.Run()
-	if err != nil {
-		return fmt.Errorf("form error: %w", err)
-	}
-
-	// Parse time strings
-	startTime, err := time.Parse("2006-01-02 15:04:05", startTimeStr)
-	if err != nil {
-		return fmt.Errorf("invalid start time: %w", err)
-	}
-	endTime, err := time.Parse("2006-01-02 15:04:05", endTimeStr)
-	if err != nil {
-		return fmt.Errorf("invalid end time: %w", err)
+		err = form.Run()
+		if err != nil {
+			return fmt.Errorf("form error: %w", err)
+		}
 	}
 
 	// Generate the audio
