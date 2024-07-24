@@ -11,7 +11,7 @@ func main() {
 	logger := log.New(os.Stdout)
 	sqlLogger := logger.With("component", "sql")
 
-	db.InitDB()
+	db.InitDB(sqlLogger)
 	defer db.Close()
 
 	// Load and apply migrations

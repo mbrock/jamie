@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"database/sql"
-	"os"
 
 	"jamie/etc"
 
@@ -20,11 +19,11 @@ type DB struct {
 
 var db *DB
 
-func InitDB() {
+func InitDB(logger *log.Logger) {
 	var err error
 	sqlDB, err := sql.Open("sqlite3", "./001.db")
 	if err != nil {
-		log.Fatal(err)
+		logger.Fatal(err)
 	}
 
 	db = &DB{
@@ -32,12 +31,10 @@ func InitDB() {
 		stmts: make(map[string]*sql.Stmt),
 	}
 
-	sqlLogger = log.New(os.Stdout).With("component", "sql")
+	sqlLogger = logger
 }
 
 func (db *DB) PrepareStatements() error {
-	logger := log.New(os.Stdout)
-	sqlLogger := logger.With("component", "sql")
 
 	statements := map[string]string{
 		"insertStream": `

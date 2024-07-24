@@ -87,7 +87,7 @@ func runDiscord(cmd *cobra.Command, args []string) {
 		mainLogger.Fatal("missing DEEPGRAM_API_KEY or --deepgram-api-key=")
 	}
 
-	db.InitDB()
+	db.InitDB(sqlLogger)
 	defer db.Close()
 
 	// Load and apply migrations
