@@ -14,12 +14,16 @@ import (
 	"github.com/google/uuid"
 )
 
+type PacketInfo struct {
+	Timestamp   uint32
+	ReceiveTime int64
+	Sequence    uint16
+}
+
 type UserSpeechStream struct {
 	UserID               string
 	StreamID             string
-	InitialTimestamp     uint32
-	InitialReceiveTime   int64
-	InitialSequence      uint16
+	InitialPacket        PacketInfo
 	TranscriptionSession speech.LiveTranscriptionSession
 	Avatar               string
 	GuildID              string
@@ -230,11 +234,13 @@ func (bot *Bot) getOrCreateVoiceStream(
 	}
 
 	stream = &UserSpeechStream{
-		UserID:               userIDStr,
-		StreamID:             streamID,
-		InitialTimestamp:     packet.Timestamp,
-		InitialReceiveTime:   time.Now().UnixNano(),
-		InitialSequence:      packet.Sequence,
+		UserID:   userIDStr,
+		StreamID: streamID,
+		InitialPacket: PacketInfo{
+			Timestamp:   packet.Timestamp,
+			ReceiveTime: time.Now().UnixNano(),
+			Sequence:    packet.Sequence,
+		},
 		TranscriptionSession: transcriptionSession,
 		Avatar:               getRandomAvatar(),
 		GuildID:              guildID,
@@ -252,9 +258,9 @@ func (bot *Bot) getOrCreateVoiceStream(
 		streamID,
 		userIDStr,
 		packet.SSRC,
-		packet.Timestamp,
-		stream.InitialReceiveTime,
-		stream.InitialSequence,
+		stream.InitialPacket.Timestamp,
+		stream.InitialPacket.ReceiveTime,
+		stream.InitialPacket.Sequence,
 	)
 	if err != nil {
 		return nil, fmt.Errorf(
