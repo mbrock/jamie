@@ -117,6 +117,11 @@ var generateAudioCmd = &cobra.Command{
 	Run:   runGenerateAudio,
 }
 
+func runGenerateAudio(cmd *cobra.Command, args []string) {
+	// TODO: Implement the audio generation logic here
+	fmt.Println("Audio generation not yet implemented")
+}
+
 func runSummarizeTranscript(cmd *cobra.Command, args []string) {
 	mainLogger, _, _, sqlLogger := createLoggers()
 
