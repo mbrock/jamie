@@ -32,7 +32,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleIndex(w http.ResponseWriter, _ *http.Request) {
-	transcriptions, err := h.db.GetRecentTranscriptions(50)
+	transcriptions, err := h.db.GetRecentTranscriptions()
 	if err != nil {
 		h.logger.Error("failed to get transcriptions", "error", err.Error())
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -45,12 +45,12 @@ func (h *Handler) handleIndex(w http.ResponseWriter, _ *http.Request) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Recent Transcriptions</title>
+    <title>All Transcriptions</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100">
     <div class="container mx-auto px-4 py-8">
-        <h1 class="text-3xl font-bold mb-6">Recent Transcriptions</h1>
+        <h1 class="text-3xl font-bold mb-6">All Transcriptions</h1>
         <div class="space-y-4">
             {{range .}}
             <div class="bg-white shadow rounded-lg p-4">

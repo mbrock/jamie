@@ -254,15 +254,14 @@ func SaveRecognition(
 	return err
 }
 
-func (db *DB) GetRecentTranscriptions(limit int) ([]Transcription, error) {
+func (db *DB) GetRecentTranscriptions() ([]Transcription, error) {
 	query := `
 		WITH ranked_recognitions AS (
 			SELECT 
 				s.emoji,
 				r.text,
 				r.created_at,
-				LAG(r.created_at, 1) OVER (PARTITION BY s.emoji ORDER BY r.created_at) AS prev_created_at,
-				ROW_NUMBER() OVER (ORDER BY r.created_at DESC) AS rn
+				LAG(r.created_at, 1) OVER (PARTITION BY s.emoji ORDER BY r.created_at) AS prev_created_at
 			FROM recognitions r
 			JOIN speakers s ON r.stream = s.stream
 			ORDER BY r.created_at DESC
@@ -278,7 +277,6 @@ func (db *DB) GetRecentTranscriptions(limit int) ([]Transcription, error) {
 					ELSE 0 
 				END AS new_group
 			FROM ranked_recognitions
-			WHERE rn <= ?
 		),
 		final_groups AS (
 			SELECT 
