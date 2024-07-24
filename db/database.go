@@ -20,16 +20,10 @@ func InitDB() {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
 
-	schemaSQL, err := schemaFS.ReadFile("schema.sql")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	_, err = db.Exec(string(schemaSQL))
-	if err != nil {
-		log.Fatal(err)
-	}
+func GetDB() *sql.DB {
+	return db
 }
 
 func CreateVoiceStream(

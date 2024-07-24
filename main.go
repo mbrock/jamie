@@ -90,6 +90,17 @@ func runDiscord(cmd *cobra.Command, args []string) {
 	db.InitDB()
 	defer db.Close()
 
+	// Load and apply migrations
+	migrations, err := db.LoadMigrations("db")
+	if err != nil {
+		mainLogger.Fatal("load migrations", "error", err.Error())
+	}
+
+	err = db.Migrate(db.GetDB(), migrations)
+	if err != nil {
+		mainLogger.Fatal("apply migrations", "error", err.Error())
+	}
+
 	transcriptionService, err := stt.NewDeepgramClient(
 		deepgramAPIKey,
 		deepgramLogger,
