@@ -316,7 +316,7 @@ func (s *UserStream) handlePhrase(phrase <-chan string) {
 		}
 
 		_, err := s.bot.session.ChannelMessageSend(
-			s.ChannelID,
+			string(s.ChannelID),
 			fmt.Sprintf("%s %s", s.Emoji, final),
 		)
 
@@ -329,8 +329,8 @@ func (s *UserStream) handlePhrase(phrase <-chan string) {
 		}
 
 		err = db.SaveTranscript(
-			s.GuildID,
-			s.ChannelID,
+			string(s.GuildID),
+			string(s.ChannelID),
 			final,
 		)
 		if err != nil {
@@ -346,7 +346,7 @@ func (s *UserStream) handlePhrase(phrase <-chan string) {
 func (s *UserStream) handleAvatarChangeRequest() {
 	s.Emoji = getRandomAvatar()
 	_, err := s.bot.session.ChannelMessageSend(
-		s.ChannelID,
+		string(s.ChannelID),
 		fmt.Sprintf("You are now %s.", s.Emoji),
 	)
 	if err != nil {
