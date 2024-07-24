@@ -30,6 +30,7 @@ func init() {
 	rootCmd.AddCommand(discordCmd)
 	rootCmd.AddCommand(webCmd)
 	rootCmd.AddCommand(openaiChatCmd)
+	rootCmd.AddCommand(summarizeTranscriptCmd)
 
 	// Add persistent flags
 	rootCmd.PersistentFlags().String("discord-token", "", "Discord bot token")
@@ -80,6 +81,12 @@ var openaiChatCmd = &cobra.Command{
 	Use:   "chat",
 	Short: "Start an OpenAI chat session",
 	Run:   runOpenAIChat,
+}
+
+var summarizeTranscriptCmd = &cobra.Command{
+	Use:   "summarize",
+	Short: "Summarize today's transcript using OpenAI",
+	Run:   runSummarizeTranscript,
 }
 
 func main() {
