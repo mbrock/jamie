@@ -362,6 +362,38 @@ func (db *DB) GetRecentTranscriptions() ([]Transcription, error) {
 	return transcriptions, nil
 }
 
+type Stream struct {
+	ID        string
+	CreatedAt time.Time
+}
+
+func (db *DB) GetRecentStreams(guildID, channelID string, limit int) ([]Stream, error) {
+	query := `
+		SELECT s.id, s.created_at
+		FROM streams s
+		JOIN discord_channel_streams dcs ON s.id = dcs.stream
+		WHERE dcs.discord_guild = ? AND dcs.discord_channel = ?
+		ORDER BY s.created_at DESC
+		LIMIT ?
+	`
+	rows, err := db.Query(query, guildID, channelID, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var streams []Stream
+	for rows.Next() {
+		var s Stream
+		err := rows.Scan(&s.ID, &s.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		streams = append(streams, s)
+	}
+	return streams, rows.Err()
+}
+
 func Close() {
 	for _, stmt := range db.stmts {
 		stmt.Close()
