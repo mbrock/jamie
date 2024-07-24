@@ -261,7 +261,8 @@ func (db *DB) GetRecentTranscriptions() ([]Transcription, error) {
 				s.emoji,
 				r.text,
 				r.created_at,
-				LAG(r.created_at, 1) OVER (PARTITION BY s.emoji ORDER BY r.created_at) AS prev_created_at
+				LAG(r.created_at, 1) OVER (ORDER BY r.created_at) AS prev_created_at,
+				LAG(s.emoji, 1) OVER (ORDER BY r.created_at) AS prev_emoji
 			FROM recognitions r
 			JOIN speakers s ON r.stream = s.stream
 			ORDER BY r.created_at DESC
@@ -272,7 +273,9 @@ func (db *DB) GetRecentTranscriptions() ([]Transcription, error) {
 				text,
 				created_at,
 				CASE 
-					WHEN prev_created_at IS NULL OR (JULIANDAY(created_at) - JULIANDAY(prev_created_at)) * 24 * 60 > 3 
+					WHEN prev_created_at IS NULL OR 
+						 (JULIANDAY(created_at) - JULIANDAY(prev_created_at)) * 24 * 60 > 3 OR
+						 emoji != prev_emoji
 					THEN 1 
 					ELSE 0 
 				END AS new_group
@@ -282,16 +285,16 @@ func (db *DB) GetRecentTranscriptions() ([]Transcription, error) {
 			SELECT 
 				emoji,
 				GROUP_CONCAT(text, ' ') AS text,
-				MAX(created_at) AS created_at
+				MIN(created_at) AS created_at
 			FROM (
 				SELECT 
 					emoji,
 					text,
 					created_at,
-					SUM(new_group) OVER (ORDER BY created_at DESC) AS group_id
+					SUM(new_group) OVER (ORDER BY created_at) AS group_id
 				FROM grouped_recognitions
 			)
-			GROUP BY emoji, group_id
+			GROUP BY group_id
 			ORDER BY created_at DESC
 		)
 		SELECT emoji, text, created_at
