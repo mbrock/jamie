@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"jamie/db"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/sashabaranov/go-openai"
@@ -37,7 +36,14 @@ func runSummarizeTranscript(cmd *cobra.Command, args []string) {
 	// Format transcriptions
 	var formattedTranscript strings.Builder
 	for _, t := range transcriptions {
-		formattedTranscript.WriteString(fmt.Sprintf("%s %s: %s\n", t.Timestamp.Format("15:04:05"), t.Emoji, t.Text))
+		formattedTranscript.WriteString(
+			fmt.Sprintf(
+				"%s %s: %s\n",
+				t.Timestamp.Format("15:04:05"),
+				t.Emoji,
+				t.Text,
+			),
+		)
 	}
 
 	// Get OpenAI API key
@@ -52,7 +58,7 @@ func runSummarizeTranscript(cmd *cobra.Command, args []string) {
 
 	// Prepare the chat completion request
 	req := openai.ChatCompletionRequest{
-		Model: openai.GPT3Dot5Turbo,
+		Model: openai.GPT4o,
 		Messages: []openai.ChatCompletionMessage{
 			{
 				Role: openai.ChatMessageRoleSystem,
