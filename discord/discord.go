@@ -19,7 +19,7 @@ type ChannelInfo struct {
 	ChannelID string
 }
 
-type Voice struct {
+type UserSpeechStream struct {
 	UserID               string
 	StreamID             string
 	InitialTimestamp     uint32
@@ -33,7 +33,7 @@ type Bot struct {
 	log *log.Logger
 	con *dis.Session
 	asr speech.ASR
-	vox map[uint32]*Voice
+	vox map[uint32]*UserSpeechStream
 	tab map[uint32]string
 	mut sync.RWMutex
 }
@@ -46,7 +46,7 @@ func NewBot(
 	bot := &Bot{
 		asr: asr,
 		log: logger,
-		vox: make(map[uint32]*Voice),
+		vox: make(map[uint32]*UserSpeechStream),
 		tab: make(map[uint32]string),
 	}
 
@@ -94,7 +94,10 @@ func (bot *Bot) joinVoiceChannel(guildID, channelID string) error {
 	}
 
 	bot.log.Info("joined voice channel", "channel", channelID)
-	go bot.handleVoiceConnection(vc, ChannelInfo{GuildID: guildID, ChannelID: channelID})
+	go bot.handleVoiceConnection(
+		vc,
+		ChannelInfo{GuildID: guildID, ChannelID: channelID},
+	)
 	return nil
 }
 
@@ -126,13 +129,6 @@ func (bot *Bot) handleVoiceConnection(
 	vc *dis.VoiceConnection,
 	channelInfo ChannelInfo,
 ) {
-	bot.log.Info(
-		"handling voice connection",
-		"guild",
-		channelInfo.GuildID,
-		"channel",
-		channelInfo.ChannelID,
-	)
 
 	vc.AddHandler(bot.handleVoiceSpeakingUpdate)
 
@@ -159,7 +155,7 @@ func (bot *Bot) handleVoiceSpeakingUpdate(
 	v *dis.VoiceSpeakingUpdate,
 ) {
 	bot.log.Info(
-		"voice speaking update",
+		"tab",
 		"ssrc",
 		v.SSRC,
 		"userID",
@@ -210,7 +206,7 @@ func (bot *Bot) processVoicePacket(
 func (bot *Bot) getOrCreateVoiceStream(
 	packet *dis.Packet,
 	channelInfo ChannelInfo,
-) (*Voice, error) {
+) (*UserSpeechStream, error) {
 	bot.mut.RLock()
 	stream, exists := bot.vox[packet.SSRC]
 	bot.mut.RUnlock()
@@ -220,6 +216,7 @@ func (bot *Bot) getOrCreateVoiceStream(
 	}
 
 	streamID := uuid.New().String()
+
 	bot.mut.RLock()
 	userIDStr := bot.tab[packet.SSRC]
 	bot.mut.RUnlock()
@@ -229,7 +226,7 @@ func (bot *Bot) getOrCreateVoiceStream(
 		return nil, fmt.Errorf("failed to start ASR session: %w", err)
 	}
 
-	stream = &Voice{
+	stream = &UserSpeechStream{
 		UserID:               userIDStr,
 		StreamID:             streamID,
 		InitialTimestamp:     packet.Timestamp,
@@ -270,44 +267,31 @@ func (bot *Bot) getOrCreateVoiceStream(
 		streamID,
 	)
 
-	go bot.handleTranscription(stream, channelInfo)
+	go bot.transcribeUserSpeechStream(stream, channelInfo)
 
 	return stream, nil
 }
 
-func (bot *Bot) handleTranscription(
-	stream *Voice,
-	channelInfo ChannelInfo,
+func (bot *Bot) transcribeUserSpeechStream(
+	stream *UserSpeechStream,
+	inn ChannelInfo,
 ) {
-	for transcriptChan := range stream.TranscriptionSession.Read() {
-		var transcript string
+	for phrase := range stream.TranscriptionSession.Read() {
+		var final string
 
-		for partialTranscript := range transcriptChan {
-			transcript = partialTranscript
+		for draft := range phrase {
+			final = draft
 		}
 
-		if transcript != "" {
-			transcript = strings.TrimSpace(transcript)
-
-			if strings.EqualFold(transcript, "Change my identity.") {
-				stream.Avatar = getRandomAvatar()
-				_, err := bot.con.ChannelMessageSend(
-					channelInfo.ChannelID,
-					fmt.Sprintf("You are now %s.", stream.Avatar),
-				)
-				if err != nil {
-					bot.log.Error(
-						"failed to send identity change message",
-						"error",
-						err.Error(),
-					)
-				}
+		if final != "" {
+			if strings.EqualFold(final, "Change my identity.") {
+				bot.handleAvatarChangeRequest(stream, inn)
 				continue
 			}
 
 			_, err := bot.con.ChannelMessageSend(
-				channelInfo.ChannelID,
-				fmt.Sprintf("%s %s", stream.Avatar, transcript),
+				inn.ChannelID,
+				fmt.Sprintf("%s %s", stream.Avatar, final),
 			)
 
 			if err != nil {
@@ -319,9 +303,9 @@ func (bot *Bot) handleTranscription(
 			}
 
 			err = db.SaveTranscript(
-				channelInfo.GuildID,
-				channelInfo.ChannelID,
-				transcript,
+				inn.GuildID,
+				inn.ChannelID,
+				final,
 			)
 			if err != nil {
 				bot.log.Error(
@@ -331,6 +315,24 @@ func (bot *Bot) handleTranscription(
 				)
 			}
 		}
+	}
+}
+
+func (bot *Bot) handleAvatarChangeRequest(
+	stream *UserSpeechStream,
+	inn ChannelInfo,
+) {
+	stream.Avatar = getRandomAvatar()
+	_, err := bot.con.ChannelMessageSend(
+		inn.ChannelID,
+		fmt.Sprintf("You are now %s.", stream.Avatar),
+	)
+	if err != nil {
+		bot.log.Error(
+			"failed to send identity change message",
+			"error",
+			err.Error(),
+		)
 	}
 }
 
