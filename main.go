@@ -96,9 +96,22 @@ func runDiscord(cmd *cobra.Command, args []string) {
 		mainLogger.Fatal("load migrations", "error", err.Error())
 	}
 
+	fmt.Println("Starting database migration process...")
 	err = db.Migrate(db.GetDB(), migrations)
 	if err != nil {
-		mainLogger.Fatal("apply migrations", "error", err.Error())
+		mainLogger.Error("apply migrations", "error", err.Error())
+		fmt.Print("An error occurred during migration. Do you want to continue? (y/n): ")
+		var response string
+		_, err := fmt.Scanln(&response)
+		if err != nil {
+			mainLogger.Fatal("error reading user input", "error", err.Error())
+		}
+		if response != "y" && response != "Y" {
+			mainLogger.Fatal("migration process aborted by user")
+		}
+		fmt.Println("Continuing despite migration errors...")
+	} else {
+		fmt.Println("Migration process completed successfully.")
 	}
 
 	transcriptionService, err := stt.NewDeepgramClient(

@@ -71,10 +71,28 @@ func Migrate(db *sql.DB, migrations []Migration) error {
 		return err
 	}
 
+	fmt.Printf("Current database version: %d\n", currentVersion)
+
 	for _, migration := range migrations {
 		if migration.Version <= currentVersion {
+			fmt.Printf("Skipping migration %d (already applied)\n", migration.Version)
 			continue
 		}
+
+		fmt.Printf("New migration found: version %d\n", migration.Version)
+		fmt.Print("Do you want to apply this migration? (y/n): ")
+		var response string
+		_, err := fmt.Scanln(&response)
+		if err != nil {
+			return fmt.Errorf("error reading user input: %w", err)
+		}
+
+		if response != "y" && response != "Y" {
+			fmt.Println("Migration skipped.")
+			continue
+		}
+
+		fmt.Printf("Applying migration %d...\n", migration.Version)
 
 		tx, err := db.Begin()
 		if err != nil {
@@ -84,39 +102,31 @@ func Migrate(db *sql.DB, migrations []Migration) error {
 		if migration.Migrate != "" {
 			_, err = tx.Exec(migration.Migrate)
 			if err != nil {
-				err := tx.Rollback()
-				if err != nil {
-					return err
-				}
-				return err
+				tx.Rollback()
+				return fmt.Errorf("error executing migrate script: %w", err)
 			}
 		}
 
 		_, err = tx.Exec(migration.Schema)
 		if err != nil {
-			err := tx.Rollback()
-			if err != nil {
-				return err
-			}
-			return err
+			tx.Rollback()
+			return fmt.Errorf("error executing schema script: %w", err)
 		}
 
 		_, err = tx.Exec(fmt.Sprintf("PRAGMA user_version = %d", migration.Version))
 		if err != nil {
-			err := tx.Rollback()
-			if err != nil {
-				return err
-			}
-			return err
+			tx.Rollback()
+			return fmt.Errorf("error updating user_version: %w", err)
 		}
 
 		err = tx.Commit()
 		if err != nil {
-			return err
+			return fmt.Errorf("error committing transaction: %w", err)
 		}
 
-		fmt.Printf("Migrated to version %d\n", migration.Version)
+		fmt.Printf("Successfully migrated to version %d\n", migration.Version)
 	}
 
+	fmt.Println("Migration process completed.")
 	return nil
 }
