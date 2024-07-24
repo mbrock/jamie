@@ -2,11 +2,11 @@ package db
 
 import (
 	"database/sql"
-	"log"
 	"os"
 
 	"jamie/etc"
 
+	"github.com/charmbracelet/log"
 	_ "github.com/mattn/go-sqlite3"
 )
 
@@ -36,7 +36,7 @@ func InitDB() {
 	}
 
 	logger := log.New(os.Stdout)
-	sqlLogger := logger.WithPrefix("sql")
+	sqlLogger := logger.With("component", "sql")
 
 	err = Migrate(db.DB, migrations, sqlLogger)
 	if err != nil {
