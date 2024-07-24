@@ -36,13 +36,13 @@ func InitDB() {
 
 func (db *DB) prepareStatements() error {
 	statements := map[string]string{
-		"createStream": `
+		"insertStream": `
 			INSERT INTO streams (
 				id,
 				packet_seq_offset,
 				sample_idx_offset
 			) VALUES (?, ?, ?)`,
-		"savePacket": `
+		"insertPacket": `
 			INSERT INTO packets (
 				id,
 				stream,
@@ -50,32 +50,32 @@ func (db *DB) prepareStatements() error {
 				sample_idx,
 				payload
 			) VALUES (?, ?, ?, ?, ?)`,
-		"createSpeaker": `
+		"insertSpeaker": `
 			INSERT INTO speakers (
 				id,
 				stream,
 				emoji
 			) VALUES (?, ?, ?)`,
-		"createDiscordSpeaker": `
+		"insertDiscordSpeaker": `
 			INSERT INTO discord_speakers (
 				id,
 				speaker,
 				discord_id
 			) VALUES (?, ?, ?)`,
-		"createDiscordChannelStream": `
+		"insertDiscordChannelStream": `
 			INSERT INTO discord_channel_streams (
 				id,
 				stream,
 				discord_guild,
 				discord_channel
 			) VALUES (?, ?, ?, ?)`,
-		"createAttribution": `
+		"insertAttribution": `
 			INSERT INTO attributions (
 				id,
 				stream,
 				speaker
 			) VALUES (?, ?, ?)`,
-		"saveRecognition": `
+		"insertRecognition": `
 			INSERT INTO recognitions (
 				id,
 				stream,
@@ -84,24 +84,24 @@ func (db *DB) prepareStatements() error {
 				text,
 				confidence
 			) VALUES (?, ?, ?, ?, ?, ?)`,
-		"getStreamForDiscordChannel": `
+		"selectStreamForDiscordChannel": `
 			SELECT s.id 
 			FROM streams s
 			JOIN discord_channel_streams dcs ON s.id = dcs.stream
 			WHERE dcs.discord_guild = ? AND dcs.discord_channel = ?
 			ORDER BY s.created_at DESC
 			LIMIT 1`,
-		"createStreamForDiscordChannel1": `
+		"insertStreamForDiscordChannel": `
 			INSERT INTO streams (id, packet_seq_offset, sample_idx_offset) VALUES (?, ?, ?)`,
-		"createStreamForDiscordChannel2": `
+		"insertDiscordChannelStreamForStream": `
 			INSERT INTO discord_channel_streams (id, stream, discord_guild, discord_channel) VALUES (?, ?, ?, ?)`,
-		"createSpeakerForStream": `
+		"insertSpeakerForStream": `
 			INSERT INTO speakers (id, stream, emoji) VALUES (?, ?, ?)`,
 		"checkSpeechRecognitionSessionExists": `
 			SELECT EXISTS(SELECT 1 FROM speech_recognition_sessions WHERE stream = ?)`,
-		"saveSpeechRecognitionSession": `
+		"insertSpeechRecognitionSession": `
 			INSERT INTO speech_recognition_sessions (stream, session_data) VALUES (?, ?)`,
-		"getChannelAndEmojiForStream": `
+		"selectChannelAndEmojiForStream": `
 			SELECT dcs.discord_channel, s.emoji 
 			FROM discord_channel_streams dcs
 			JOIN streams st ON dcs.stream = st.id
@@ -109,9 +109,9 @@ func (db *DB) prepareStatements() error {
 			WHERE st.id = ?`,
 		"updateSpeakerEmoji": `
 			UPDATE speakers SET emoji = ? WHERE stream = ?`,
-		"getChannelIDForStream": `
+		"selectChannelIDForStream": `
 			SELECT discord_channel FROM discord_channel_streams WHERE stream = ?`,
-		"endStreamForChannel": `
+		"updateStreamEndTimeForChannel": `
 			UPDATE streams s
 			SET ended_at = CURRENT_TIMESTAMP
 			WHERE s.id IN (
@@ -137,37 +137,37 @@ func GetDB() *DB {
 }
 
 func CreateStream(id string, packetSeqOffset int, sampleIdxOffset int) error {
-	_, err := db.stmts["createStream"].Exec(id, packetSeqOffset, sampleIdxOffset)
+	_, err := db.stmts["insertStream"].Exec(id, packetSeqOffset, sampleIdxOffset)
 	return err
 }
 
 func SavePacket(id string, stream string, packetSeq int, sampleIdx int, payload []byte) error {
-	_, err := db.stmts["savePacket"].Exec(id, stream, packetSeq, sampleIdx, payload)
+	_, err := db.stmts["insertPacket"].Exec(id, stream, packetSeq, sampleIdx, payload)
 	return err
 }
 
 func CreateSpeaker(id, stream, emoji string) error {
-	_, err := db.stmts["createSpeaker"].Exec(id, stream, emoji)
+	_, err := db.stmts["insertSpeaker"].Exec(id, stream, emoji)
 	return err
 }
 
 func CreateDiscordSpeaker(id, speaker, discordID string) error {
-	_, err := db.stmts["createDiscordSpeaker"].Exec(id, speaker, discordID)
+	_, err := db.stmts["insertDiscordSpeaker"].Exec(id, speaker, discordID)
 	return err
 }
 
 func CreateDiscordChannelStream(id, stream, discordGuild, discordChannel string) error {
-	_, err := db.stmts["createDiscordChannelStream"].Exec(id, stream, discordGuild, discordChannel)
+	_, err := db.stmts["insertDiscordChannelStream"].Exec(id, stream, discordGuild, discordChannel)
 	return err
 }
 
 func CreateAttribution(id, stream, speaker string) error {
-	_, err := db.stmts["createAttribution"].Exec(id, stream, speaker)
+	_, err := db.stmts["insertAttribution"].Exec(id, stream, speaker)
 	return err
 }
 
 func SaveRecognition(id, stream string, sampleIdx, sampleLen int, text string, confidence float64) error {
-	_, err := db.stmts["saveRecognition"].Exec(id, stream, sampleIdx, sampleLen, text, confidence)
+	_, err := db.stmts["insertRecognition"].Exec(id, stream, sampleIdx, sampleLen, text, confidence)
 	return err
 }
 
@@ -182,7 +182,7 @@ func Close() {
 
 func GetStreamForDiscordChannel(guildID, channelID string) (string, error) {
 	var streamID string
-	err := db.stmts["getStreamForDiscordChannel"].QueryRow(guildID, channelID).Scan(&streamID)
+	err := db.stmts["selectStreamForDiscordChannel"].QueryRow(guildID, channelID).Scan(&streamID)
 	return streamID, err
 }
 
@@ -193,12 +193,12 @@ func CreateStreamForDiscordChannel(streamID, guildID, channelID string, packetSe
 	}
 	defer tx.Rollback()
 
-	_, err = tx.Stmt(db.stmts["createStreamForDiscordChannel1"]).Exec(streamID, packetSequence, packetTimestamp)
+	_, err = tx.Stmt(db.stmts["insertStreamForDiscordChannel"]).Exec(streamID, packetSequence, packetTimestamp)
 	if err != nil {
 		return err
 	}
 
-	_, err = tx.Stmt(db.stmts["createStreamForDiscordChannel2"]).Exec(etc.Gensym(), streamID, guildID, channelID)
+	_, err = tx.Stmt(db.stmts["insertDiscordChannelStreamForStream"]).Exec(etc.Gensym(), streamID, guildID, channelID)
 	if err != nil {
 		return err
 	}
@@ -207,7 +207,7 @@ func CreateStreamForDiscordChannel(streamID, guildID, channelID string, packetSe
 }
 
 func CreateSpeakerForStream(speakerID, streamID, emoji string) error {
-	_, err := db.stmts["createSpeakerForStream"].Exec(speakerID, streamID, emoji)
+	_, err := db.stmts["insertSpeakerForStream"].Exec(speakerID, streamID, emoji)
 	return err
 }
 
@@ -218,13 +218,13 @@ func CheckSpeechRecognitionSessionExists(streamID string) (bool, error) {
 }
 
 func SaveSpeechRecognitionSession(streamID, sessionData string) error {
-	_, err := db.stmts["saveSpeechRecognitionSession"].Exec(streamID, sessionData)
+	_, err := db.stmts["insertSpeechRecognitionSession"].Exec(streamID, sessionData)
 	return err
 }
 
 func GetChannelAndEmojiForStream(streamID string) (string, string, error) {
 	var channelID, emoji string
-	err := db.stmts["getChannelAndEmojiForStream"].QueryRow(streamID).Scan(&channelID, &emoji)
+	err := db.stmts["selectChannelAndEmojiForStream"].QueryRow(streamID).Scan(&channelID, &emoji)
 	return channelID, emoji, err
 }
 
@@ -235,11 +235,11 @@ func UpdateSpeakerEmoji(streamID, newEmoji string) error {
 
 func GetChannelIDForStream(streamID string) (string, error) {
 	var channelID string
-	err := db.stmts["getChannelIDForStream"].QueryRow(streamID).Scan(&channelID)
+	err := db.stmts["selectChannelIDForStream"].QueryRow(streamID).Scan(&channelID)
 	return channelID, err
 }
 
 func EndStreamForChannel(guildID, channelID string) error {
-	_, err := db.stmts["endStreamForChannel"].Exec(guildID, channelID)
+	_, err := db.stmts["updateStreamEndTimeForChannel"].Exec(guildID, channelID)
 	return err
 }
