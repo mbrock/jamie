@@ -2,9 +2,9 @@
 build:
 	go build -o jamie main.go
 
-# Run the application
+# Run the application with discord command
 run: build
-	./jamie
+	./jamie discord
 
 # Clean up build artifacts
 clean:
