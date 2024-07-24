@@ -46,10 +46,10 @@ func NewBot(
 	logger *log.Logger,
 ) (*Bot, error) {
 	bot := &Bot{
-		asr: asr,
-		log: logger,
-		vox: make(map[uint32]*UserSpeechStream),
-		tab: make(map[uint32]string),
+		transcriber:    asr,
+		logger:         logger,
+		voiceStreams:   make(map[uint32]*UserSpeechStream),
+		userIDTable:    make(map[uint32]string),
 	}
 
 	dg, err := dis.New("Bot " + token)
@@ -64,28 +64,28 @@ func NewBot(
 		return nil, fmt.Errorf("error opening connection: %w", err)
 	}
 
-	bot.con = dg
-	bot.log.Info("bot started", "username", bot.con.State.User.Username)
+	bot.session = dg
+	bot.logger.Info("bot started", "username", bot.session.State.User.Username)
 	return bot, nil
 }
 
 func (bot *Bot) Close() error {
-	return bot.con.Close()
+	return bot.session.Close()
 }
 
 func (bot *Bot) handleGuildCreate(
 	_ *dis.Session,
 	event *dis.GuildCreate,
 ) {
-	bot.log.Info("joined guild", "guild", event.Guild.Name)
+	bot.logger.Info("joined guild", "guild", event.Guild.Name)
 	err := bot.joinAllVoiceChannels(event.Guild.ID)
 	if err != nil {
-		bot.log.Error("failed to join voice channels", "error", err.Error())
+		bot.logger.Error("failed to join voice channels", "error", err.Error())
 	}
 }
 
 func (bot *Bot) joinVoiceChannel(guildID, channelID string) error {
-	vc, err := bot.con.ChannelVoiceJoin(
+	vc, err := bot.session.ChannelVoiceJoin(
 		guildID,
 		channelID,
 		false,
@@ -95,7 +95,7 @@ func (bot *Bot) joinVoiceChannel(guildID, channelID string) error {
 		return fmt.Errorf("failed to join voice channel: %w", err)
 	}
 
-	bot.log.Info("joined voice channel", "channel", channelID)
+	bot.logger.Info("joined voice channel", "channel", channelID)
 	go bot.handleVoiceConnection(
 		vc,
 		ChannelInfo{GuildID: guildID, ChannelID: channelID},
@@ -104,7 +104,7 @@ func (bot *Bot) joinVoiceChannel(guildID, channelID string) error {
 }
 
 func (bot *Bot) joinAllVoiceChannels(guildID string) error {
-	channels, err := bot.con.GuildChannels(guildID)
+	channels, err := bot.session.GuildChannels(guildID)
 	if err != nil {
 		return fmt.Errorf("error getting guild channels: %w", err)
 	}
@@ -113,7 +113,7 @@ func (bot *Bot) joinAllVoiceChannels(guildID string) error {
 		if channel.Type == dis.ChannelTypeGuildVoice {
 			err := bot.joinVoiceChannel(guildID, channel.ID)
 			if err != nil {
-				bot.log.Error(
+				bot.logger.Error(
 					"failed to join voice channel",
 					"channel",
 					channel.Name,
@@ -137,13 +137,13 @@ func (bot *Bot) handleVoiceConnection(
 	for {
 		packet, ok := <-vc.OpusRecv
 		if !ok {
-			bot.log.Info("voice channel closed")
+			bot.logger.Info("voice channel closed")
 			break
 		}
 
 		err := bot.processVoicePacket(packet, channelInfo)
 		if err != nil {
-			bot.log.Error(
+			bot.logger.Error(
 				"failed to process voice packet",
 				"error",
 				err.Error(),
@@ -156,8 +156,8 @@ func (bot *Bot) handleVoiceSpeakingUpdate(
 	_ *dis.VoiceConnection,
 	v *dis.VoiceSpeakingUpdate,
 ) {
-	bot.log.Info(
-		"tab",
+	bot.logger.Info(
+		"userIDTable",
 		"ssrc",
 		v.SSRC,
 		"userID",
@@ -165,9 +165,9 @@ func (bot *Bot) handleVoiceSpeakingUpdate(
 		"speaking",
 		v.Speaking,
 	)
-	bot.mut.Lock()
-	bot.tab[uint32(v.SSRC)] = v.UserID
-	bot.mut.Unlock()
+	bot.mutex.Lock()
+	bot.userIDTable[uint32(v.SSRC)] = v.UserID
+	bot.mutex.Unlock()
 }
 
 func (bot *Bot) processVoicePacket(
@@ -209,9 +209,9 @@ func (bot *Bot) getOrCreateVoiceStream(
 	packet *dis.Packet,
 	channelInfo ChannelInfo,
 ) (*UserSpeechStream, error) {
-	bot.mut.RLock()
-	stream, exists := bot.vox[packet.SSRC]
-	bot.mut.RUnlock()
+	bot.mutex.RLock()
+	stream, exists := bot.voiceStreams[packet.SSRC]
+	bot.mutex.RUnlock()
 
 	if exists {
 		return stream, nil
@@ -219,11 +219,11 @@ func (bot *Bot) getOrCreateVoiceStream(
 
 	streamID := uuid.New().String()
 
-	bot.mut.RLock()
-	userIDStr := bot.tab[packet.SSRC]
-	bot.mut.RUnlock()
+	bot.mutex.RLock()
+	userIDStr := bot.userIDTable[packet.SSRC]
+	bot.mutex.RUnlock()
 
-	transcriptionSession, err := bot.asr.Start(context.Background())
+	transcriptionSession, err := bot.transcriber.Start(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("failed to start ASR session: %w", err)
 	}
@@ -240,9 +240,9 @@ func (bot *Bot) getOrCreateVoiceStream(
 		bot:                  bot,
 	}
 
-	bot.mut.Lock()
-	bot.vox[packet.SSRC] = stream
-	bot.mut.Unlock()
+	bot.mutex.Lock()
+	bot.voiceStreams[packet.SSRC] = stream
+	bot.mutex.Unlock()
 
 	err = db.CreateVoiceStream(
 		channelInfo.GuildID,
@@ -261,7 +261,7 @@ func (bot *Bot) getOrCreateVoiceStream(
 		)
 	}
 
-	bot.log.Info(
+	bot.logger.Info(
 		"created new voice stream",
 		"ssrc",
 		int(packet.SSRC),
@@ -290,13 +290,13 @@ func (s *UserSpeechStream) listen() {
 				continue
 			}
 
-			_, err := s.bot.con.ChannelMessageSend(
+			_, err := s.bot.session.ChannelMessageSend(
 				s.ChannelInfo.ChannelID,
 				fmt.Sprintf("%s %s", s.Avatar, final),
 			)
 
 			if err != nil {
-				s.bot.log.Error(
+				s.bot.logger.Error(
 					"failed to send transcribed message",
 					"error",
 					err.Error(),
@@ -309,7 +309,7 @@ func (s *UserSpeechStream) listen() {
 				final,
 			)
 			if err != nil {
-				s.bot.log.Error(
+				s.bot.logger.Error(
 					"failed to save transcript to database",
 					"error",
 					err.Error(),
@@ -321,12 +321,12 @@ func (s *UserSpeechStream) listen() {
 
 func (s *UserSpeechStream) handleAvatarChangeRequest() {
 	s.Avatar = getRandomAvatar()
-	_, err := s.bot.con.ChannelMessageSend(
+	_, err := s.bot.session.ChannelMessageSend(
 		s.ChannelInfo.ChannelID,
 		fmt.Sprintf("You are now %s.", s.Avatar),
 	)
 	if err != nil {
-		s.bot.log.Error(
+		s.bot.logger.Error(
 			"failed to send identity change message",
 			"error",
 			err.Error(),
