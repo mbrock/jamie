@@ -114,6 +114,13 @@ func runDiscord(cmd *cobra.Command, args []string) {
 		mainLogger.Warn("Continuing despite migration errors...")
 	}
 
+	mainLogger.Info("Preparing database statements...")
+	err = db.GetDB().PrepareStatements()
+	if err != nil {
+		mainLogger.Fatal("prepare statements", "error", err.Error())
+	}
+	mainLogger.Info("Database statements prepared successfully")
+
 	transcriptionService, err := stt.NewDeepgramClient(
 		deepgramAPIKey,
 		deepgramLogger,
