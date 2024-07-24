@@ -6,7 +6,6 @@ import (
 	"jamie/db"
 	"strings"
 
-	"github.com/charmbracelet/glamour"
 	"github.com/sashabaranov/go-openai"
 )
 
@@ -40,14 +39,15 @@ func SummarizeTranscript(openaiAPIKey string) (string, error) {
 
 	// Prepare the chat completion request
 	req := openai.ChatCompletionRequest{
-		Model: openai.GPT4o,
+		Model:     openai.GPT4o,
+		MaxTokens: 500,
 		Messages: []openai.ChatCompletionMessage{
 			{
 				Role: openai.ChatMessageRoleSystem,
-				Content: "You are an AI assistant tasked with summarizing and explaining conversations. " +
-					"Please analyze the following transcript and provide a concise summary of the main topics discussed, " +
-					"key points made, and any important decisions or actions mentioned. " +
-					"Try to capture the essence of the conversation and explain it clearly.",
+				Content: "Analyze the following transcript and provide a narrative synopsis. " +
+					"Write punchy single sentence paragraphs, each one prefixed by a relevant emoji, different ones. " +
+					"Emphasize key words and salient concepts with CAPS. " +
+					"Keep it real, authentic, and not too long. Write in lower case weird style.",
 			},
 			{
 				Role:    openai.ChatMessageRoleUser,
