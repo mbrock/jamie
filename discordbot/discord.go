@@ -486,24 +486,36 @@ func (bot *Bot) handleSummaryCommand(
 
 	// Accumulate and update summary
 	var fullSummary strings.Builder
-	for chunk := range summaryChan {
-		fullSummary.WriteString(chunk)
+	updateTicker := time.NewTicker(2 * time.Second)
+	defer updateTicker.Stop()
 
-		_, err = s.ChannelMessageEdit(
-			m.ChannelID,
-			message.ID,
-			fullSummary.String(),
-		)
-		if err != nil {
-			bot.log.Error(
-				"failed to update summary message",
-				"error",
-				err,
-			)
+	for {
+		select {
+		case chunk, ok := <-summaryChan:
+			if !ok {
+				// Channel closed, summary generation complete
+				goto DONE
+			}
+			fullSummary.WriteString(chunk)
+		case <-updateTicker.C:
+			if fullSummary.Len() > 0 {
+				_, err = s.ChannelMessageEdit(
+					m.ChannelID,
+					message.ID,
+					fullSummary.String(),
+				)
+				if err != nil {
+					bot.log.Error(
+						"failed to update summary message",
+						"error",
+						err,
+					)
+				}
+			}
 		}
-
-		time.Sleep(2 * time.Second)
 	}
+
+DONE:
 
 	// Send final summary
 	_, err = s.ChannelMessageEdit(
