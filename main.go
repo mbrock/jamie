@@ -153,8 +153,8 @@ func createLoggers() (mainLogger, discordLogger, deepgramLogger, sqlLogger *log.
 
 	logger.SetLevel(logLevel)
 	logger.SetReportCaller(true)
-	logger.SetCallerFormatter(func(file string, line int) string {
-		return fmt.Sprintf("%s:%d", filepath.Base(file), line)
+	logger.SetCallerFormatter(func(f log.Caller) string {
+		return fmt.Sprintf("%s:%d", filepath.Base(f.File), f.Line)
 	})
 
 	mainLogger = logger.WithPrefix("app")
