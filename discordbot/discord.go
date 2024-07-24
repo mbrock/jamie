@@ -187,19 +187,31 @@ func (bot *Bot) getOrCreateVoiceStream(
 	guildID, channelID string,
 ) (string, error) {
 	var streamID string
-	err := bot.db.QueryRow(
-		"SELECT id FROM streams WHERE discord_guild = ? AND discord_channel = ? AND ssrc = ?",
-		guildID, channelID, packet.SSRC,
-	).Scan(&streamID)
+	err := bot.db.QueryRow(`
+		SELECT s.id 
+		FROM streams s
+		JOIN discord_channel_streams dcs ON s.id = dcs.stream
+		WHERE dcs.discord_guild = ? AND dcs.discord_channel = ?
+		ORDER BY s.created_at DESC
+		LIMIT 1
+	`, guildID, channelID).Scan(&streamID)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		streamID = etc.Gensym()
 		_, err = bot.db.Exec(
-			"INSERT INTO streams (id, discord_guild, discord_channel, ssrc, packet_seq_offset, sample_idx_offset) VALUES (?, ?, ?, ?, ?, ?)",
-			streamID, guildID, channelID, packet.SSRC, packet.Sequence, packet.Timestamp,
+			"INSERT INTO streams (id, packet_seq_offset, sample_idx_offset) VALUES (?, ?, ?)",
+			streamID, packet.Sequence, packet.Timestamp,
 		)
 		if err != nil {
 			return "", fmt.Errorf("failed to create new stream: %w", err)
+		}
+
+		_, err = bot.db.Exec(
+			"INSERT INTO discord_channel_streams (id, stream, discord_guild, discord_channel) VALUES (?, ?, ?, ?)",
+			etc.Gensym(), streamID, guildID, channelID,
+		)
+		if err != nil {
+			return "", fmt.Errorf("failed to create discord channel stream: %w", err)
 		}
 
 		speakerID := etc.Gensym()
@@ -214,7 +226,6 @@ func (bot *Bot) getOrCreateVoiceStream(
 
 		bot.log.Info(
 			"created new voice stream",
-			"ssrc", packet.SSRC,
 			"streamID", streamID,
 		)
 	} else if err != nil {
@@ -284,13 +295,13 @@ func (bot *Bot) processSegment(streamID string, segmentDrafts <-chan string) {
 
 		var channelID string
 		var emoji string
-		err := bot.db.QueryRow(
-			`SELECT discord_channel, emoji 
-			 FROM streams 
-			 JOIN speakers ON streams.id = speakers.stream 
-			 WHERE streams.id = ?`,
-			streamID,
-		).Scan(&channelID, &emoji)
+		err := bot.db.QueryRow(`
+			SELECT dcs.discord_channel, s.emoji 
+			FROM discord_channel_streams dcs
+			JOIN streams st ON dcs.stream = st.id
+			JOIN speakers s ON st.id = s.stream
+			WHERE st.id = ?
+		`, streamID).Scan(&channelID, &emoji)
 		if err != nil {
 			bot.log.Error("failed to get channel and emoji", "error", err.Error())
 			return
@@ -366,10 +377,15 @@ func (bot *Bot) handleVoiceStateUpdate(
 
 	if v.ChannelID == "" {
 		// User left a voice channel
-		_, err := bot.db.Exec(
-			"UPDATE streams SET ended_at = CURRENT_TIMESTAMP WHERE discord_guild = ? AND discord_channel = ? AND ended_at IS NULL",
-			v.GuildID, v.ChannelID,
-		)
+		_, err := bot.db.Exec(`
+			UPDATE streams s
+			SET ended_at = CURRENT_TIMESTAMP
+			WHERE s.id IN (
+				SELECT dcs.stream
+				FROM discord_channel_streams dcs
+				WHERE dcs.discord_guild = ? AND dcs.discord_channel = ?
+			) AND s.ended_at IS NULL
+		`, v.GuildID, v.ChannelID)
 		if err != nil {
 			bot.log.Error("failed to update stream end time", "error", err.Error())
 		}
@@ -377,11 +393,20 @@ func (bot *Bot) handleVoiceStateUpdate(
 		// User joined or moved to a voice channel
 		streamID := etc.Gensym()
 		_, err := bot.db.Exec(
-			"INSERT INTO streams (id, discord_guild, discord_channel) VALUES (?, ?, ?)",
-			streamID, v.GuildID, v.ChannelID,
+			"INSERT INTO streams (id) VALUES (?)",
+			streamID,
 		)
 		if err != nil {
 			bot.log.Error("failed to create new stream for user join", "error", err.Error())
+			return
+		}
+		
+		_, err = bot.db.Exec(
+			"INSERT INTO discord_channel_streams (id, stream, discord_guild, discord_channel) VALUES (?, ?, ?, ?)",
+			etc.Gensym(), streamID, v.GuildID, v.ChannelID,
+		)
+		if err != nil {
+			bot.log.Error("failed to create discord channel stream for user join", "error", err.Error())
 		}
 	}
 }
