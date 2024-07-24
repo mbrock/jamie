@@ -183,48 +183,6 @@ func runSummarizeTranscript(cmd *cobra.Command, args []string) {
 	fmt.Print(renderedSummary)
 }
 
-func runGenerateAudio(cmd *cobra.Command, args []string) {
-	if len(args) != 3 {
-		logger.Fatal("Usage: generateaudio <streamID> <startTime> <endTime>")
-	}
-
-	streamID := args[0]
-	startTime, err := time.Parse(time.RFC3339, args[1])
-	if err != nil {
-		logger.Fatal("Invalid start time format. Use RFC3339 format.")
-	}
-	endTime, err := time.Parse(time.RFC3339, args[2])
-	if err != nil {
-		logger.Fatal("Invalid end time format. Use RFC3339 format.")
-	}
-
-	mainLogger, _, _, sqlLogger := createLoggers()
-
-	err = db.InitDB(sqlLogger)
-	if err != nil {
-		mainLogger.Fatal("initialize database", "error", err.Error())
-	}
-	defer db.Close()
-
-	bot, err := discordbot.NewBot("", nil, mainLogger, "", "")
-	if err != nil {
-		mainLogger.Fatal("create bot instance", "error", err.Error())
-	}
-
-	oggData, err := bot.GenerateOggOpusBlob(streamID, startTime, endTime)
-	if err != nil {
-		mainLogger.Fatal("generate OGG Opus blob", "error", err.Error())
-	}
-
-	outputFile := fmt.Sprintf("audio_%s.ogg", streamID)
-	err = os.WriteFile(outputFile, oggData, 0644)
-	if err != nil {
-		mainLogger.Fatal("write audio file", "error", err.Error())
-	}
-
-	mainLogger.Info("Audio file generated successfully", "file", outputFile)
-}
-
 func main() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
