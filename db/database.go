@@ -297,7 +297,7 @@ func (db *DB) GetRecentTranscriptions() ([]Transcription, error) {
 		SELECT emoji, text, created_at
 		FROM final_groups
 	`
-	rows, err := db.Query(query, limit)
+	rows, err := db.Query(query)
 	if err != nil {
 		return nil, err
 	}
@@ -354,7 +354,9 @@ func (db *DB) queryRowWithLog(
 	return stmt.QueryRowContext(ctx, args...)
 }
 
-func GetStreamForDiscordChannelAndSpeaker(guildID, channelID, discordID string) (string, error) {
+func GetStreamForDiscordChannelAndSpeaker(
+	guildID, channelID, discordID string,
+) (string, error) {
 	var streamID string
 	row := db.queryRowWithLog(
 		context.Background(),
