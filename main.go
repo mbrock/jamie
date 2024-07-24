@@ -131,21 +131,31 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	}
 	defer db.Close()
 
-	var streamID string
+	// Fetch recent streams
+	streams, err := db.GetDB().GetRecentStreams("", "", 10) // Assuming we don't need guild and channel IDs for this
+	if err != nil {
+		mainLogger.Fatal("fetch recent streams", "error", err.Error())
+	}
+
+	if len(streams) == 0 {
+		mainLogger.Fatal("no recent streams found")
+	}
+
+	// Prepare stream options for selection
+	streamOptions := make([]string, len(streams))
+	for i, stream := range streams {
+		streamOptions[i] = fmt.Sprintf("%s (%s)", stream.ID, stream.CreatedAt.Format(time.RFC3339))
+	}
+
+	var selectedStreamIndex int
 	var startTime, endTime time.Time
 
 	form := huh.NewForm(
 		huh.NewGroup(
-			huh.NewInput().
-				Title("Enter the stream ID").
-				Placeholder("e.g., abc123").
-				Validate(func(s string) error {
-					if s == "" {
-						return errors.New("stream ID cannot be empty")
-					}
-					return nil
-				}).
-				Value(&streamID),
+			huh.NewSelect[int]().
+				Title("Choose a stream").
+				Options(huh.NewOptions(streamOptions...)...).
+				Value(&selectedStreamIndex),
 
 			huh.NewInput().
 				Title("Enter the start time (RFC3339 format)").
@@ -186,6 +196,8 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	if err != nil {
 		mainLogger.Fatal("form input", "error", err.Error())
 	}
+
+	streamID := streams[selectedStreamIndex].ID
 
 	oggData, err := generateOggOpusBlob(streamID, startTime, endTime)
 	if err != nil {
