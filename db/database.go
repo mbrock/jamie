@@ -90,7 +90,8 @@ func (db *DB) PrepareStatements() error {
 			SELECT s.id 
 			FROM streams s
 			JOIN discord_channel_streams dcs ON s.id = dcs.stream
-			JOIN discord_speakers ds ON s.id = ds.stream
+			JOIN speakers spk ON s.id = spk.stream
+			JOIN discord_speakers ds ON spk.id = ds.speaker
 			WHERE dcs.discord_guild = ? AND dcs.discord_channel = ? AND ds.discord_id = ?
 			ORDER BY s.created_at DESC
 			LIMIT 1`,
