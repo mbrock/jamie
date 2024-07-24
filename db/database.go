@@ -363,16 +363,19 @@ func (db *DB) GetRecentTranscriptions() ([]Transcription, error) {
 }
 
 type Stream struct {
-	ID        string
-	CreatedAt time.Time
+	ID                 string
+	CreatedAt          time.Time
+	TranscriptionCount int
 }
 
-func (db *DB) GetRecentStreams(guildID, channelID string, limit int) ([]Stream, error) {
+func (db *DB) GetRecentStreamsWithTranscriptionCount(guildID, channelID string, limit int) ([]Stream, error) {
 	query := `
-		SELECT s.id, s.created_at
+		SELECT s.id, s.created_at, COUNT(r.id) as transcription_count
 		FROM streams s
 		LEFT JOIN discord_channel_streams dcs ON s.id = dcs.stream
+		LEFT JOIN recognitions r ON s.id = r.stream
 		WHERE (dcs.discord_guild = ? OR ? = '') AND (dcs.discord_channel = ? OR ? = '')
+		GROUP BY s.id
 		ORDER BY s.created_at DESC
 		LIMIT ?
 	`
@@ -385,7 +388,7 @@ func (db *DB) GetRecentStreams(guildID, channelID string, limit int) ([]Stream, 
 	var streams []Stream
 	for rows.Next() {
 		var s Stream
-		err := rows.Scan(&s.ID, &s.CreatedAt)
+		err := rows.Scan(&s.ID, &s.CreatedAt, &s.TranscriptionCount)
 		if err != nil {
 			return nil, err
 		}

@@ -131,9 +131,7 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	defer db.Close()
 
 	// Fetch recent streams
-	streams, err := db.GetDB().
-		GetRecentStreams("", "", 100)
-		// Increased limit to 100
+	streams, err := db.GetDB().GetRecentStreamsWithTranscriptionCount("", "", 100)
 	if err != nil {
 		mainLogger.Fatal("fetch recent streams", "error", err.Error())
 	}
@@ -149,9 +147,10 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	for i, stream := range streams {
 		streamOptions[i] = huh.NewOption(
 			fmt.Sprintf(
-				"%s (%s)",
+				"%s (%s) - %d transcriptions",
 				stream.ID,
 				stream.CreatedAt.Format(time.RFC3339),
+				stream.TranscriptionCount,
 			),
 			stream.ID,
 		)
