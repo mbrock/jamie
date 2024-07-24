@@ -76,16 +76,14 @@ func (bot *Bot) handleGuildCreate(
 	event *dis.GuildCreate,
 ) {
 	bot.log.Info("joined guild", "guild", event.Guild.Name)
-	err := bot.joinAllVoiceChannels(
-		ChannelInfo{GuildID: event.Guild.ID, ChannelID: ""},
-	)
+	err := bot.joinAllVoiceChannels(event.Guild.ID)
 	if err != nil {
 		bot.log.Error("failed to join voice channels", "error", err.Error())
 	}
 }
 
-func (bot *Bot) joinAllVoiceChannels(channelInfo ChannelInfo) error {
-	channels, err := bot.con.GuildChannels(channelInfo.GuildID)
+func (bot *Bot) joinAllVoiceChannels(guildID string) error {
+	channels, err := bot.con.GuildChannels(guildID)
 	if err != nil {
 		return fmt.Errorf("error getting guild channels: %w", err)
 	}
@@ -93,7 +91,7 @@ func (bot *Bot) joinAllVoiceChannels(channelInfo ChannelInfo) error {
 	for _, channel := range channels {
 		if channel.Type == dis.ChannelTypeGuildVoice {
 			vc, err := bot.con.ChannelVoiceJoin(
-				channelInfo.GuildID,
+				guildID,
 				channel.ID,
 				false,
 				false,
@@ -108,7 +106,7 @@ func (bot *Bot) joinAllVoiceChannels(channelInfo ChannelInfo) error {
 				)
 			} else {
 				bot.log.Info("joined voice channel", "channel", channel.Name)
-				go bot.handleVoiceConnection(vc, ChannelInfo{GuildID: channelInfo.GuildID, ChannelID: channel.ID})
+				go bot.handleVoiceConnection(vc, ChannelInfo{GuildID: guildID, ChannelID: channel.ID})
 			}
 		}
 	}
