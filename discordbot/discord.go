@@ -48,8 +48,9 @@ type Bot struct {
 	conn *discordsdk.Session
 
 	speechRecognitionService stt.SpeechRecognitionService
-	userStreams              map[uint32]*UserStream
-	userStreamRoutes         map[uint32]UserID
+
+	userStreams      map[uint32]*UserStream
+	userStreamRoutes map[uint32]UserID
 }
 
 func NewBot(
