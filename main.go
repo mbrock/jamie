@@ -100,7 +100,9 @@ func runDiscord(cmd *cobra.Command, args []string) {
 	err = db.Migrate(db.GetDB().DB, migrations, sqlLogger)
 	if err != nil {
 		mainLogger.Error("apply migrations", "error", err.Error())
-		fmt.Print("An error occurred during migration. Do you want to continue? (y/n): ")
+		fmt.Print(
+			"An error occurred during migration. Do you want to continue? (y/n): ",
+		)
 		var response string
 		_, err := fmt.Scanln(&response)
 		if err != nil {
@@ -141,9 +143,12 @@ func createLoggers() (mainLogger, discordLogger, deepgramLogger, sqlLogger *log.
 		logLevel = log.DebugLevel
 	}
 
-	mainLogger = logger.WithPrefix("app").WithLevel(logLevel)
-	discordLogger = logger.WithPrefix("yap").WithLevel(logLevel)
-	deepgramLogger = logger.WithPrefix("ear").WithLevel(logLevel)
-	sqlLogger = logger.WithPrefix("sql").WithLevel(logLevel)
+	logger.SetLevel(logLevel)
+
+	mainLogger = logger.WithPrefix("app")
+	discordLogger = logger.WithPrefix("yap")
+	deepgramLogger = logger.WithPrefix("ear")
+	sqlLogger = logger.WithPrefix("sql")
+
 	return
 }
