@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bwmarrin/discordgo"
+	dis "github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
 	"github.com/google/uuid"
 )
@@ -19,7 +19,7 @@ type ChannelInfo struct {
 	ChannelID string
 }
 
-type VoiceStream struct {
+type Voice struct {
 	UserID               string
 	StreamID             string
 	InitialTimestamp     uint32
@@ -29,24 +29,28 @@ type VoiceStream struct {
 	Avatar               string
 }
 
-type DiscordBot struct {
-	log          *log.Logger
-	api          *discordgo.Session
-	asr          speech.ASR
-	voiceStreams map[uint32]*VoiceStream
-	userIDMap    map[uint32]string
-	mu           sync.RWMutex
+type Bot struct {
+	log *log.Logger
+	con *dis.Session
+	asr speech.ASR
+	vox map[uint32]*Voice
+	tab map[uint32]string
+	mut sync.RWMutex
 }
 
-func NewDiscordBot(token string, asr speech.ASR, logger *log.Logger) (*DiscordBot, error) {
-	bot := &DiscordBot{
-		asr:          asr,
-		log:          logger,
-		voiceStreams: make(map[uint32]*VoiceStream),
-		userIDMap:    make(map[uint32]string),
+func NewBot(
+	token string,
+	asr speech.ASR,
+	logger *log.Logger,
+) (*Bot, error) {
+	bot := &Bot{
+		asr: asr,
+		log: logger,
+		vox: make(map[uint32]*Voice),
+		tab: make(map[uint32]string),
 	}
 
-	dg, err := discordgo.New("Bot " + token)
+	dg, err := dis.New("Bot " + token)
 	if err != nil {
 		return nil, fmt.Errorf("error creating Discord session: %w", err)
 	}
@@ -58,34 +62,50 @@ func NewDiscordBot(token string, asr speech.ASR, logger *log.Logger) (*DiscordBo
 		return nil, fmt.Errorf("error opening connection: %w", err)
 	}
 
-	bot.api = dg
-	bot.log.Info("bot started", "username", bot.api.State.User.Username)
+	bot.con = dg
+	bot.log.Info("bot started", "username", bot.con.State.User.Username)
 	return bot, nil
 }
 
-func (bot *DiscordBot) Close() error {
-	return bot.api.Close()
+func (bot *Bot) Close() error {
+	return bot.con.Close()
 }
 
-func (bot *DiscordBot) handleGuildCreate(_ *discordgo.Session, event *discordgo.GuildCreate) {
+func (bot *Bot) handleGuildCreate(
+	_ *dis.Session,
+	event *dis.GuildCreate,
+) {
 	bot.log.Info("joined guild", "guild", event.Guild.Name)
-	err := bot.joinAllVoiceChannels(ChannelInfo{GuildID: event.Guild.ID, ChannelID: ""})
+	err := bot.joinAllVoiceChannels(
+		ChannelInfo{GuildID: event.Guild.ID, ChannelID: ""},
+	)
 	if err != nil {
 		bot.log.Error("failed to join voice channels", "error", err.Error())
 	}
 }
 
-func (bot *DiscordBot) joinAllVoiceChannels(channelInfo ChannelInfo) error {
-	channels, err := bot.api.GuildChannels(channelInfo.GuildID)
+func (bot *Bot) joinAllVoiceChannels(channelInfo ChannelInfo) error {
+	channels, err := bot.con.GuildChannels(channelInfo.GuildID)
 	if err != nil {
 		return fmt.Errorf("error getting guild channels: %w", err)
 	}
 
 	for _, channel := range channels {
-		if channel.Type == discordgo.ChannelTypeGuildVoice {
-			vc, err := bot.api.ChannelVoiceJoin(channelInfo.GuildID, channel.ID, false, false)
+		if channel.Type == dis.ChannelTypeGuildVoice {
+			vc, err := bot.con.ChannelVoiceJoin(
+				channelInfo.GuildID,
+				channel.ID,
+				false,
+				false,
+			)
 			if err != nil {
-				bot.log.Error("failed to join voice channel", "channel", channel.Name, "error", err.Error())
+				bot.log.Error(
+					"failed to join voice channel",
+					"channel",
+					channel.Name,
+					"error",
+					err.Error(),
+				)
 			} else {
 				bot.log.Info("joined voice channel", "channel", channel.Name)
 				go bot.handleVoiceConnection(vc, ChannelInfo{GuildID: channelInfo.GuildID, ChannelID: channel.ID})
@@ -96,8 +116,17 @@ func (bot *DiscordBot) joinAllVoiceChannels(channelInfo ChannelInfo) error {
 	return nil
 }
 
-func (bot *DiscordBot) handleVoiceConnection(vc *discordgo.VoiceConnection, channelInfo ChannelInfo) {
-	bot.log.Info("handling voice connection", "guild", channelInfo.GuildID, "channel", channelInfo.ChannelID)
+func (bot *Bot) handleVoiceConnection(
+	vc *dis.VoiceConnection,
+	channelInfo ChannelInfo,
+) {
+	bot.log.Info(
+		"handling voice connection",
+		"guild",
+		channelInfo.GuildID,
+		"channel",
+		channelInfo.ChannelID,
+	)
 
 	vc.AddHandler(bot.handleVoiceSpeakingUpdate)
 
@@ -110,19 +139,37 @@ func (bot *DiscordBot) handleVoiceConnection(vc *discordgo.VoiceConnection, chan
 
 		err := bot.processVoicePacket(packet, channelInfo)
 		if err != nil {
-			bot.log.Error("failed to process voice packet", "error", err.Error())
+			bot.log.Error(
+				"failed to process voice packet",
+				"error",
+				err.Error(),
+			)
 		}
 	}
 }
 
-func (bot *DiscordBot) handleVoiceSpeakingUpdate(_ *discordgo.VoiceConnection, v *discordgo.VoiceSpeakingUpdate) {
-	bot.log.Info("voice speaking update", "ssrc", v.SSRC, "userID", v.UserID, "speaking", v.Speaking)
-	bot.mu.Lock()
-	bot.userIDMap[uint32(v.SSRC)] = v.UserID
-	bot.mu.Unlock()
+func (bot *Bot) handleVoiceSpeakingUpdate(
+	_ *dis.VoiceConnection,
+	v *dis.VoiceSpeakingUpdate,
+) {
+	bot.log.Info(
+		"voice speaking update",
+		"ssrc",
+		v.SSRC,
+		"userID",
+		v.UserID,
+		"speaking",
+		v.Speaking,
+	)
+	bot.mut.Lock()
+	bot.tab[uint32(v.SSRC)] = v.UserID
+	bot.mut.Unlock()
 }
 
-func (bot *DiscordBot) processVoicePacket(packet *discordgo.Packet, channelInfo ChannelInfo) error {
+func (bot *Bot) processVoicePacket(
+	packet *dis.Packet,
+	channelInfo ChannelInfo,
+) error {
 	stream, err := bot.getOrCreateVoiceStream(packet, channelInfo)
 	if err != nil {
 		return fmt.Errorf("failed to get or create voice stream: %w", err)
@@ -140,7 +187,10 @@ func (bot *DiscordBot) processVoicePacket(packet *discordgo.Packet, channelInfo 
 		receiveTime,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to save Discord voice packet to database: %w", err)
+		return fmt.Errorf(
+			"failed to save Discord voice packet to database: %w",
+			err,
+		)
 	}
 
 	err = stream.TranscriptionSession.SendAudio(packet.Opus)
@@ -151,26 +201,29 @@ func (bot *DiscordBot) processVoicePacket(packet *discordgo.Packet, channelInfo 
 	return nil
 }
 
-func (bot *DiscordBot) getOrCreateVoiceStream(packet *discordgo.Packet, channelInfo ChannelInfo) (*VoiceStream, error) {
-	bot.mu.RLock()
-	stream, exists := bot.voiceStreams[packet.SSRC]
-	bot.mu.RUnlock()
+func (bot *Bot) getOrCreateVoiceStream(
+	packet *dis.Packet,
+	channelInfo ChannelInfo,
+) (*Voice, error) {
+	bot.mut.RLock()
+	stream, exists := bot.vox[packet.SSRC]
+	bot.mut.RUnlock()
 
 	if exists {
 		return stream, nil
 	}
 
 	streamID := uuid.New().String()
-	bot.mu.RLock()
-	userIDStr := bot.userIDMap[packet.SSRC]
-	bot.mu.RUnlock()
+	bot.mut.RLock()
+	userIDStr := bot.tab[packet.SSRC]
+	bot.mut.RUnlock()
 
 	transcriptionSession, err := bot.asr.Start(context.Background())
 	if err != nil {
 		return nil, fmt.Errorf("failed to start ASR session: %w", err)
 	}
 
-	stream := &VoiceStream{
+	stream = &Voice{
 		UserID:               userIDStr,
 		StreamID:             streamID,
 		InitialTimestamp:     packet.Timestamp,
@@ -180,9 +233,9 @@ func (bot *DiscordBot) getOrCreateVoiceStream(packet *discordgo.Packet, channelI
 		Avatar:               getRandomAvatar(),
 	}
 
-	bot.mu.Lock()
-	bot.voiceStreams[packet.SSRC] = stream
-	bot.mu.Unlock()
+	bot.mut.Lock()
+	bot.vox[packet.SSRC] = stream
+	bot.mut.Unlock()
 
 	err = db.CreateVoiceStream(
 		channelInfo.GuildID,
@@ -195,17 +248,31 @@ func (bot *DiscordBot) getOrCreateVoiceStream(packet *discordgo.Packet, channelI
 		stream.InitialSequence,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create voice stream in database: %w", err)
+		return nil, fmt.Errorf(
+			"failed to create voice stream in database: %w",
+			err,
+		)
 	}
 
-	bot.log.Info("created new voice stream", "ssrc", int(packet.SSRC), "userID", userIDStr, "streamID", streamID)
+	bot.log.Info(
+		"created new voice stream",
+		"ssrc",
+		int(packet.SSRC),
+		"userID",
+		userIDStr,
+		"streamID",
+		streamID,
+	)
 
 	go bot.handleTranscription(stream, channelInfo)
 
 	return stream, nil
 }
 
-func (bot *DiscordBot) handleTranscription(stream *VoiceStream, channelInfo ChannelInfo) {
+func (bot *Bot) handleTranscription(
+	stream *Voice,
+	channelInfo ChannelInfo,
+) {
 	for transcriptChan := range stream.TranscriptionSession.Read() {
 		var transcript string
 
@@ -218,28 +285,44 @@ func (bot *DiscordBot) handleTranscription(stream *VoiceStream, channelInfo Chan
 
 			if strings.EqualFold(transcript, "Change my identity.") {
 				stream.Avatar = getRandomAvatar()
-				_, err := bot.api.ChannelMessageSend(
+				_, err := bot.con.ChannelMessageSend(
 					channelInfo.ChannelID,
 					fmt.Sprintf("You are now %s.", stream.Avatar),
 				)
 				if err != nil {
-					bot.log.Error("failed to send identity change message", "error", err.Error())
+					bot.log.Error(
+						"failed to send identity change message",
+						"error",
+						err.Error(),
+					)
 				}
 				continue
 			}
 
-			_, err := bot.api.ChannelMessageSend(
+			_, err := bot.con.ChannelMessageSend(
 				channelInfo.ChannelID,
 				fmt.Sprintf("%s %s", stream.Avatar, transcript),
 			)
 
 			if err != nil {
-				bot.log.Error("failed to send transcribed message", "error", err.Error())
+				bot.log.Error(
+					"failed to send transcribed message",
+					"error",
+					err.Error(),
+				)
 			}
 
-			err = db.SaveTranscript(channelInfo.GuildID, channelInfo.ChannelID, transcript)
+			err = db.SaveTranscript(
+				channelInfo.GuildID,
+				channelInfo.ChannelID,
+				transcript,
+			)
 			if err != nil {
-				bot.log.Error("failed to save transcript to database", "error", err.Error())
+				bot.log.Error(
+					"failed to save transcript to database",
+					"error",
+					err.Error(),
+				)
 			}
 		}
 	}

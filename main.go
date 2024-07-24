@@ -17,7 +17,7 @@ import (
 
 var (
 	logger *log.Logger
-	bot    *discord.DiscordBot
+	bot    *discord.Bot
 )
 
 func init() {
@@ -26,11 +26,18 @@ func init() {
 
 	// Add persistent flags
 	rootCmd.PersistentFlags().String("discord-token", "", "Discord bot token")
-	rootCmd.PersistentFlags().String("deepgram-api-key", "", "Deepgram API key")
+	rootCmd.PersistentFlags().
+		String("deepgram-api-key", "", "Deepgram API key")
 
 	// Bind flags to viper
-	viper.BindPFlag("discord_token", rootCmd.PersistentFlags().Lookup("discord-token"))
-	viper.BindPFlag("deepgram_api_key", rootCmd.PersistentFlags().Lookup("deepgram-api-key"))
+	viper.BindPFlag(
+		"discord_token",
+		rootCmd.PersistentFlags().Lookup("discord-token"),
+	)
+	viper.BindPFlag(
+		"deepgram_api_key",
+		rootCmd.PersistentFlags().Lookup("deepgram-api-key"),
+	)
 }
 
 func initConfig() {
@@ -91,7 +98,7 @@ func runDiscord(cmd *cobra.Command, args []string) {
 		mainLogger.Fatal("create deepgram client", "error", err.Error())
 	}
 
-	bot, err = discord.NewDiscordBot(
+	bot, err = discord.NewBot(
 		discordToken,
 		transcriptionService,
 		discordLogger,
