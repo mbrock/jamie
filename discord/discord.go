@@ -33,16 +33,17 @@ type DiscordBot struct {
 	log          *log.Logger
 	api          *discordgo.Session
 	asr          speech.ASR
-	voiceStreams *sync.Map
-	userIDMap    *sync.Map
+	voiceStreams map[uint32]*VoiceStream
+	userIDMap    map[uint32]string
+	mu           sync.RWMutex
 }
 
 func NewDiscordBot(token string, asr speech.ASR, logger *log.Logger) (*DiscordBot, error) {
 	bot := &DiscordBot{
 		asr:          asr,
 		log:          logger,
-		voiceStreams: &sync.Map{},
-		userIDMap:    &sync.Map{},
+		voiceStreams: make(map[uint32]*VoiceStream),
+		userIDMap:    make(map[uint32]string),
 	}
 
 	dg, err := discordgo.New("Bot " + token)
@@ -116,7 +117,9 @@ func (bot *DiscordBot) handleVoiceConnection(vc *discordgo.VoiceConnection, chan
 
 func (bot *DiscordBot) handleVoiceSpeakingUpdate(_ *discordgo.VoiceConnection, v *discordgo.VoiceSpeakingUpdate) {
 	bot.log.Info("voice speaking update", "ssrc", v.SSRC, "userID", v.UserID, "speaking", v.Speaking)
-	bot.userIDMap.Store(uint32(v.SSRC), v.UserID)
+	bot.mu.Lock()
+	bot.userIDMap[uint32(v.SSRC)] = v.UserID
+	bot.mu.Unlock()
 }
 
 func (bot *DiscordBot) processVoicePacket(packet *discordgo.Packet, channelInfo ChannelInfo) error {
@@ -149,14 +152,18 @@ func (bot *DiscordBot) processVoicePacket(packet *discordgo.Packet, channelInfo 
 }
 
 func (bot *DiscordBot) getOrCreateVoiceStream(packet *discordgo.Packet, channelInfo ChannelInfo) (*VoiceStream, error) {
-	streamInterface, exists := bot.voiceStreams.Load(packet.SSRC)
+	bot.mu.RLock()
+	stream, exists := bot.voiceStreams[packet.SSRC]
+	bot.mu.RUnlock()
+
 	if exists {
-		return streamInterface.(*VoiceStream), nil
+		return stream, nil
 	}
 
 	streamID := uuid.New().String()
-	userID, _ := bot.userIDMap.Load(packet.SSRC)
-	userIDStr, _ := userID.(string)
+	bot.mu.RLock()
+	userIDStr := bot.userIDMap[packet.SSRC]
+	bot.mu.RUnlock()
 
 	transcriptionSession, err := bot.asr.Start(context.Background())
 	if err != nil {
@@ -173,7 +180,9 @@ func (bot *DiscordBot) getOrCreateVoiceStream(packet *discordgo.Packet, channelI
 		Avatar:               getRandomAvatar(),
 	}
 
-	bot.voiceStreams.Store(packet.SSRC, stream)
+	bot.mu.Lock()
+	bot.voiceStreams[packet.SSRC] = stream
+	bot.mu.Unlock()
 
 	err = db.CreateVoiceStream(
 		channelInfo.GuildID,
