@@ -6,6 +6,7 @@ import (
 	"jamie/db"
 	"strings"
 
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/log"
 	"github.com/sashabaranov/go-openai"
 	"github.com/spf13/cobra"
@@ -80,9 +81,15 @@ func runSummarizeTranscript(cmd *cobra.Command, args []string) {
 		logger.Fatal("OpenAI API error", "error", err.Error())
 	}
 
-	// Print the summary
+	// Render and print the summary
+	summary := resp.Choices[0].Message.Content
+	renderedSummary, err := glamour.Render(summary, "dark")
+	if err != nil {
+		logger.Fatal("Failed to render summary", "error", err.Error())
+	}
+
 	fmt.Println("Summary of today's conversation:")
-	fmt.Println(resp.Choices[0].Message.Content)
+	fmt.Println(renderedSummary)
 }
 
 func main() {
