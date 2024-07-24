@@ -86,11 +86,12 @@ func (db *DB) PrepareStatements() error {
 				text,
 				confidence
 			) VALUES (?, ?, ?, ?, ?, ?)`,
-		"selectStreamForDiscordChannel": `
+		"selectStreamForDiscordChannelAndSpeaker": `
 			SELECT s.id 
 			FROM streams s
 			JOIN discord_channel_streams dcs ON s.id = dcs.stream
-			WHERE dcs.discord_guild = ? AND dcs.discord_channel = ?
+			JOIN discord_speakers ds ON s.id = ds.stream
+			WHERE dcs.discord_guild = ? AND dcs.discord_channel = ? AND ds.discord_id = ?
 			ORDER BY s.created_at DESC
 			LIMIT 1`,
 		"insertStreamForDiscordChannel": `
@@ -274,13 +275,14 @@ func (db *DB) queryRowWithLog(
 	return stmt.QueryRowContext(ctx, args...)
 }
 
-func GetStreamForDiscordChannel(guildID, channelID string) (string, error) {
+func GetStreamForDiscordChannelAndSpeaker(guildID, channelID, discordID string) (string, error) {
 	var streamID string
 	row := db.queryRowWithLog(
 		context.Background(),
-		"selectStreamForDiscordChannel",
+		"selectStreamForDiscordChannelAndSpeaker",
 		guildID,
 		channelID,
+		discordID,
 	)
 	if row == nil {
 		return "", fmt.Errorf("no row returned from query")

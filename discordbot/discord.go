@@ -186,12 +186,12 @@ func (bot *Bot) getOrCreateVoiceStream(
 	packet *discordsdk.Packet,
 	guildID, channelID string,
 ) (string, error) {
-	streamID, err := db.GetStreamForDiscordChannel(guildID, channelID)
+	discordID := fmt.Sprintf("%d", packet.SSRC) // Using SSRC as a unique identifier for the Discord user
+	streamID, err := db.GetStreamForDiscordChannelAndSpeaker(guildID, channelID, discordID)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		streamID = etc.Gensym()
 		speakerID := etc.Gensym()
-		discordID := fmt.Sprintf("%d", packet.SSRC) // Using SSRC as a unique identifier for the Discord user
 		emoji := txt.RandomAvatar()
 		err = db.CreateStreamForDiscordChannel(streamID, guildID, channelID, packet.Sequence, uint16(packet.Timestamp), speakerID, discordID, emoji)
 		if err != nil {
@@ -201,6 +201,8 @@ func (bot *Bot) getOrCreateVoiceStream(
 		bot.log.Info(
 			"created new voice stream",
 			"streamID", streamID,
+			"speakerID", speakerID,
+			"discordID", discordID,
 		)
 	} else if err != nil {
 		return "", fmt.Errorf("failed to query for stream: %w", err)
