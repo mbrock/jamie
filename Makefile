@@ -6,6 +6,10 @@ build:
 run: build
 	./jamie discord
 
+# Run the application in debug mode
+debug: build
+	LOG_LEVEL=debug ./jamie discord
+
 # Run migrations and prepare statements
 migrate:
 	go run cmd/migrate/main.go
