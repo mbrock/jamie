@@ -256,11 +256,48 @@ func SaveRecognition(
 
 func (db *DB) GetRecentTranscriptions(limit int) ([]Transcription, error) {
 	query := `
-		SELECT s.emoji, r.text, r.created_at
-		FROM recognitions r
-		JOIN speakers s ON r.stream = s.stream
-		ORDER BY r.created_at DESC
-		LIMIT ?
+		WITH ranked_recognitions AS (
+			SELECT 
+				s.emoji,
+				r.text,
+				r.created_at,
+				LAG(r.created_at, 1) OVER (PARTITION BY s.emoji ORDER BY r.created_at) AS prev_created_at,
+				ROW_NUMBER() OVER (ORDER BY r.created_at DESC) AS rn
+			FROM recognitions r
+			JOIN speakers s ON r.stream = s.stream
+			ORDER BY r.created_at DESC
+		),
+		grouped_recognitions AS (
+			SELECT 
+				emoji,
+				text,
+				created_at,
+				CASE 
+					WHEN prev_created_at IS NULL OR (JULIANDAY(created_at) - JULIANDAY(prev_created_at)) * 24 * 60 > 3 
+					THEN 1 
+					ELSE 0 
+				END AS new_group
+			FROM ranked_recognitions
+			WHERE rn <= ?
+		),
+		final_groups AS (
+			SELECT 
+				emoji,
+				GROUP_CONCAT(text, ' ') AS text,
+				MAX(created_at) AS created_at
+			FROM (
+				SELECT 
+					emoji,
+					text,
+					created_at,
+					SUM(new_group) OVER (ORDER BY created_at DESC) AS group_id
+				FROM grouped_recognitions
+			)
+			GROUP BY emoji, group_id
+			ORDER BY created_at DESC
+		)
+		SELECT emoji, text, created_at
+		FROM final_groups
 	`
 	rows, err := db.Query(query, limit)
 	if err != nil {
