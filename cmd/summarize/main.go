@@ -1,14 +1,11 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"jamie/db"
-	"strings"
+	"jamie/llm"
 
-	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/log"
-	"github.com/sashabaranov/go-openai"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -23,73 +20,19 @@ func runSummarizeTranscript(cmd *cobra.Command, args []string) {
 	}
 	defer db.Close()
 
-	// Get today's transcriptions
-	transcriptions, err := db.GetDB().GetTodayTranscriptions()
-	if err != nil {
-		logger.Fatal("get today's transcriptions", "error", err.Error())
-	}
-
-	if len(transcriptions) == 0 {
-		logger.Info("No transcriptions found for today")
-		return
-	}
-
-	// Format transcriptions
-	var formattedTranscript strings.Builder
-	for _, t := range transcriptions {
-		formattedTranscript.WriteString(
-			fmt.Sprintf(
-				"%s %s: %s\n",
-				t.Timestamp.Format("15:04:05"),
-				t.Emoji,
-				t.Text,
-			),
-		)
-	}
-
 	// Get OpenAI API key
 	openaiAPIKey := viper.GetString("openai_api_key")
 	if openaiAPIKey == "" {
 		logger.Fatal("missing OPENAI_API_KEY or --openai-api-key=")
 	}
 
-	// Create OpenAI client
-	client := openai.NewClient(openaiAPIKey)
-	ctx := context.Background()
-
-	// Prepare the chat completion request
-	req := openai.ChatCompletionRequest{
-		Model: openai.GPT4o,
-		Messages: []openai.ChatCompletionMessage{
-			{
-				Role: openai.ChatMessageRoleSystem,
-				Content: "You are an AI assistant tasked with summarizing and explaining conversations. " +
-					"Please analyze the following transcript and provide a concise summary of the main topics discussed, " +
-					"key points made, and any important decisions or actions mentioned. " +
-					"Try to capture the essence of the conversation and explain it clearly.",
-			},
-			{
-				Role:    openai.ChatMessageRoleUser,
-				Content: formattedTranscript.String(),
-			},
-		},
-	}
-
-	// Send the request to OpenAI
-	resp, err := client.CreateChatCompletion(ctx, req)
+	summary, err := llm.SummarizeTranscript(openaiAPIKey)
 	if err != nil {
-		logger.Fatal("OpenAI API error", "error", err.Error())
-	}
-
-	// Render and print the summary
-	summary := resp.Choices[0].Message.Content
-	renderedSummary, err := glamour.Render(summary, "dark")
-	if err != nil {
-		logger.Fatal("Failed to render summary", "error", err.Error())
+		logger.Fatal("failed to summarize transcript", "error", err.Error())
 	}
 
 	fmt.Println("Summary of today's conversation:")
-	fmt.Println(renderedSummary)
+	fmt.Println(summary)
 }
 
 func main() {
