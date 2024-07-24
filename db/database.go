@@ -4,13 +4,19 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	"jamie/etc"
-	"jamie/web"
 
 	"github.com/charmbracelet/log"
 	_ "github.com/mattn/go-sqlite3"
 )
+
+type Transcription struct {
+	Emoji     string
+	Text      string
+	Timestamp time.Time
+}
 
 var sqlLogger *log.Logger
 
@@ -248,7 +254,7 @@ func SaveRecognition(
 	return err
 }
 
-func (db *DB) GetRecentTranscriptions(limit int) ([]web.Transcription, error) {
+func (db *DB) GetRecentTranscriptions(limit int) ([]Transcription, error) {
 	query := `
 		SELECT s.emoji, r.text, r.created_at
 		FROM recognitions r
@@ -262,9 +268,9 @@ func (db *DB) GetRecentTranscriptions(limit int) ([]web.Transcription, error) {
 	}
 	defer rows.Close()
 
-	var transcriptions []web.Transcription
+	var transcriptions []Transcription
 	for rows.Next() {
-		var t web.Transcription
+		var t Transcription
 		err := rows.Scan(&t.Emoji, &t.Text, &t.Timestamp)
 		if err != nil {
 			return nil, err
