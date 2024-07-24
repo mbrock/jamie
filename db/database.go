@@ -683,8 +683,7 @@ func (db *DB) GetPacketsForStreamInTimeRange(
 	streamID string,
 	startTime, endTime time.Time,
 ) ([][]byte, error) {
-	rows, err := db.Query(
-		db.stmts["getPacketsForStreamInTimeRange"].Query(),
+	rows, err := db.stmts["getPacketsForStreamInTimeRange"].Query(
 		streamID,
 		startTime,
 		endTime,
