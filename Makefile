@@ -1,6 +1,6 @@
 # Build the main application
 build:
-	go build -o jamie main.go
+	go build -gcflags="all=-N -l" -o jamie main.go
 
 # Run the application with discord command
 run: build
@@ -14,9 +14,13 @@ debug: build
 migrate:
 	go run cmd/migrate/main.go
 
+# Build with race detection
+build-race:
+	go build -race -o jamie-race main.go
+
 # Clean up build artifacts
 clean:
-	rm -f jamie
+	rm -f jamie jamie-race
 
 # Drop the database
 drop:
