@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"jamie/etc"
+	"jamie/web"
 
 	"github.com/charmbracelet/log"
 	_ "github.com/mattn/go-sqlite3"
