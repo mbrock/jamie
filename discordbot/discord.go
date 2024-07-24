@@ -227,6 +227,18 @@ func (bot *Bot) getSpeechRecognitionSession(streamID string) (stt.LiveTranscript
 	return session, nil
 }
 
+func (bot *Bot) speechRecognitionLoop(streamID string, session stt.LiveTranscriptionSession) {
+	for {
+		select {
+		case segmentDrafts, ok := <-session.Receive():
+			if !ok {
+				bot.log.Info("Speech recognition session closed", "streamID", streamID)
+				return
+			}
+			bot.processSegment(streamID, segmentDrafts)
+		}
+	}
+}
 
 func (bot *Bot) processSegment(streamID string, segmentDrafts <-chan string) {
 	var final string
