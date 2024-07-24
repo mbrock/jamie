@@ -113,13 +113,13 @@ func (db *DB) PrepareStatements() error {
 		"selectChannelIDForStream": `
 			SELECT discord_channel FROM discord_channel_streams WHERE stream = ?`,
 		"updateStreamEndTimeForChannel": `
-			UPDATE streams s
+			UPDATE streams
 			SET ended_at = CURRENT_TIMESTAMP
-			WHERE s.id IN (
-				SELECT dcs.stream
-				FROM discord_channel_streams dcs
-				WHERE dcs.discord_guild = ? AND dcs.discord_channel = ?
-			) AND s.ended_at IS NULL`,
+			WHERE id IN (
+				SELECT stream
+				FROM discord_channel_streams
+				WHERE discord_guild = ? AND discord_channel = ?
+			) AND ended_at IS NULL`,
 	}
 
 	for name, query := range statements {
