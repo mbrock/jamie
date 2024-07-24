@@ -102,14 +102,11 @@ var summarizeTranscriptCmd = &cobra.Command{
 func runSummarizeTranscript(cmd *cobra.Command, args []string) {
 	mainLogger, _, _, sqlLogger := createLoggers()
 
-	db.InitDB(sqlLogger)
-	defer db.Close()
-
-	// Prepare database statements
-	err := db.GetDB().PrepareStatements()
+	err := db.InitDB(sqlLogger)
 	if err != nil {
-		mainLogger.Fatal("prepare statements", "error", err.Error())
+		mainLogger.Fatal("initialize database", "error", err.Error())
 	}
+	defer db.Close()
 
 	// Get today's transcriptions
 	transcriptions, err := db.GetDB().GetTodayTranscriptions()

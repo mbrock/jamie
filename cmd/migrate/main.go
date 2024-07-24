@@ -11,7 +11,10 @@ func main() {
 	logger := log.New(os.Stdout)
 	sqlLogger := logger.With("component", "sql")
 
-	db.InitDB(sqlLogger)
+	err := db.InitDB(sqlLogger)
+	if err != nil {
+		logger.Fatal("initialize database", "error", err.Error())
+	}
 	defer db.Close()
 
 	// Load and apply migrations
@@ -27,12 +30,4 @@ func main() {
 	}
 
 	logger.Info("Migrations applied successfully")
-
-	logger.Info("Preparing statements...")
-	err = db.GetDB().PrepareStatements()
-	if err != nil {
-		logger.Fatal("prepare statements", "error", err.Error())
-	}
-
-	logger.Info("Statements prepared successfully")
 }

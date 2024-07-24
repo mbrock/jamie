@@ -27,11 +27,11 @@ type DB struct {
 
 var db *DB
 
-func InitDB(logger *log.Logger) {
+func InitDB(logger *log.Logger) error {
 	var err error
 	sqlDB, err := sql.Open("sqlite3", "./001.db")
 	if err != nil {
-		logger.Fatal(err)
+		return fmt.Errorf("failed to open database: %w", err)
 	}
 
 	db = &DB{
@@ -40,6 +40,13 @@ func InitDB(logger *log.Logger) {
 	}
 
 	sqlLogger = logger
+
+	err = db.PrepareStatements()
+	if err != nil {
+		return fmt.Errorf("failed to prepare statements: %w", err)
+	}
+
+	return nil
 }
 
 func (db *DB) PrepareStatements() error {
