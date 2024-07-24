@@ -249,14 +249,12 @@ func runWeb(cmd *cobra.Command, args []string) {
 	defer db.Close()
 
 	// Run database migrations
-	err = db.RunMigrations(sqlLogger)
-	if err != nil {
+	if err := db.RunMigrations(sqlLogger); err != nil {
 		mainLogger.Fatal("run migrations", "error", err.Error())
 	}
 
 	mainLogger.Info("Preparing database statements...")
-	err = db.GetDB().PrepareStatements()
-	if err != nil {
+	if err := db.GetDB().PrepareStatements(); err != nil {
 		mainLogger.Fatal("prepare statements", "error", err.Error())
 	}
 	mainLogger.Info("Database statements prepared successfully")
@@ -265,8 +263,7 @@ func runWeb(cmd *cobra.Command, args []string) {
 	handler := web.NewHandler(db.GetDB(), mainLogger)
 
 	mainLogger.Info("Starting web server", "port", port)
-	err = http.ListenAndServe(fmt.Sprintf(":%d", port), handler)
-	if err != nil {
+	if err := http.ListenAndServe(fmt.Sprintf(":%d", port), handler); err != nil {
 		mainLogger.Fatal("failed to start web server", "error", err.Error())
 	}
 }
