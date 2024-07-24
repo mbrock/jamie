@@ -187,24 +187,39 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 		)
 	}
 
-	var startIndex, endIndex int
+	var startOption, endOption string
 
 	timeSelectionForm := huh.NewForm(
 		huh.NewGroup(
-			huh.NewSelect[int]().
+			huh.NewSelect[string]().
 				Title("Choose start transcription").
 				Options(huh.NewOptions(startOptions...)...).
-				Value(&startIndex),
-			huh.NewSelect[int]().
+				Value(&startOption),
+			huh.NewSelect[string]().
 				Title("Choose end transcription").
 				Options(huh.NewOptions(startOptions...)...).
-				Value(&endIndex),
+				Value(&endOption),
 		),
 	)
 
 	err = timeSelectionForm.Run()
 	if err != nil {
 		mainLogger.Fatal("time selection form input", "error", err.Error())
+	}
+
+	startIndex := -1
+	endIndex := -1
+	for i, option := range startOptions {
+		if option == startOption {
+			startIndex = i
+		}
+		if option == endOption {
+			endIndex = i
+		}
+	}
+
+	if startIndex == -1 || endIndex == -1 {
+		mainLogger.Fatal("Invalid selection")
 	}
 
 	if endIndex < startIndex {
