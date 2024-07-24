@@ -728,6 +728,7 @@ func (bot *Bot) handleGenerateAudioCommand(
 	args []string,
 ) error {
 	var streamID string
+	var startTimeStr, endTimeStr string
 	var startTime, endTime time.Time
 
 	if len(args) == 3 {
@@ -766,20 +767,30 @@ func (bot *Bot) handleGenerateAudioCommand(
 						_, err := time.Parse("2006-01-02 15:04:05", s)
 						return err
 					}).
-					Value(&startTime),
+					Value(&startTimeStr),
 				huh.NewInput().
 					Title("End time (YYYY-MM-DD HH:MM:SS)").
 					Validate(func(s string) error {
 						_, err := time.Parse("2006-01-02 15:04:05", s)
 						return err
 					}).
-					Value(&endTime),
+					Value(&endTimeStr),
 			),
 		)
 
 		err = form.Run()
 		if err != nil {
 			return fmt.Errorf("form error: %w", err)
+		}
+
+		// Parse the time strings after form submission
+		startTime, err = time.Parse("2006-01-02 15:04:05", startTimeStr)
+		if err != nil {
+			return fmt.Errorf("invalid start time format: %w", err)
+		}
+		endTime, err = time.Parse("2006-01-02 15:04:05", endTimeStr)
+		if err != nil {
+			return fmt.Errorf("invalid end time format: %w", err)
 		}
 	}
 
