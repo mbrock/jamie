@@ -308,9 +308,14 @@ func (db *DB) GetRecentTranscriptions(limit int) ([]Transcription, error) {
 	var transcriptions []Transcription
 	for rows.Next() {
 		var t Transcription
-		err := rows.Scan(&t.Emoji, &t.Text, &t.Timestamp)
+		var timestampStr string
+		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr)
 		if err != nil {
 			return nil, err
+		}
+		t.Timestamp, err = time.Parse("2006-01-02 15:04:05", timestampStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse timestamp: %w", err)
 		}
 		transcriptions = append(transcriptions, t)
 	}
