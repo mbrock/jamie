@@ -6,18 +6,18 @@ CREATE TABLE IF NOT EXISTS transcripts (
     timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS discord_voice_packet (
+CREATE TABLE IF NOT EXISTS voice_packets (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    stream_id TEXT,
+    user_stream_id TEXT,
     packet BLOB,
     relative_sequence INTEGER,
     relative_opus_timestamp INTEGER,
     receive_time INTEGER,
-    FOREIGN KEY (stream_id) REFERENCES discord_voice_stream(stream_id)
+    FOREIGN KEY (user_stream_id) REFERENCES user_streams(id)
 );
 
-CREATE TABLE IF NOT EXISTS discord_voice_stream (
-    stream_id TEXT PRIMARY KEY,
+CREATE TABLE IF NOT EXISTS user_streams (
+    id TEXT PRIMARY KEY,
     guild_id TEXT,
     channel_id TEXT,
     ssrc INTEGER,
