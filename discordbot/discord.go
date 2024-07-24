@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"jamie/db"
 	"jamie/etc"
+	"jamie/llm"
 	"jamie/stt"
 	"jamie/txt"
 	"strings"
@@ -21,18 +22,21 @@ type Bot struct {
 	speechRecognitionService stt.SpeechRecognitionService
 	db                       *db.DB
 	sessions                 map[string]stt.LiveTranscriptionSession
+	openaiAPIKey             string
 }
 
 func NewBot(
 	discordToken string,
 	speechRecognitionService stt.SpeechRecognitionService,
 	logger *log.Logger,
+	openaiAPIKey string,
 ) (*Bot, error) {
 	bot := &Bot{
 		speechRecognitionService: speechRecognitionService,
 		log:                      logger,
 		db:                       db.GetDB(),
 		sessions:                 make(map[string]stt.LiveTranscriptionSession),
+		openaiAPIKey:             openaiAPIKey,
 	}
 
 	dg, err := discordsdk.New("Bot " + discordToken)
@@ -42,6 +46,7 @@ func NewBot(
 
 	dg.AddHandler(bot.handleGuildCreate)
 	dg.AddHandler(bot.handleVoiceStateUpdate)
+	dg.AddHandler(bot.handleMessageCreate)
 
 	err = dg.Open()
 	if err != nil {
@@ -73,6 +78,32 @@ func (bot *Bot) handleGuildCreate(
 			"error",
 			err.Error(),
 		)
+	}
+}
+
+func (bot *Bot) handleMessageCreate(s *discordsdk.Session, m *discordsdk.MessageCreate) {
+	// Ignore messages from the bot itself
+	if m.Author.ID == s.State.User.ID {
+		return
+	}
+
+	// Check if the message is the summary command
+	if m.Content == "!summary" {
+		bot.log.Info("Summary command received", "channel", m.ChannelID)
+
+		// Generate summary
+		summary, err := llm.SummarizeTranscript(bot.openaiAPIKey)
+		if err != nil {
+			bot.log.Error("Failed to generate summary", "error", err.Error())
+			s.ChannelMessageSend(m.ChannelID, "Sorry, I couldn't generate a summary at this time.")
+			return
+		}
+
+		// Send summary to the channel
+		_, err = s.ChannelMessageSend(m.ChannelID, summary)
+		if err != nil {
+			bot.log.Error("Failed to send summary message", "error", err.Error())
+		}
 	}
 }
 

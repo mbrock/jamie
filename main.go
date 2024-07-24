@@ -216,10 +216,16 @@ func runDiscord(cmd *cobra.Command, args []string) {
 		mainLogger.Fatal("create deepgram client", "error", err.Error())
 	}
 
+	openaiAPIKey := viper.GetString("openai_api_key")
+	if openaiAPIKey == "" {
+		mainLogger.Fatal("missing OPENAI_API_KEY or --openai-api-key=")
+	}
+
 	bot, err = discordbot.NewBot(
 		discordToken,
 		transcriptionService,
 		discordLogger,
+		openaiAPIKey,
 	)
 	if err != nil {
 		mainLogger.Fatal("start discord bot", "error", err.Error())
