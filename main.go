@@ -74,7 +74,7 @@ func main() {
 }
 
 func runDiscord(cmd *cobra.Command, args []string) {
-	mainLogger, discordLogger, deepgramLogger := createLoggers()
+	mainLogger, discordLogger, deepgramLogger, sqlLogger := createLoggers()
 
 	discordToken := viper.GetString("discord_token")
 	deepgramAPIKey := viper.GetString("deepgram_api_key")
@@ -97,7 +97,7 @@ func runDiscord(cmd *cobra.Command, args []string) {
 	}
 
 	mainLogger.Info("Starting database migration process...")
-	err = db.Migrate(db.GetDB(), migrations, mainLogger)
+	err = db.Migrate(db.GetDB(), migrations, sqlLogger)
 	if err != nil {
 		mainLogger.Error("apply migrations", "error", err.Error())
 		fmt.Print("An error occurred during migration. Do you want to continue? (y/n): ")
@@ -135,9 +135,10 @@ func runDiscord(cmd *cobra.Command, args []string) {
 	<-sc
 }
 
-func createLoggers() (mainLogger, discordLogger, deepgramLogger *log.Logger) {
+func createLoggers() (mainLogger, discordLogger, deepgramLogger, sqlLogger *log.Logger) {
 	mainLogger = logger.WithPrefix("app")
 	discordLogger = logger.WithPrefix("yap")
 	deepgramLogger = logger.WithPrefix("ear")
+	sqlLogger = logger.WithPrefix("sql")
 	return
 }
