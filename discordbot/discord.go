@@ -12,11 +12,8 @@ import (
 	"jamie/llm"
 	"jamie/stt"
 	"jamie/txt"
-	"os"
 	"strings"
 	"time"
-
-	"jamie/main"
 
 	discordsdk "github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
@@ -89,7 +86,6 @@ func (bot *Bot) registerCommands() {
 	bot.commands["prompt"] = bot.handlePromptCommand
 	bot.commands["listprompts"] = bot.handleListPromptsCommand
 	bot.commands["audio"] = bot.handleAudioCommand
-	bot.commands["generateaudio"] = bot.handleGenerateAudioCommand
 }
 
 func (bot *Bot) Close() error {
@@ -721,48 +717,6 @@ func (bot *Bot) GenerateOggOpusBlob(
 	}
 
 	return oggBuffer.Bytes(), nil
-}
-
-func (bot *Bot) handleGenerateAudioCommand(
-	s *discordsdk.Session,
-	m *discordsdk.MessageCreate,
-	args []string,
-) error {
-	streamID, startTime, endTime, err := getAudioGenerationParams(args, bot.db)
-	if err != nil {
-		return fmt.Errorf("failed to get audio generation parameters: %w", err)
-	}
-
-	// Generate the audio
-	oggData, err := bot.GenerateOggOpusBlob(streamID, startTime, endTime)
-	if err != nil {
-		return fmt.Errorf("generate OGG Opus blob: %w", err)
-	}
-
-	// Create a temporary file to store the OGG data
-	tempFile, err := os.CreateTemp("", "audio-*.ogg")
-	if err != nil {
-		return fmt.Errorf("create temporary file: %w", err)
-	}
-	defer os.Remove(tempFile.Name())
-
-	// Write the OGG data to the temporary file
-	if _, err := tempFile.Write(oggData); err != nil {
-		return fmt.Errorf("write OGG data to file: %w", err)
-	}
-	tempFile.Close()
-
-	// Send the audio file as an attachment
-	_, err = s.ChannelFileSend(
-		m.ChannelID,
-		"audio.ogg",
-		bytes.NewReader(oggData),
-	)
-	if err != nil {
-		return fmt.Errorf("send audio file: %w", err)
-	}
-
-	return nil
 }
 
 func (bot *Bot) textToSpeech(text string) ([]byte, error) {
