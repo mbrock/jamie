@@ -18,6 +18,7 @@ import (
 	discordsdk "github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
 	"github.com/haguro/elevenlabs-go"
+	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
 	"github.com/tosone/minimp3"
 	"layeh.com/gopus"
@@ -697,7 +698,15 @@ func (bot *Bot) GenerateOggOpusBlob(
 
 	// Write packets to the OGG writer
 	for _, packet := range packets {
-		if _, err := oggWriter.Write(packet); err != nil {
+		if err := oggWriter.WriteRTP(&rtp.Packet{
+			Header: rtp.Header{
+				Version:        2,   // ?
+				PayloadType:    111, // ?
+				SequenceNumber: packet.Sequence,
+				Timestamp:      uint32(packet.Timestamp),
+			},
+			Payload: packet.Opus,
+		}); err != nil {
 			return nil, fmt.Errorf("write Opus packet: %w", err)
 		}
 	}
