@@ -697,15 +697,15 @@ func (bot *Bot) GenerateOggOpusBlob(
 	}
 
 	// Write packets to the OGG writer
-	for _, packet := range packets {
+	for i, packet := range packets {
 		if err := oggWriter.WriteRTP(&rtp.Packet{
 			Header: rtp.Header{
-				Version:        2,   // ?
-				PayloadType:    111, // ?
-				SequenceNumber: packet.Sequence,
-				Timestamp:      uint32(packet.Timestamp),
+				Version:        2,
+				PayloadType:    111,
+				SequenceNumber: uint16(i),
+				Timestamp:      uint32(i * 960), // Assuming 20ms frames at 48kHz
 			},
-			Payload: packet.Opus,
+			Payload: packet,
 		}); err != nil {
 			return nil, fmt.Errorf("write Opus packet: %w", err)
 		}
