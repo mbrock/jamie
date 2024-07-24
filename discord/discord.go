@@ -32,12 +32,12 @@ type UserSpeechStream struct {
 }
 
 type Bot struct {
-	log *log.Logger
-	con *dis.Session
-	asr speech.ASR
-	vox map[uint32]*UserSpeechStream
-	tab map[uint32]string
-	mut sync.RWMutex
+	logger         *log.Logger
+	session        *dis.Session
+	transcriber    speech.ASR
+	voiceStreams   map[uint32]*UserSpeechStream
+	userIDTable    map[uint32]string
+	mutex          sync.RWMutex
 }
 
 func NewBot(
