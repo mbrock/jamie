@@ -201,10 +201,6 @@ func (bot *Bot) processVoicePacket(
 		return fmt.Errorf("failed to get or create voice stream: %w", err)
 	}
 
-	relativeOpusTimestamp := packet.Timestamp - stream.Beginning.SampleIndex
-	relativeSequence := packet.Sequence - stream.Beginning.PacketIndex
-	receiveTime := time.Now().UnixNano()
-
 	packetID := etc.Gensym()
 	err = db.SavePacket(
 		packetID,
