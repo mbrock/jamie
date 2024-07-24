@@ -280,43 +280,47 @@ func (bot *Bot) getOrCreateVoiceStream(
 
 func (s *UserSpeechStream) listen() {
 	for phrase := range s.TranscriptionSession.Read() {
-		var final string
+		s.handlePhrase(phrase)
+	}
+}
 
-		for draft := range phrase {
-			final = draft
+func (s *UserSpeechStream) handlePhrase(phrase <-chan string) {
+	var final string
+
+	for draft := range phrase {
+		final = draft
+	}
+
+	if final != "" {
+		if strings.EqualFold(final, "Change my identity.") {
+			s.handleAvatarChangeRequest()
+			return
 		}
 
-		if final != "" {
-			if strings.EqualFold(final, "Change my identity.") {
-				s.handleAvatarChangeRequest()
-				continue
-			}
+		_, err := s.bot.session.ChannelMessageSend(
+			s.ChannelID,
+			fmt.Sprintf("%s %s", s.Avatar, final),
+		)
 
-			_, err := s.bot.session.ChannelMessageSend(
-				s.ChannelID,
-				fmt.Sprintf("%s %s", s.Avatar, final),
+		if err != nil {
+			s.bot.logger.Error(
+				"failed to send transcribed message",
+				"error",
+				err.Error(),
 			)
+		}
 
-			if err != nil {
-				s.bot.logger.Error(
-					"failed to send transcribed message",
-					"error",
-					err.Error(),
-				)
-			}
-
-			err = db.SaveTranscript(
-				s.GuildID,
-				s.ChannelID,
-				final,
+		err = db.SaveTranscript(
+			s.GuildID,
+			s.ChannelID,
+			final,
+		)
+		if err != nil {
+			s.bot.logger.Error(
+				"failed to save transcript to database",
+				"error",
+				err.Error(),
 			)
-			if err != nil {
-				s.bot.logger.Error(
-					"failed to save transcript to database",
-					"error",
-					err.Error(),
-				)
-			}
 		}
 	}
 }
