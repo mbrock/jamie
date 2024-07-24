@@ -28,6 +28,20 @@ func InitDB() {
 		stmts: make(map[string]*sql.Stmt),
 	}
 
+	// Load and apply migrations
+	migrations, err := LoadMigrations("db")
+	if err != nil {
+		log.Fatal("load migrations", "error", err.Error())
+	}
+
+	logger := log.New(os.Stdout)
+	sqlLogger := logger.WithPrefix("sql")
+
+	err = Migrate(db.DB, migrations, sqlLogger)
+	if err != nil {
+		log.Fatal("apply migrations", "error", err.Error())
+	}
+
 	err = db.prepareStatements()
 	if err != nil {
 		log.Fatal(err)
