@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"jamie/main"
+
 	discordsdk "github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
 	"github.com/haguro/elevenlabs-go"
@@ -726,15 +728,9 @@ func (bot *Bot) handleGenerateAudioCommand(
 	m *discordsdk.MessageCreate,
 	args []string,
 ) error {
-	streamID, startTime, endTime, err := db.GetAudioGenerationParams(
-		args,
-		bot.db,
-	)
+	streamID, startTime, endTime, err := getAudioGenerationParams(args, bot.db)
 	if err != nil {
-		return fmt.Errorf(
-			"failed to get audio generation parameters: %w",
-			err,
-		)
+		return fmt.Errorf("failed to get audio generation parameters: %w", err)
 	}
 
 	// Generate the audio
