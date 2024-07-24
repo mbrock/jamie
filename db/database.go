@@ -509,3 +509,39 @@ func EndStreamForChannel(guildID, channelID string) error {
 	)
 	return err
 }
+
+func (db *DB) GetTodayTranscriptions() ([]Transcription, error) {
+	query := `
+		SELECT s.emoji, r.text, r.created_at
+		FROM recognitions r
+		JOIN speakers s ON r.stream = s.stream
+		WHERE DATE(r.created_at) = DATE('now')
+		ORDER BY r.created_at ASC
+	`
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var transcriptions []Transcription
+	for rows.Next() {
+		var t Transcription
+		var timestampStr string
+		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr)
+		if err != nil {
+			return nil, err
+		}
+		t.Timestamp, err = time.Parse("2006-01-02 15:04:05", timestampStr)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse timestamp: %w", err)
+		}
+		transcriptions = append(transcriptions, t)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return transcriptions, nil
+}
