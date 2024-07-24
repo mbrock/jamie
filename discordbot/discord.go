@@ -284,6 +284,34 @@ func (bot *Bot) getOrCreateVoiceStream(
 		stream.ID,
 	)
 
+	// Create speaker
+	speakerID := etc.Gensym()
+	err = db.CreateSpeaker(speakerID, string(stream.ID), stream.Emoji)
+	if err != nil {
+		bot.log.Error("failed to create speaker", "error", err.Error())
+	}
+
+	// Create discord speaker
+	discordSpeakerID := etc.Gensym()
+	err = db.CreateDiscordSpeaker(discordSpeakerID, speakerID, string(stream.UserID))
+	if err != nil {
+		bot.log.Error("failed to create discord speaker", "error", err.Error())
+	}
+
+	// Create discord channel stream
+	channelStreamID := etc.Gensym()
+	err = db.CreateDiscordChannelStream(channelStreamID, string(stream.ID), string(stream.GuildID), string(stream.ChannelID))
+	if err != nil {
+		bot.log.Error("failed to create discord channel stream", "error", err.Error())
+	}
+
+	// Create attribution
+	attributionID := etc.Gensym()
+	err = db.CreateAttribution(attributionID, string(stream.ID), speakerID)
+	if err != nil {
+		bot.log.Error("failed to create attribution", "error", err.Error())
+	}
+
 	go stream.SpeechRecognitionLoop()
 
 	return stream, nil
@@ -321,14 +349,12 @@ func (s *UserStream) ProcessSegment(segmentDrafts <-chan string) {
 			)
 		}
 
-		err = db.SaveTranscript(
-			string(s.GuildID),
-			string(s.ChannelID),
-			final,
-		)
+		// Save recognition
+		recognitionID := etc.Gensym()
+		err = db.SaveRecognition(recognitionID, string(s.ID), 0, 0, final, 1.0) // Assuming sample_idx and sample_len are 0, and confidence is 1.0
 		if err != nil {
 			s.bot.log.Error(
-				"failed to save transcript to database",
+				"failed to save recognition to database",
 				"error",
 				err.Error(),
 			)
@@ -348,5 +374,18 @@ func (s *UserStream) handleAvatarChangeRequest() {
 			"error",
 			err.Error(),
 		)
+	}
+
+	// Update speaker emoji in the database
+	stmt, err := db.GetDB().Prepare("UPDATE speakers SET emoji = ? WHERE stream = ?")
+	if err != nil {
+		s.bot.log.Error("failed to prepare update statement", "error", err.Error())
+		return
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(s.Emoji, string(s.ID))
+	if err != nil {
+		s.bot.log.Error("failed to update speaker emoji", "error", err.Error())
 	}
 }
