@@ -91,7 +91,7 @@ func (bot *Bot) handleGuildCreate(
 	event *discordsdk.GuildCreate,
 ) {
 	bot.logger.Info("joined guild", "guild", event.Guild.Name)
-	err := bot.joinAllVoiceChannels(event.Guild.ID)
+	err := bot.joinAllVoiceChannels(GuildID(event.Guild.ID))
 	if err != nil {
 		bot.logger.Error(
 			"failed to join voice channels",
@@ -103,8 +103,8 @@ func (bot *Bot) handleGuildCreate(
 
 func (bot *Bot) joinVoiceChannel(guildID GuildID, channelID ChannelID) error {
 	vc, err := bot.session.ChannelVoiceJoin(
-		guildID,
-		channelID,
+		string(guildID),
+		string(channelID),
 		false,
 		false,
 	)
@@ -118,14 +118,14 @@ func (bot *Bot) joinVoiceChannel(guildID GuildID, channelID ChannelID) error {
 }
 
 func (bot *Bot) joinAllVoiceChannels(guildID GuildID) error {
-	channels, err := bot.session.GuildChannels(guildID)
+	channels, err := bot.session.GuildChannels(string(guildID))
 	if err != nil {
 		return fmt.Errorf("error getting guild channels: %w", err)
 	}
 
 	for _, channel := range channels {
 		if channel.Type == discordsdk.ChannelTypeGuildVoice {
-			err := bot.joinVoiceChannel(guildID, channel.ID)
+			err := bot.joinVoiceChannel(guildID, ChannelID(channel.ID))
 			if err != nil {
 				bot.logger.Error(
 					"failed to join voice channel",
@@ -200,7 +200,7 @@ func (bot *Bot) processVoicePacket(
 	receiveTime := time.Now().UnixNano()
 
 	err = db.SaveDiscordVoicePacket(
-		stream.ID,
+		string(stream.ID),
 		packet.Opus,
 		relativeSequence,
 		relativeOpusTimestamp,
@@ -265,10 +265,10 @@ func (bot *Bot) getOrCreateVoiceStream(
 	bot.mutex.Unlock()
 
 	err = db.CreateVoiceStream(
-		guildID,
-		channelID,
-		streamID,
-		userIDStr,
+		string(guildID),
+		string(channelID),
+		string(streamID),
+		string(userIDStr),
 		packet.SSRC,
 		stream.FirstPacketTiming.SampleIndex,
 		stream.FirstPacketTiming.ReceivedAt,
