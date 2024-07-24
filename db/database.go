@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"log"
 
+	"jamie/etc"
+
 	_ "github.com/mattn/go-sqlite3"
 )
 
