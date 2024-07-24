@@ -2,21 +2,17 @@ package db
 
 import (
 	"database/sql"
-	"embed"
 	"log"
 	"time"
 
 	_ "github.com/mattn/go-sqlite3"
 )
 
-//go:embed 001/schema.sql
-var schemaFS embed.FS
-
 var db *sql.DB
 
 func InitDB() {
 	var err error
-	db, err = sql.Open("sqlite3", "./002.db")
+	db, err = sql.Open("sqlite3", "./001.db")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -26,24 +22,17 @@ func GetDB() *sql.DB {
 	return db
 }
 
-func CreateVoiceStream(
-	guildID, channelID, streamID, userID string,
-	ssrc uint32,
-	firstOpusTimestamp uint32,
-	firstReceiveTime int64,
-	firstSequence uint16,
+func CreateStream(
+	id string,
+	packetSeqOffset int,
+	sampleIdxOffset int,
 ) error {
 	stmt, err := db.Prepare(`
-		INSERT INTO discord_voice_stream (
-			guild_id,
-			channel_id,
-			stream_id,
-			ssrc,
-			user_id,
-			first_opus_timestamp,
-			first_receive_time,
-			first_sequence
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO streams (
+			id,
+			packet_seq_offset,
+			sample_idx_offset
+		) VALUES (?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -51,32 +40,27 @@ func CreateVoiceStream(
 	defer stmt.Close()
 
 	_, err = stmt.Exec(
-		guildID,
-		channelID,
-		streamID,
-		ssrc,
-		userID,
-		firstOpusTimestamp,
-		firstReceiveTime,
-		firstSequence,
+		id,
+		packetSeqOffset,
+		sampleIdxOffset,
 	)
 	return err
 }
 
-func SaveDiscordVoicePacket(
-	streamID string,
-	packet []byte,
-	relativeSequence uint16,
-	relativeOpusTimestamp uint32,
-	receiveTime int64,
+func SavePacket(
+	id string,
+	stream string,
+	packetSeq int,
+	sampleIdx int,
+	payload []byte,
 ) error {
 	stmt, err := db.Prepare(`
-		INSERT INTO discord_voice_packet (
-			stream_id, 
-			packet, 
-			relative_sequence, 
-			relative_opus_timestamp, 
-			receive_time
+		INSERT INTO packets (
+			id,
+			stream,
+			packet_seq,
+			sample_idx,
+			payload
 		) VALUES (?, ?, ?, ?, ?)
 	`)
 	if err != nil {
@@ -85,11 +69,11 @@ func SaveDiscordVoicePacket(
 	defer stmt.Close()
 
 	_, err = stmt.Exec(
-		streamID,
-		packet,
-		relativeSequence,
-		relativeOpusTimestamp,
-		receiveTime,
+		id,
+		stream,
+		packetSeq,
+		sampleIdx,
+		payload,
 	)
 	return err
 }
