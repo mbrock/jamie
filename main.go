@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/log"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
@@ -121,37 +123,81 @@ var generateAudioCmd = &cobra.Command{
 }
 
 func runGenerateAudio(cmd *cobra.Command, args []string) {
-	if len(args) < 3 {
-		fmt.Println("Usage: jamie generateaudio <stream_id> <start_time> <end_time>")
-		return
-	}
-
-	streamID := args[0]
-	startTime, err := time.Parse(time.RFC3339, args[1])
-	if err != nil {
-		fmt.Printf("Invalid start time format: %v\n", err)
-		return
-	}
-	endTime, err := time.Parse(time.RFC3339, args[2])
-	if err != nil {
-		fmt.Printf("Invalid end time format: %v\n", err)
-		return
-	}
-
 	mainLogger, _, _, sqlLogger := createLoggers()
 
-	err = db.InitDB(sqlLogger)
+	err := db.InitDB(sqlLogger)
 	if err != nil {
 		mainLogger.Fatal("initialize database", "error", err.Error())
 	}
 	defer db.Close()
+
+	var streamID string
+	var startTime, endTime time.Time
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Enter the stream ID").
+				Placeholder("e.g., abc123").
+				Validate(func(s string) error {
+					if s == "" {
+						return errors.New("stream ID cannot be empty")
+					}
+					return nil
+				}).
+				Value(&streamID),
+
+			huh.NewInput().
+				Title("Enter the start time (RFC3339 format)").
+				Placeholder("e.g., 2023-04-01T12:00:00Z").
+				Validate(func(s string) error {
+					t, err := time.Parse(time.RFC3339, s)
+					if err != nil {
+						return errors.New(
+							"invalid time format, please use RFC3339",
+						)
+					}
+					startTime = t
+					return nil
+				}),
+
+			huh.NewInput().
+				Title("Enter the end time (RFC3339 format)").
+				Placeholder("e.g., 2023-04-01T13:00:00Z").
+				Validate(func(s string) error {
+					t, err := time.Parse(time.RFC3339, s)
+					if err != nil {
+						return errors.New(
+							"invalid time format, please use RFC3339",
+						)
+					}
+					endTime = t
+					if endTime.Before(startTime) {
+						return errors.New(
+							"end time must be after start time",
+						)
+					}
+					return nil
+				}),
+		),
+	)
+
+	err = form.Run()
+	if err != nil {
+		mainLogger.Fatal("form input", "error", err.Error())
+	}
 
 	oggData, err := generateOggOpusBlob(streamID, startTime, endTime)
 	if err != nil {
 		mainLogger.Fatal("generate OGG Opus blob", "error", err.Error())
 	}
 
-	outputFileName := fmt.Sprintf("audio_%s_%s_%s.ogg", streamID, startTime.Format("20060102T150405"), endTime.Format("20060102T150405"))
+	outputFileName := fmt.Sprintf(
+		"audio_%s_%s_%s.ogg",
+		streamID,
+		startTime.Format("20060102T150405"),
+		endTime.Format("20060102T150405"),
+	)
 	err = os.WriteFile(outputFileName, oggData, 0644)
 	if err != nil {
 		mainLogger.Fatal("write audio file", "error", err.Error())
@@ -160,9 +206,13 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	fmt.Printf("Audio file generated: %s\n", outputFileName)
 }
 
-func generateOggOpusBlob(streamID string, startTime, endTime time.Time) ([]byte, error) {
+func generateOggOpusBlob(
+	streamID string,
+	startTime, endTime time.Time,
+) ([]byte, error) {
 	// Fetch packets from the database
-	packets, err := db.GetDB().GetPacketsForStreamInTimeRange(streamID, startTime, endTime)
+	packets, err := db.GetDB().
+		GetPacketsForStreamInTimeRange(streamID, startTime, endTime)
 	if err != nil {
 		return nil, fmt.Errorf("fetch packets: %w", err)
 	}
