@@ -265,11 +265,11 @@ func (bot *Bot) getOrCreateVoiceStream(
 		bot.log.Warn("UserID not set for stream", "ssrc", packet.SSRC)
 	}
 
-	err = db.CreateVoiceStream(
+	err := db.CreateVoiceStream(
 		string(guildID),
 		string(channelID),
-		string(streamID),
-		string(userIDStr),
+		string(stream.ID),
+		string(stream.UserID),
 		packet.SSRC,
 		stream.FirstPacketTiming.SampleIndex,
 		stream.FirstPacketTiming.ReceivedAt,
@@ -287,9 +287,9 @@ func (bot *Bot) getOrCreateVoiceStream(
 		"ssrc",
 		int(packet.SSRC),
 		"userID",
-		userIDStr,
+		stream.UserID,
 		"streamID",
-		streamID,
+		stream.ID,
 	)
 
 	go stream.listen()
