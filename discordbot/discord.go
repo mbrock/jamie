@@ -17,6 +17,7 @@ import (
 	"time"
 
 	discordsdk "github.com/bwmarrin/discordgo"
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/log"
 	"github.com/haguro/elevenlabs-go"
 	"github.com/pion/rtp"
@@ -726,22 +727,52 @@ func (bot *Bot) handleGenerateAudioCommand(
 	m *discordsdk.MessageCreate,
 	args []string,
 ) error {
-	if len(args) < 3 {
-		return fmt.Errorf(
-			"usage: !generateaudio <streamID> <startTime> <endTime>",
-		)
+	var streamID string
+	var startTime, endTime time.Time
+
+	// Get available streams
+	streams, err := bot.db.GetRecentStreams()
+	if err != nil {
+		return fmt.Errorf("failed to get recent streams: %w", err)
 	}
 
-	streamID := args[0]
-	startTime, err := time.Parse(time.RFC3339, args[1])
-	if err != nil {
-		return fmt.Errorf("invalid start time format: %w", err)
-	}
-	endTime, err := time.Parse(time.RFC3339, args[2])
-	if err != nil {
-		return fmt.Errorf("invalid end time format: %w", err)
+	// Create options for stream selection
+	streamOptions := make([]huh.Option[string], len(streams))
+	for i, stream := range streams {
+		streamOptions[i] = huh.NewOption(stream.Description, stream.ID)
 	}
 
+	// Create the form
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Choose a stream").
+				Options(streamOptions...).
+				Value(&streamID),
+			huh.NewInput().
+				Title("Start time (YYYY-MM-DD HH:MM:SS)").
+				Validate(func(s string) error {
+					_, err := time.Parse("2006-01-02 15:04:05", s)
+					return err
+				}).
+				Value(&startTime),
+			huh.NewInput().
+				Title("End time (YYYY-MM-DD HH:MM:SS)").
+				Validate(func(s string) error {
+					_, err := time.Parse("2006-01-02 15:04:05", s)
+					return err
+				}).
+				Value(&endTime),
+		),
+	)
+
+	// Run the form
+	err = form.Run()
+	if err != nil {
+		return fmt.Errorf("form error: %w", err)
+	}
+
+	// Generate the audio
 	oggData, err := bot.GenerateOggOpusBlob(streamID, startTime, endTime)
 	if err != nil {
 		return fmt.Errorf("generate OGG Opus blob: %w", err)
@@ -761,7 +792,7 @@ func (bot *Bot) handleGenerateAudioCommand(
 	tempFile.Close()
 
 	// Send the audio file as an attachment
-	_, err = s.ChannelFileSend(m.ChannelID, "audio.ogg", tempFile)
+	_, err = s.ChannelFileSend(m.ChannelID, "audio.ogg", tempFile.Name())
 	if err != nil {
 		return fmt.Errorf("send audio file: %w", err)
 	}
