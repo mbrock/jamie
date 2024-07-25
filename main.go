@@ -235,19 +235,19 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 		)
 	}
 
-	startTime := transcriptions[startIndex].Timestamp
-	endTime := transcriptions[endIndex].Timestamp
+	startSample := transcriptions[startIndex].SampleIdx
+	endSample := transcriptions[endIndex].SampleIdx
 
-	oggData, err := generateOggOpusBlob(selectedStreamID, startTime, endTime)
+	oggData, err := generateOggOpusBlob(selectedStreamID, startSample, endSample)
 	if err != nil {
 		mainLogger.Fatal("generate OGG Opus blob", "error", err.Error())
 	}
 
 	outputFileName := fmt.Sprintf(
-		"audio_%s_%s_%s.ogg",
+		"audio_%s_%d_%d.ogg",
 		selectedStreamID,
-		startTime.Format("20060102T150405"),
-		endTime.Format("20060102T150405"),
+		startSample,
+		endSample,
 	)
 	err = os.WriteFile(outputFileName, oggData, 0644)
 	if err != nil {
@@ -259,11 +259,11 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 
 func generateOggOpusBlob(
 	streamID string,
-	startTime, endTime time.Time,
+	startSample, endSample int,
 ) ([]byte, error) {
 	// Fetch packets from the database
 	packets, err := db.GetDB().
-		GetPacketsForStreamInTimeRange(streamID, startTime, endTime)
+		GetPacketsForStreamInSampleRange(streamID, startSample, endSample)
 	if err != nil {
 		return nil, fmt.Errorf("fetch packets: %w", err)
 	}

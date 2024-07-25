@@ -648,7 +648,7 @@ func (bot *Bot) GenerateOggOpusBlob(
 	startTime, endTime time.Time,
 ) ([]byte, error) {
 	// Fetch packets from the database
-	packets, err := bot.db.GetPacketsForStreamInTimeRange(
+	packets, err := bot.db.GetPacketsForStreamInSampleRange(
 		streamID,
 		startTime,
 		endTime,

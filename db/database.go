@@ -16,6 +16,7 @@ type Transcription struct {
 	Emoji     string
 	Text      string
 	Timestamp time.Time
+	SampleIdx int
 }
 
 var sqlLogger *log.Logger
@@ -161,11 +162,11 @@ func (db *DB) PrepareStatements() error {
 				FROM discord_channel_streams
 				WHERE discord_guild = ? AND discord_channel = ?
 			) AND ended_at IS NULL`,
-		"getPacketsForStreamInTimeRange": `
-			SELECT payload, received_at
+		"getPacketsForStreamInSampleRange": `
+			SELECT payload, sample_idx
 			FROM packets
-			WHERE stream = ? AND received_at BETWEEN ? AND ?
-			ORDER BY packet_seq ASC`,
+			WHERE stream = ? AND sample_idx BETWEEN ? AND ?
+			ORDER BY sample_idx ASC`,
 	}
 
 	for name, query := range statements {
@@ -344,7 +345,7 @@ func (db *DB) GetRecentTranscriptions() ([]Transcription, error) {
 	for rows.Next() {
 		var t Transcription
 		var timestampStr string
-		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr)
+		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr, &t.SampleIdx)
 		if err != nil {
 			return nil, err
 		}
@@ -399,11 +400,11 @@ func (db *DB) GetRecentStreamsWithTranscriptionCount(guildID, channelID string, 
 
 func (db *DB) GetTranscriptionsForStream(streamID string) ([]Transcription, error) {
 	query := `
-		SELECT s.emoji, r.text, r.created_at
+		SELECT s.emoji, r.text, r.created_at, r.sample_idx
 		FROM recognitions r
 		JOIN speakers s ON r.stream = s.stream
 		WHERE r.stream = ?
-		ORDER BY r.created_at ASC
+		ORDER BY r.sample_idx ASC
 	`
 	rows, err := db.Query(query, streamID)
 	if err != nil {
@@ -750,17 +751,17 @@ func RunMigrations(logger *log.Logger) error {
 	return nil
 }
 
-func (db *DB) GetPacketsForStreamInTimeRange(
+func (db *DB) GetPacketsForStreamInSampleRange(
 	streamID string,
-	startTime, endTime time.Time,
+	startSample, endSample int,
 ) ([]struct {
 	Payload   []byte
-	Timestamp time.Time
+	SampleIdx int
 }, error) {
-	rows, err := db.stmts["getPacketsForStreamInTimeRange"].Query(
+	rows, err := db.stmts["getPacketsForStreamInSampleRange"].Query(
 		streamID,
-		startTime,
-		endTime,
+		startSample,
+		endSample,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query packets: %w", err)
@@ -769,14 +770,14 @@ func (db *DB) GetPacketsForStreamInTimeRange(
 
 	var packets []struct {
 		Payload   []byte
-		Timestamp time.Time
+		SampleIdx int
 	}
 	for rows.Next() {
 		var p struct {
 			Payload   []byte
-			Timestamp time.Time
+			SampleIdx int
 		}
-		if err := rows.Scan(&p.Payload, &p.Timestamp); err != nil {
+		if err := rows.Scan(&p.Payload, &p.SampleIdx); err != nil {
 			return nil, fmt.Errorf("scan packet data: %w", err)
 		}
 		packets = append(packets, p)
