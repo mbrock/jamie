@@ -436,7 +436,7 @@ func (db *DB) GetTranscriptionsForStream(
 			return nil, fmt.Errorf("parse timestamp: %w", err)
 		}
 		if endTimeStr != "" {
-			t.EndTime, err = time.Parse(time.RFC3339, endTimeStr)
+			t.EndTime, err = time.Parse("2006-01-02 15:04:05", endTimeStr)
 			if err != nil {
 				return nil, fmt.Errorf("parse end timestamp: %w", err)
 			}
