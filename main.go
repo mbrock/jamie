@@ -279,15 +279,36 @@ func generateOggOpusBlob(
 	}
 
 	// Write packets to the OGG writer
+	var lastTimestamp time.Time
 	for i, packet := range packets {
+		if !lastTimestamp.IsZero() {
+			gap := packet.Timestamp.Sub(lastTimestamp)
+			if gap > 20*time.Millisecond {
+				silentPacketsCount := int(gap / (20 * time.Millisecond))
+				for j := 0; j < silentPacketsCount; j++ {
+					silentPacket := make([]byte, 2) // Minimum valid Opus packet
+					if err := oggWriter.WriteRTP(&rtp.Packet{
+						Header: rtp.Header{
+							Timestamp: uint32((i * 960) + (j * 960)),
+						},
+						Payload: silentPacket,
+					}); err != nil {
+						return nil, fmt.Errorf("write silent Opus packet: %w", err)
+					}
+				}
+			}
+		}
+
 		if err := oggWriter.WriteRTP(&rtp.Packet{
 			Header: rtp.Header{
 				Timestamp: uint32(i * 960),
 			},
-			Payload: packet,
+			Payload: packet.Payload,
 		}); err != nil {
 			return nil, fmt.Errorf("write Opus packet: %w", err)
 		}
+
+		lastTimestamp = packet.Timestamp
 	}
 
 	// Close the OGG writer to finalize the file

@@ -162,7 +162,7 @@ func (db *DB) PrepareStatements() error {
 				WHERE discord_guild = ? AND discord_channel = ?
 			) AND ended_at IS NULL`,
 		"getPacketsForStreamInTimeRange": `
-			SELECT payload
+			SELECT payload, received_at
 			FROM packets
 			WHERE stream = ? AND received_at BETWEEN ? AND ?
 			ORDER BY packet_seq ASC`,
@@ -753,7 +753,10 @@ func RunMigrations(logger *log.Logger) error {
 func (db *DB) GetPacketsForStreamInTimeRange(
 	streamID string,
 	startTime, endTime time.Time,
-) ([][]byte, error) {
+) ([]struct {
+	Payload   []byte
+	Timestamp time.Time
+}, error) {
 	rows, err := db.stmts["getPacketsForStreamInTimeRange"].Query(
 		streamID,
 		startTime,
@@ -764,13 +767,19 @@ func (db *DB) GetPacketsForStreamInTimeRange(
 	}
 	defer rows.Close()
 
-	var packets [][]byte
+	var packets []struct {
+		Payload   []byte
+		Timestamp time.Time
+	}
 	for rows.Next() {
-		var payload []byte
-		if err := rows.Scan(&payload); err != nil {
-			return nil, fmt.Errorf("scan packet payload: %w", err)
+		var p struct {
+			Payload   []byte
+			Timestamp time.Time
 		}
-		packets = append(packets, payload)
+		if err := rows.Scan(&p.Payload, &p.Timestamp); err != nil {
+			return nil, fmt.Errorf("scan packet data: %w", err)
+		}
+		packets = append(packets, p)
 	}
 
 	if err := rows.Err(); err != nil {
