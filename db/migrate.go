@@ -212,7 +212,28 @@ func Migrate(db *sql.DB, logger *log.Logger) error {
 		}
 
 		if !confirm {
-			logger.Info("Migration skipped", "id", migration.ID)
+			var markAsDone bool
+			err = huh.NewConfirm().
+				Title(fmt.Sprintf("Mark migration %s as already done?", migration.ID)).
+				Value(&markAsDone).
+				Run()
+
+			if err != nil {
+				return fmt.Errorf("error getting user confirmation: %w", err)
+			}
+
+			if markAsDone {
+				_, err = db.Exec(
+					"INSERT INTO migration_history (id, applied_at) VALUES (?, julianday('now'))",
+					migration.ID,
+				)
+				if err != nil {
+					return fmt.Errorf("error marking migration as done: %w", err)
+				}
+				logger.Info("Migration marked as done", "id", migration.ID)
+			} else {
+				logger.Info("Migration skipped", "id", migration.ID)
+			}
 			continue
 		}
 
