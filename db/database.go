@@ -223,7 +223,7 @@ func (db *DB) SaveRecognition(id, stream string, sampleIdx, sampleLen int, text 
 }
 
 // queryRowsGeneric is a generic helper function that executes a query and processes the rows using a provided parser function
-func (db *DB) queryRowsGeneric[T any](query string, args []interface{}, parser func(*sql.Rows) (T, error)) ([]T, error) {
+func queryRowsGeneric[T any](db *DB, query string, args []interface{}, parser func(*sql.Rows) (T, error)) ([]T, error) {
 	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, err
@@ -244,7 +244,7 @@ func (db *DB) queryRowsGeneric[T any](query string, args []interface{}, parser f
 
 // queryRows is a non-generic wrapper for queryRowsGeneric that returns []interface{}
 func (db *DB) queryRows(query string, args []interface{}, parser func(*sql.Rows) (interface{}, error)) ([]interface{}, error) {
-	return db.queryRowsGeneric(query, args, parser)
+	return queryRowsGeneric(db, query, args, parser)
 }
 
 // GetRecentTranscriptions retrieves recent transcriptions
