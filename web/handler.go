@@ -172,9 +172,8 @@ type Transcription struct {
 func (h *Handler) handleStreamAudio(w http.ResponseWriter, r *http.Request) {
 	streamID := r.URL.Query().Get("stream")
 	startTimeStr := r.URL.Query().Get("start")
-	endTimeStr := r.URL.Query().Get("end")
 
-	if streamID == "" || startTimeStr == "" || endTimeStr == "" {
+	if streamID == "" || startTimeStr == "" {
 		http.Error(w, "Missing required parameters", http.StatusBadRequest)
 		return
 	}
@@ -208,6 +207,7 @@ func (h *Handler) handleStreamAudio(w http.ResponseWriter, r *http.Request) {
 
 	startSample := transcriptions[0].SampleIdx
 	endSample := transcriptions[len(transcriptions)-1].SampleIdx
+	actualEndTime := transcriptions[len(transcriptions)-1].Timestamp
 
 	oggData, err := generateOggOpusBlob(streamID, startSample, endSample)
 	if err != nil {
@@ -222,7 +222,7 @@ func (h *Handler) handleStreamAudio(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "audio/ogg")
 	w.Header().
-		Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"audio_%s_%s_%s.ogg\"", streamID, startTimeStr, endTimeStr))
+		Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"audio_%s_%s_%s.ogg\"", streamID, startTimeStr, actualEndTime.Format(time.RFC3339)))
 	w.Header().Set("Content-Length", strconv.Itoa(len(oggData)))
 
 	_, err = w.Write(oggData)
