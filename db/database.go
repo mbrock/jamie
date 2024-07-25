@@ -21,7 +21,11 @@ func (db *DB) execContext(query string, args ...interface{}) error {
 	return err
 }
 
-func (db *DB) queryRows(query string, args []interface{}, parser func(*sql.Rows) (interface{}, error)) ([]interface{}, error) {
+func (db *DB) queryRows(
+	query string,
+	args []interface{},
+	parser func(*sql.Rows) (interface{}, error),
+) ([]interface{}, error) {
 	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, err
@@ -796,7 +800,13 @@ func (db *DB) GetConversationTimeRanges(minSilence time.Duration) ([]struct {
 
 	minSilenceSeconds := minSilence.Seconds()
 
-	rows, err := db.Query(query, minSilenceSeconds, minSilenceSeconds, minSilenceSeconds, minSilenceSeconds)
+	rows, err := db.Query(
+		query,
+		minSilenceSeconds,
+		minSilenceSeconds,
+		minSilenceSeconds,
+		minSilenceSeconds,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -825,7 +835,11 @@ func (db *DB) GetConversationTimeRanges(minSilence time.Duration) ([]struct {
 
 		duration := end.Sub(start)
 		if duration > 8*time.Hour {
-			return nil, fmt.Errorf("conversation duration exceeds 8 hours: %v to %v", start, end)
+			return nil, fmt.Errorf(
+				"conversation duration exceeds 8 hours: %v to %v",
+				start,
+				end,
+			)
 		}
 
 		results = append(results, struct {
@@ -844,7 +858,9 @@ func (db *DB) GetConversationTimeRanges(minSilence time.Duration) ([]struct {
 	return results, nil
 }
 
-func (db *DB) GetTranscriptionsForTimeRange(startTime, endTime time.Time) ([]Transcription, error) {
+func (db *DB) GetTranscriptionsForTimeRange(
+	startTime, endTime time.Time,
+) ([]Transcription, error) {
 	query := `
 		SELECT s.emoji, r.text, r.created_at
 		FROM recognitions r
@@ -853,9 +869,19 @@ func (db *DB) GetTranscriptionsForTimeRange(startTime, endTime time.Time) ([]Tra
 		ORDER BY r.created_at ASC
 	`
 
-	db.logger.Debug("Fetching transcriptions", "startTime", startTime, "endTime", endTime)
+	db.logger.Debug(
+		"Fetching transcriptions",
+		"startTime",
+		startTime,
+		"endTime",
+		endTime,
+	)
 
-	rows, err := db.Query(query, startTime.Format("2006-01-02 15:04:05"), endTime.Format("2006-01-02 15:04:05"))
+	rows, err := db.Query(
+		query,
+		startTime.Format("2006-01-02 15:04:05"),
+		endTime.Format("2006-01-02 15:04:05"),
+	)
 	if err != nil {
 		db.logger.Error("Error querying transcriptions", "error", err)
 		return nil, err
@@ -871,9 +897,15 @@ func (db *DB) GetTranscriptionsForTimeRange(startTime, endTime time.Time) ([]Tra
 			db.logger.Error("Error scanning row", "error", err)
 			return nil, err
 		}
-		t.Timestamp, err = time.Parse("2006-01-02 15:04:05", timestampStr)
+		t.Timestamp, err = time.Parse(time.RFC3339, timestampStr)
 		if err != nil {
-			db.logger.Error("Error parsing timestamp", "error", err, "timestampStr", timestampStr)
+			db.logger.Error(
+				"Error parsing timestamp",
+				"error",
+				err,
+				"timestampStr",
+				timestampStr,
+			)
 			return nil, fmt.Errorf("parse timestamp: %w", err)
 		}
 		transcriptions = append(transcriptions, t)

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"jamie/db"
+	"jamie/ogg"
 
 	"github.com/charmbracelet/log"
 )
@@ -79,7 +80,10 @@ func (h *Handler) handleIndex(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-func (h *Handler) handleConversations(w http.ResponseWriter, _ *http.Request) {
+func (h *Handler) handleConversations(
+	w http.ResponseWriter,
+	_ *http.Request,
+) {
 	conversations, err := h.db.GetConversationTimeRanges(3 * time.Minute)
 	if err != nil {
 		h.logger.Error("failed to get conversations", "error", err.Error())
@@ -93,21 +97,51 @@ func (h *Handler) handleConversations(w http.ResponseWriter, _ *http.Request) {
 		Transcriptions []db.Transcription
 	}
 
-	conversationsWithTranscriptions := make([]ConversationWithTranscriptions, 0, len(conversations))
+	conversationsWithTranscriptions := make(
+		[]ConversationWithTranscriptions,
+		0,
+		len(conversations),
+	)
 
 	for _, conv := range conversations {
-		transcriptions, err := h.db.GetTranscriptionsForTimeRange(conv.StartTime, conv.EndTime)
+		transcriptions, err := h.db.GetTranscriptionsForTimeRange(
+			conv.StartTime,
+			conv.EndTime,
+		)
 		if err != nil {
-			h.logger.Error("failed to get transcriptions for conversation", "error", err.Error(), "start_time", conv.StartTime, "end_time", conv.EndTime)
-			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			h.logger.Error(
+				"failed to get transcriptions for conversation",
+				"error",
+				err.Error(),
+				"start_time",
+				conv.StartTime,
+				"end_time",
+				conv.EndTime,
+			)
+			http.Error(
+				w,
+				"Internal Server Error",
+				http.StatusInternalServerError,
+			)
 			return
 		}
-		h.logger.Debug("Fetched transcriptions", "count", len(transcriptions), "start_time", conv.StartTime, "end_time", conv.EndTime)
-		conversationsWithTranscriptions = append(conversationsWithTranscriptions, ConversationWithTranscriptions{
-			StartTime:      conv.StartTime,
-			EndTime:        conv.EndTime,
-			Transcriptions: transcriptions,
-		})
+		h.logger.Debug(
+			"Fetched transcriptions",
+			"count",
+			len(transcriptions),
+			"start_time",
+			conv.StartTime,
+			"end_time",
+			conv.EndTime,
+		)
+		conversationsWithTranscriptions = append(
+			conversationsWithTranscriptions,
+			ConversationWithTranscriptions{
+				StartTime:      conv.StartTime,
+				EndTime:        conv.EndTime,
+				Transcriptions: transcriptions,
+			},
+		)
 	}
 
 	tmpl := template.Must(template.New("conversations").Parse(`
@@ -187,7 +221,10 @@ func (h *Handler) handleStreamAudio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	transcriptions, err := h.db.GetTranscriptionsForTimeRange(startTime, endTime)
+	transcriptions, err := h.db.GetTranscriptionsForTimeRange(
+		startTime,
+		endTime,
+	)
 	if err != nil {
 		h.logger.Error("failed to get transcriptions", "error", err.Error())
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -195,7 +232,11 @@ func (h *Handler) handleStreamAudio(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(transcriptions) == 0 {
-		http.Error(w, "No transcriptions found for the given time range", http.StatusNotFound)
+		http.Error(
+			w,
+			"No transcriptions found for the given time range",
+			http.StatusNotFound,
+		)
 		return
 	}
 
@@ -204,40 +245,33 @@ func (h *Handler) handleStreamAudio(w http.ResponseWriter, r *http.Request) {
 
 	oggData, err := generateOggOpusBlob(streamID, startSample, endSample)
 	if err != nil {
-		h.logger.Error("failed to generate OGG Opus blob", "error", err.Error())
+		h.logger.Error(
+			"failed to generate OGG Opus blob",
+			"error",
+			err.Error(),
+		)
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "audio/ogg")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"audio_%s_%s_%s.ogg\"", streamID, startTimeStr, endTimeStr))
+	w.Header().
+		Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"audio_%s_%s_%s.ogg\"", streamID, startTimeStr, endTimeStr))
 	w.Header().Set("Content-Length", strconv.Itoa(len(oggData)))
 
 	_, err = w.Write(oggData)
 	if err != nil {
-		h.logger.Error("failed to write OGG data to response", "error", err.Error())
+		h.logger.Error(
+			"failed to write OGG data to response",
+			"error",
+			err.Error(),
+		)
 	}
 }
-import (
-	"bytes"
-	"fmt"
-	"html/template"
-	"net/http"
-	"strconv"
-	"time"
 
-	"jamie/db"
-
-	"github.com/charmbracelet/log"
-	"github.com/pion/rtp"
-	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
-)
-import (
-	"jamie/ogg"
-)
-
-// ... (other imports and code)
-
-func generateOggOpusBlob(streamID string, startSample, endSample int) ([]byte, error) {
+func generateOggOpusBlob(
+	streamID string,
+	startSample, endSample int,
+) ([]byte, error) {
 	return ogg.GenerateOggOpusBlob(streamID, startSample, endSample)
 }
