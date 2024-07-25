@@ -238,7 +238,11 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	startSample := transcriptions[startIndex].SampleIdx
 	endSample := transcriptions[endIndex].SampleIdx
 
-	oggData, err := generateOggOpusBlob(selectedStreamID, startSample, endSample)
+	oggData, err := generateOggOpusBlob(
+		selectedStreamID,
+		startSample,
+		endSample,
+	)
 	if err != nil {
 		mainLogger.Fatal("generate OGG Opus blob", "error", err.Error())
 	}
@@ -280,20 +284,26 @@ func generateOggOpusBlob(
 
 	// Write packets to the OGG writer
 	var lastSampleIdx int
-	for i, packet := range packets {
+	for _, packet := range packets {
 		if lastSampleIdx != 0 {
 			gap := packet.SampleIdx - lastSampleIdx
 			if gap > 960 { // 960 samples = 20ms at 48kHz
 				silentPacketsCount := gap / 960
 				for j := 0; j < silentPacketsCount; j++ {
-					silentPacket := make([]byte, 2) // Minimum valid Opus packet
+					silentPacket := make(
+						[]byte,
+						2,
+					) // Minimum valid Opus packet
 					if err := oggWriter.WriteRTP(&rtp.Packet{
 						Header: rtp.Header{
 							Timestamp: uint32(lastSampleIdx + (j * 960)),
 						},
 						Payload: silentPacket,
 					}); err != nil {
-						return nil, fmt.Errorf("write silent Opus packet: %w", err)
+						return nil, fmt.Errorf(
+							"write silent Opus packet: %w",
+							err,
+						)
 					}
 				}
 			}
