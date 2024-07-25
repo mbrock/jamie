@@ -434,4 +434,205 @@ func (db *DB) SaveSpeechRecognitionSession(streamID, sessionData string) error {
 }
 
 // GetSpeechRecognitionSession retrieves a speech recognition session
-func (db *DB) GetS
+func (db *DB) GetSpeechRecognitionSession(streamID string) (string, error) {
+	query := `
+		SELECT session_data FROM speech_recognition_sessions WHERE stream = ?
+	`
+	var sessionData string
+	err := db.queryRow(context.Background(), query, streamID).Scan(&sessionData)
+	return sessionData, err
+}
+
+// GetChannelAndEmojiForStream retrieves the channel ID and emoji for a stream
+func (db *DB) GetChannelAndEmojiForStream(streamID string) (string, string, error) {
+	query := `
+		SELECT dcs.discord_channel, s.emoji 
+		FROM discord_channel_streams dcs
+		JOIN streams st ON dcs.stream = st.id
+		JOIN speakers s ON st.id = s.stream
+		WHERE st.id = ?
+	`
+	var channelID, emoji string
+	err := db.queryRow(context.Background(), query, streamID).Scan(&channelID, &emoji)
+	return channelID, emoji, err
+}
+
+// UpdateSpeakerEmoji updates the emoji for a speaker
+func (db *DB) UpdateSpeakerEmoji(streamID, newEmoji string) error {
+	query := `
+		UPDATE speakers SET emoji = ? WHERE stream = ?
+	`
+	_, err := db.exec(context.Background(), query, newEmoji, streamID)
+	return err
+}
+
+// GetChannelIDForStream retrieves the channel ID for a stream
+func (db *DB) GetChannelIDForStream(streamID string) (string, error) {
+	query := `
+		SELECT discord_channel FROM discord_channel_streams WHERE stream = ?
+	`
+	var channelID string
+	err := db.queryRow(context.Background(), query, streamID).Scan(&channelID)
+	return channelID, err
+}
+
+// EndStreamForChannel ends a stream for a channel
+func (db *DB) EndStreamForChannel(guildID, channelID string) error {
+	query := `
+		UPDATE streams
+		SET ended_at = CURRENT_TIMESTAMP
+		WHERE id IN (
+			SELECT stream
+			FROM discord_channel_streams
+			WHERE discord_guild = ? AND discord_channel = ?
+		) AND ended_at IS NULL
+	`
+	_, err := db.exec(context.Background(), query, guildID, channelID)
+	return err
+}
+
+// GetTodayTranscriptions retrieves transcriptions for today
+func (db *DB) GetTodayTranscriptions() ([]Transcription, error) {
+	query := `
+		SELECT s.emoji, r.text, r.created_at
+		FROM recognitions r
+		JOIN speakers s ON r.stream = s.stream
+		WHERE DATE(r.created_at) = DATE('now')
+		ORDER BY r.created_at ASC
+	`
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var transcriptions []Transcription
+	for rows.Next() {
+		var t Transcription
+		var timestampStr string
+		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr)
+		if err != nil {
+			return nil, err
+		}
+		t.Timestamp, err = time.Parse(time.RFC3339, timestampStr)
+		if err != nil {
+			return nil, fmt.Errorf("parse timestamp: %w", err)
+		}
+		transcriptions = append(transcriptions, t)
+	}
+
+	return transcriptions, rows.Err()
+}
+
+// GetTranscriptionsForDuration retrieves transcriptions for a specific duration
+func (db *DB) GetTranscriptionsForDuration(duration time.Duration) ([]Transcription, error) {
+	query := `
+		SELECT s.emoji, r.text, r.created_at
+		FROM recognitions r
+		JOIN speakers s ON r.stream = s.stream
+		WHERE r.created_at >= datetime('now', ?)
+		ORDER BY r.created_at ASC
+	`
+	rows, err := db.Query(query, fmt.Sprintf("-%d seconds", int(duration.Seconds())))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var transcriptions []Transcription
+	for rows.Next() {
+		var t Transcription
+		var timestampStr string
+		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr)
+		if err != nil {
+			return nil, err
+		}
+		t.Timestamp, err = time.Parse(time.RFC3339, timestampStr)
+		if err != nil {
+			return nil, fmt.Errorf("parse timestamp: %w", err)
+		}
+		transcriptions = append(transcriptions, t)
+	}
+
+	return transcriptions, rows.Err()
+}
+
+// SetSystemPrompt sets a system prompt
+func (db *DB) SetSystemPrompt(name, prompt string) error {
+	query := `
+		INSERT OR REPLACE INTO system_prompts (name, prompt)
+		VALUES (?, ?)
+	`
+	_, err := db.exec(context.Background(), query, name, prompt)
+	return err
+}
+
+// GetSystemPrompt retrieves a system prompt
+func (db *DB) GetSystemPrompt(name string) (string, error) {
+	query := `
+		SELECT prompt FROM system_prompts WHERE name = ?
+	`
+	var prompt string
+	err := db.queryRow(context.Background(), query, name).Scan(&prompt)
+	if err == sql.ErrNoRows {
+		return "", fmt.Errorf("no prompt found with name: %s", name)
+	}
+	return prompt, err
+}
+
+// ListSystemPrompts lists all system prompts
+func (db *DB) ListSystemPrompts() (map[string]string, error) {
+	query := `
+		SELECT name, prompt FROM system_prompts
+	`
+	rows, err := db.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	prompts := make(map[string]string)
+	for rows.Next() {
+		var name, prompt string
+		if err := rows.Scan(&name, &prompt); err != nil {
+			return nil, err
+		}
+		prompts[name] = prompt
+	}
+	return prompts, rows.Err()
+}
+
+// GetPacketsForStreamInSampleRange retrieves packets for a stream within a sample range
+func (db *DB) GetPacketsForStreamInSampleRange(streamID string, startSample, endSample int) ([]struct {
+	Payload   []byte
+	SampleIdx int
+}, error) {
+	query := `
+		SELECT payload, sample_idx
+		FROM packets
+		WHERE stream = ? AND sample_idx BETWEEN ? AND ?
+		ORDER BY sample_idx ASC
+	`
+	rows, err := db.Query(query, streamID, startSample, endSample)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var packets []struct {
+		Payload   []byte
+		SampleIdx int
+	}
+	for rows.Next() {
+		var p struct {
+			Payload   []byte
+			SampleIdx int
+		}
+		if err := rows.Scan(&p.Payload, &p.SampleIdx); err != nil {
+			return nil, err
+		}
+		packets = append(packets, p)
+	}
+
+	return packets, rows.Err()
+}
