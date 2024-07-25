@@ -843,3 +843,36 @@ func (db *DB) GetConversationTimeRanges(minSilence time.Duration) ([]struct {
 
 	return results, nil
 }
+
+func (db *DB) GetTranscriptionsForTimeRange(startTime, endTime time.Time) ([]Transcription, error) {
+	query := `
+		SELECT s.emoji, r.text, r.created_at
+		FROM recognitions r
+		JOIN speakers s ON r.stream = s.stream
+		WHERE r.created_at BETWEEN ? AND ?
+		ORDER BY r.created_at ASC
+	`
+
+	rows, err := db.Query(query, startTime, endTime)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var transcriptions []Transcription
+	for rows.Next() {
+		var t Transcription
+		var timestampStr string
+		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr)
+		if err != nil {
+			return nil, err
+		}
+		t.Timestamp, err = time.Parse("2006-01-02 15:04:05", timestampStr)
+		if err != nil {
+			return nil, fmt.Errorf("parse timestamp: %w", err)
+		}
+		transcriptions = append(transcriptions, t)
+	}
+
+	return transcriptions, rows.Err()
+}
