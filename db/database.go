@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 	"time"
+	"time"
 
 	"jamie/etc"
 
@@ -14,7 +15,9 @@ import (
 )
 
 // Helper functions
-func (db *DB) execContext(ctx context.Context, query string, args ...interface{}) error {
+func (db *DB) execContext(query string, args ...interface{}) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
 	_, err := db.exec(ctx, query, args...)
 	return err
 }
@@ -171,7 +174,7 @@ func (db *DB) SavePacket(id string, stream string, packetSeq int, sampleIdx int,
 		INSERT INTO packets (id, stream, packet_seq, sample_idx, payload)
 		VALUES (?, ?, ?, ?, ?)
 	`
-	return db.execContext(context.Background(), query, id, stream, packetSeq, sampleIdx, payload)
+	return db.execContext(query, id, stream, packetSeq, sampleIdx, payload)
 }
 
 // CreateSpeaker creates a new speaker entry
@@ -180,7 +183,7 @@ func (db *DB) CreateSpeaker(id, stream, emoji string) error {
 		INSERT INTO speakers (id, stream, emoji)
 		VALUES (?, ?, ?)
 	`
-	return db.execContext(context.Background(), query, id, stream, emoji)
+	return db.execContext(query, id, stream, emoji)
 }
 
 // CreateDiscordSpeaker creates a new Discord speaker entry
@@ -189,7 +192,7 @@ func (db *DB) CreateDiscordSpeaker(id, speaker, discordID string) error {
 		INSERT INTO discord_speakers (id, speaker, discord_id)
 		VALUES (?, ?, ?)
 	`
-	return db.execContext(context.Background(), query, id, speaker, discordID)
+	return db.execContext(query, id, speaker, discordID)
 }
 
 // CreateDiscordChannelStream creates a new Discord channel stream entry
@@ -198,7 +201,7 @@ func (db *DB) CreateDiscordChannelStream(id, stream, discordGuild, discordChanne
 		INSERT INTO discord_channel_streams (id, stream, discord_guild, discord_channel)
 		VALUES (?, ?, ?, ?)
 	`
-	return db.execContext(context.Background(), query, id, stream, discordGuild, discordChannel)
+	return db.execContext(query, id, stream, discordGuild, discordChannel)
 }
 
 // CreateAttribution creates a new attribution entry
@@ -207,7 +210,7 @@ func (db *DB) CreateAttribution(id, stream, speaker string) error {
 		INSERT INTO attributions (id, stream, speaker)
 		VALUES (?, ?, ?)
 	`
-	return db.execContext(context.Background(), query, id, stream, speaker)
+	return db.execContext(query, id, stream, speaker)
 }
 
 // SaveRecognition saves a recognition entry
@@ -216,7 +219,7 @@ func (db *DB) SaveRecognition(id, stream string, sampleIdx, sampleLen int, text 
 		INSERT INTO recognitions (id, stream, sample_idx, sample_len, text, confidence)
 		VALUES (?, ?, ?, ?, ?, ?)
 	`
-	return db.execContext(context.Background(), query, id, stream, sampleIdx, sampleLen, text, confidence)
+	return db.execContext(query, id, stream, sampleIdx, sampleLen, text, confidence)
 }
 
 // GetRecentTranscriptions retrieves recent transcriptions
@@ -506,7 +509,7 @@ func (db *DB) UpdateSpeakerEmoji(streamID, newEmoji string) error {
 	query := `
 		UPDATE speakers SET emoji = ? WHERE stream = ?
 	`
-	return db.execContext(context.Background(), query, newEmoji, streamID)
+	return db.execContext(query, newEmoji, streamID)
 }
 
 // GetChannelIDForStream retrieves the channel ID for a stream
@@ -530,7 +533,7 @@ func (db *DB) EndStreamForChannel(guildID, channelID string) error {
 			WHERE discord_guild = ? AND discord_channel = ?
 		) AND ended_at IS NULL
 	`
-	return db.execContext(context.Background(), query, guildID, channelID)
+	return db.execContext(query, guildID, channelID)
 }
 
 // GetTodayTranscriptions retrieves transcriptions for today
