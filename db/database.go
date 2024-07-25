@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"sync"
 	"time"
-	"time"
 
 	"jamie/etc"
 
@@ -20,10 +19,6 @@ func (db *DB) execContext(query string, args ...interface{}) error {
 	defer cancel()
 	_, err := db.exec(ctx, query, args...)
 	return err
-}
-
-func (db *DB) execWithGensym(ctx context.Context, query string, args ...interface{}) error {
-	return db.execContext(ctx, query, append([]interface{}{etc.Gensym()}, args...)...)
 }
 
 // DB represents the database connection and prepared statements cache
@@ -137,7 +132,7 @@ func (db *DB) exec(
 	query string,
 	args ...interface{},
 ) (sql.Result, error) {
-	db.logger.Debug("Executing SQL statement", "query", query, "args", args)
+	db.logger.Debug("query+", "args", args)
 	stmt, err := db.prepareStmt(query)
 	if err != nil {
 		return nil, err
@@ -151,7 +146,7 @@ func (db *DB) queryRow(
 	query string,
 	args ...interface{},
 ) *sql.Row {
-	db.logger.Debug("Executing SQL query", "query", query, "args", args)
+	db.logger.Debug("query1", "args", args)
 	stmt, err := db.prepareStmt(query)
 	if err != nil {
 		return db.QueryRowContext(ctx, query, args...)
@@ -160,7 +155,11 @@ func (db *DB) queryRow(
 }
 
 // CreateStream creates a new stream entry
-func (db *DB) CreateStream(id string, packetSeqOffset int, sampleIdxOffset int) error {
+func (db *DB) CreateStream(
+	id string,
+	packetSeqOffset int,
+	sampleIdxOffset int,
+) error {
 	query := `
 		INSERT INTO streams (id, packet_seq_offset, sample_idx_offset)
 		VALUES (?, ?, ?)
@@ -169,7 +168,13 @@ func (db *DB) CreateStream(id string, packetSeqOffset int, sampleIdxOffset int) 
 }
 
 // SavePacket saves a packet entry
-func (db *DB) SavePacket(id string, stream string, packetSeq int, sampleIdx int, payload []byte) error {
+func (db *DB) SavePacket(
+	id string,
+	stream string,
+	packetSeq int,
+	sampleIdx int,
+	payload []byte,
+) error {
 	query := `
 		INSERT INTO packets (id, stream, packet_seq, sample_idx, payload)
 		VALUES (?, ?, ?, ?, ?)
@@ -196,7 +201,9 @@ func (db *DB) CreateDiscordSpeaker(id, speaker, discordID string) error {
 }
 
 // CreateDiscordChannelStream creates a new Discord channel stream entry
-func (db *DB) CreateDiscordChannelStream(id, stream, discordGuild, discordChannel string) error {
+func (db *DB) CreateDiscordChannelStream(
+	id, stream, discordGuild, discordChannel string,
+) error {
 	query := `
 		INSERT INTO discord_channel_streams (id, stream, discord_guild, discord_channel)
 		VALUES (?, ?, ?, ?)
@@ -214,16 +221,34 @@ func (db *DB) CreateAttribution(id, stream, speaker string) error {
 }
 
 // SaveRecognition saves a recognition entry
-func (db *DB) SaveRecognition(id, stream string, sampleIdx, sampleLen int, text string, confidence float64) error {
+func (db *DB) SaveRecognition(
+	id, stream string,
+	sampleIdx, sampleLen int,
+	text string,
+	confidence float64,
+) error {
 	query := `
 		INSERT INTO recognitions (id, stream, sample_idx, sample_len, text, confidence)
 		VALUES (?, ?, ?, ?, ?, ?)
 	`
-	return db.execContext(query, id, stream, sampleIdx, sampleLen, text, confidence)
+	return db.execContext(
+		query,
+		id,
+		stream,
+		sampleIdx,
+		sampleLen,
+		text,
+		confidence,
+	)
 }
 
 // queryRowsGeneric is a generic helper function that executes a query and processes the rows using a provided parser function
-func queryRowsGeneric[T any](db *DB, query string, args []interface{}, parser func(*sql.Rows) (T, error)) ([]T, error) {
+func queryRowsGeneric[T any](
+	db *DB,
+	query string,
+	args []interface{},
+	parser func(*sql.Rows) (T, error),
+) ([]T, error) {
 	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, err
@@ -240,11 +265,6 @@ func queryRowsGeneric[T any](db *DB, query string, args []interface{}, parser fu
 	}
 
 	return results, rows.Err()
-}
-
-// queryRows is a non-generic wrapper for queryRowsGeneric that returns []interface{}
-func (db *DB) queryRows(query string, args []interface{}, parser func(*sql.Rows) (interface{}, error)) ([]interface{}, error) {
-	return queryRowsGeneric(db, query, args, parser)
 }
 
 // GetRecentTranscriptions retrieves recent transcriptions
@@ -295,19 +315,24 @@ func (db *DB) GetRecentTranscriptions() ([]Transcription, error) {
 		FROM final_groups
 	`
 
-	return queryRowsGeneric(db, query, nil, func(rows *sql.Rows) (Transcription, error) {
-		var t Transcription
-		var timestampStr string
-		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr)
-		if err != nil {
-			return Transcription{}, err
-		}
-		t.Timestamp, err = time.Parse("2006-01-02 15:04:05", timestampStr)
-		if err != nil {
-			return Transcription{}, fmt.Errorf("parse timestamp: %w", err)
-		}
-		return t, nil
-	})
+	return queryRowsGeneric(
+		db,
+		query,
+		nil,
+		func(rows *sql.Rows) (Transcription, error) {
+			var t Transcription
+			var timestampStr string
+			err := rows.Scan(&t.Emoji, &t.Text, &timestampStr)
+			if err != nil {
+				return Transcription{}, err
+			}
+			t.Timestamp, err = time.Parse("2006-01-02 15:04:05", timestampStr)
+			if err != nil {
+				return Transcription{}, fmt.Errorf("parse timestamp: %w", err)
+			}
+			return t, nil
+		},
+	)
 }
 
 // GetRecentStreamsWithTranscriptionCount retrieves recent streams with transcription count
@@ -325,14 +350,19 @@ func (db *DB) GetRecentStreamsWithTranscriptionCount(
 		ORDER BY s.created_at DESC
 		LIMIT ?
 	`
-	return db.queryRows(query, []interface{}{guildID, guildID, channelID, channelID, limit}, func(rows *sql.Rows) (Stream, error) {
-		var s Stream
-		err := rows.Scan(&s.ID, &s.CreatedAt, &s.TranscriptionCount)
-		if err != nil {
-			return Stream{}, err
-		}
-		return s, nil
-	})
+	return queryRowsGeneric(
+		db,
+		query,
+		[]interface{}{guildID, guildID, channelID, channelID, limit},
+		func(rows *sql.Rows) (Stream, error) {
+			var s Stream
+			err := rows.Scan(&s.ID, &s.CreatedAt, &s.TranscriptionCount)
+			if err != nil {
+				return Stream{}, err
+			}
+			return s, nil
+		},
+	)
 }
 
 // GetTranscriptionsForStream retrieves transcriptions for a specific stream
@@ -437,13 +467,7 @@ func (db *DB) CreateStreamForDiscordChannel(
 	}
 
 	for _, q := range queries {
-		db.logger.Debug(
-			"Executing SQL statement in transaction",
-			"query",
-			q.query,
-			"args",
-			q.args,
-		)
+		db.logger.Debug("tx exec", "args", q.args)
 		if _, err := tx.Exec(q.query, q.args...); err != nil {
 			return err
 		}
