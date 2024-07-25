@@ -645,13 +645,13 @@ func (bot *Bot) handleListPromptsCommand(
 
 func (bot *Bot) GenerateOggOpusBlob(
 	streamID string,
-	startTime, endTime time.Time,
+	startSample, endSample int,
 ) ([]byte, error) {
 	// Fetch packets from the database
 	packets, err := bot.db.GetPacketsForStreamInSampleRange(
 		streamID,
-		startTime,
-		endTime,
+		startSample,
+		endSample,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("fetch packets: %w", err)
@@ -674,9 +674,9 @@ func (bot *Bot) GenerateOggOpusBlob(
 				Version:        2,
 				PayloadType:    111,
 				SequenceNumber: uint16(i),
-				Timestamp:      uint32(i * 960),
+				Timestamp:      uint32(packet.SampleIdx),
 			},
-			Payload: packet,
+			Payload: packet.Payload,
 		}); err != nil {
 			return nil, fmt.Errorf("write Opus packet: %w", err)
 		}
