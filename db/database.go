@@ -853,8 +853,11 @@ func (db *DB) GetTranscriptionsForTimeRange(startTime, endTime time.Time) ([]Tra
 		ORDER BY r.created_at ASC
 	`
 
-	rows, err := db.Query(query, startTime.Format(time.RFC3339), endTime.Format(time.RFC3339))
+	db.logger.Debug("Fetching transcriptions", "startTime", startTime, "endTime", endTime)
+
+	rows, err := db.Query(query, startTime.Format("2006-01-02 15:04:05"), endTime.Format("2006-01-02 15:04:05"))
 	if err != nil {
+		db.logger.Error("Error querying transcriptions", "error", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -865,14 +868,18 @@ func (db *DB) GetTranscriptionsForTimeRange(startTime, endTime time.Time) ([]Tra
 		var timestampStr string
 		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr)
 		if err != nil {
+			db.logger.Error("Error scanning row", "error", err)
 			return nil, err
 		}
-		t.Timestamp, err = time.Parse(time.RFC3339, timestampStr)
+		t.Timestamp, err = time.Parse("2006-01-02 15:04:05", timestampStr)
 		if err != nil {
+			db.logger.Error("Error parsing timestamp", "error", err, "timestampStr", timestampStr)
 			return nil, fmt.Errorf("parse timestamp: %w", err)
 		}
 		transcriptions = append(transcriptions, t)
 	}
+
+	db.logger.Debug("Fetched transcriptions", "count", len(transcriptions))
 
 	return transcriptions, rows.Err()
 }
