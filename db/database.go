@@ -222,6 +222,26 @@ func (db *DB) SaveRecognition(id, stream string, sampleIdx, sampleLen int, text 
 	return db.execContext(query, id, stream, sampleIdx, sampleLen, text, confidence)
 }
 
+// queryRows is a helper function that executes a query and processes the rows using a provided parser function
+func (db *DB) queryRows[T any](query string, args []interface{}, parser func(*sql.Rows) (T, error)) ([]T, error) {
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []T
+	for rows.Next() {
+		result, err := parser(rows)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, result)
+	}
+
+	return results, rows.Err()
+}
+
 // GetRecentTranscriptions retrieves recent transcriptions
 func (db *DB) GetRecentTranscriptions() ([]Transcription, error) {
 	query := `
@@ -269,28 +289,20 @@ func (db *DB) GetRecentTranscriptions() ([]Transcription, error) {
 		SELECT emoji, text, created_at
 		FROM final_groups
 	`
-	rows, err := db.Query(query)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
 
-	var transcriptions []Transcription
-	for rows.Next() {
+	return db.queryRows(query, nil, func(rows *sql.Rows) (Transcription, error) {
 		var t Transcription
 		var timestampStr string
 		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr)
 		if err != nil {
-			return nil, err
+			return Transcription{}, err
 		}
 		t.Timestamp, err = time.Parse("2006-01-02 15:04:05", timestampStr)
 		if err != nil {
-			return nil, fmt.Errorf("parse timestamp: %w", err)
+			return Transcription{}, fmt.Errorf("parse timestamp: %w", err)
 		}
-		transcriptions = append(transcriptions, t)
-	}
-
-	return transcriptions, rows.Err()
+		return t, nil
+	})
 }
 
 // GetRecentStreamsWithTranscriptionCount retrieves recent streams with transcription count
@@ -308,29 +320,14 @@ func (db *DB) GetRecentStreamsWithTranscriptionCount(
 		ORDER BY s.created_at DESC
 		LIMIT ?
 	`
-	rows, err := db.Query(
-		query,
-		guildID,
-		guildID,
-		channelID,
-		channelID,
-		limit,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var streams []Stream
-	for rows.Next() {
+	return db.queryRows(query, []interface{}{guildID, guildID, channelID, channelID, limit}, func(rows *sql.Rows) (Stream, error) {
 		var s Stream
 		err := rows.Scan(&s.ID, &s.CreatedAt, &s.TranscriptionCount)
 		if err != nil {
-			return nil, err
+			return Stream{}, err
 		}
-		streams = append(streams, s)
-	}
-	return streams, rows.Err()
+		return s, nil
+	})
 }
 
 // GetTranscriptionsForStream retrieves transcriptions for a specific stream
