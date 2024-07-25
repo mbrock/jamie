@@ -13,6 +13,16 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// Helper functions
+func (db *DB) execContext(ctx context.Context, query string, args ...interface{}) error {
+	_, err := db.exec(ctx, query, args...)
+	return err
+}
+
+func (db *DB) execWithGensym(ctx context.Context, query string, args ...interface{}) error {
+	return db.execContext(ctx, query, append([]interface{}{etc.Gensym()}, args...)...)
+}
+
 // DB represents the database connection and prepared statements cache
 type DB struct {
 	*sql.DB
@@ -147,47 +157,21 @@ func (db *DB) queryRow(
 }
 
 // CreateStream creates a new stream entry
-func (db *DB) CreateStream(
-	id string,
-	packetSeqOffset int,
-	sampleIdxOffset int,
-) error {
+func (db *DB) CreateStream(id string, packetSeqOffset int, sampleIdxOffset int) error {
 	query := `
 		INSERT INTO streams (id, packet_seq_offset, sample_idx_offset)
 		VALUES (?, ?, ?)
 	`
-	_, err := db.exec(
-		context.Background(),
-		query,
-		id,
-		packetSeqOffset,
-		sampleIdxOffset,
-	)
-	return err
+	return db.execContext(context.Background(), query, id, packetSeqOffset, sampleIdxOffset)
 }
 
 // SavePacket saves a packet entry
-func (db *DB) SavePacket(
-	id string,
-	stream string,
-	packetSeq int,
-	sampleIdx int,
-	payload []byte,
-) error {
+func (db *DB) SavePacket(id string, stream string, packetSeq int, sampleIdx int, payload []byte) error {
 	query := `
 		INSERT INTO packets (id, stream, packet_seq, sample_idx, payload)
 		VALUES (?, ?, ?, ?, ?)
 	`
-	_, err := db.exec(
-		context.Background(),
-		query,
-		id,
-		stream,
-		packetSeq,
-		sampleIdx,
-		payload,
-	)
-	return err
+	return db.execContext(context.Background(), query, id, stream, packetSeq, sampleIdx, payload)
 }
 
 // CreateSpeaker creates a new speaker entry
@@ -196,8 +180,7 @@ func (db *DB) CreateSpeaker(id, stream, emoji string) error {
 		INSERT INTO speakers (id, stream, emoji)
 		VALUES (?, ?, ?)
 	`
-	_, err := db.exec(context.Background(), query, id, stream, emoji)
-	return err
+	return db.execContext(context.Background(), query, id, stream, emoji)
 }
 
 // CreateDiscordSpeaker creates a new Discord speaker entry
@@ -206,27 +189,16 @@ func (db *DB) CreateDiscordSpeaker(id, speaker, discordID string) error {
 		INSERT INTO discord_speakers (id, speaker, discord_id)
 		VALUES (?, ?, ?)
 	`
-	_, err := db.exec(context.Background(), query, id, speaker, discordID)
-	return err
+	return db.execContext(context.Background(), query, id, speaker, discordID)
 }
 
 // CreateDiscordChannelStream creates a new Discord channel stream entry
-func (db *DB) CreateDiscordChannelStream(
-	id, stream, discordGuild, discordChannel string,
-) error {
+func (db *DB) CreateDiscordChannelStream(id, stream, discordGuild, discordChannel string) error {
 	query := `
 		INSERT INTO discord_channel_streams (id, stream, discord_guild, discord_channel)
 		VALUES (?, ?, ?, ?)
 	`
-	_, err := db.exec(
-		context.Background(),
-		query,
-		id,
-		stream,
-		discordGuild,
-		discordChannel,
-	)
-	return err
+	return db.execContext(context.Background(), query, id, stream, discordGuild, discordChannel)
 }
 
 // CreateAttribution creates a new attribution entry
@@ -235,32 +207,16 @@ func (db *DB) CreateAttribution(id, stream, speaker string) error {
 		INSERT INTO attributions (id, stream, speaker)
 		VALUES (?, ?, ?)
 	`
-	_, err := db.exec(context.Background(), query, id, stream, speaker)
-	return err
+	return db.execContext(context.Background(), query, id, stream, speaker)
 }
 
 // SaveRecognition saves a recognition entry
-func (db *DB) SaveRecognition(
-	id, stream string,
-	sampleIdx, sampleLen int,
-	text string,
-	confidence float64,
-) error {
+func (db *DB) SaveRecognition(id, stream string, sampleIdx, sampleLen int, text string, confidence float64) error {
 	query := `
 		INSERT INTO recognitions (id, stream, sample_idx, sample_len, text, confidence)
 		VALUES (?, ?, ?, ?, ?, ?)
 	`
-	_, err := db.exec(
-		context.Background(),
-		query,
-		id,
-		stream,
-		sampleIdx,
-		sampleLen,
-		text,
-		confidence,
-	)
-	return err
+	return db.execContext(context.Background(), query, id, stream, sampleIdx, sampleLen, text, confidence)
 }
 
 // GetRecentTranscriptions retrieves recent transcriptions
