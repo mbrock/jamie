@@ -142,7 +142,7 @@ func (h *Handler) handleConversations(
                     <div class="bg-gray-50 rounded-lg p-4">
                         <p class="text-gray-600 text-sm">{{.Timestamp.Format "2006-01-02 15:04:05"}}</p>
                         <p class="text-lg"><span class="font-bold">{{.Emoji}}</span> {{.Text}}</p>
-                        <a href="/stream-audio/?stream={{.StreamID}}&start={{.Timestamp.Format "2006-01-02T15:04:05Z07:00"}}&end={{.Timestamp.Add(1 * time.Second).Format "2006-01-02T15:04:05Z07:00"}}" class="text-blue-600 hover:text-blue-800 mt-2 inline-block" target="_blank">🔊 Listen</a>
+                        <a href="/stream-audio/?stream={{.StreamID}}&start={{.Timestamp.Format "2006-01-02T15:04:05Z07:00"}}" class="text-blue-600 hover:text-blue-800 mt-2 inline-block" target="_blank">🔊 Listen</a>
                     </div>
                     {{end}}
                 </div>
