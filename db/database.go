@@ -813,14 +813,14 @@ func (db *DB) GetConversationTimeRanges(minSilence time.Duration) ([]struct {
 			return nil, err
 		}
 
-		start, err := time.Parse(time.RFC3339, startTime)
+		start, err := time.Parse("2006-01-02 15:04:05", startTime)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("parsing start time: %w", err)
 		}
 
-		end, err := time.Parse(time.RFC3339, endTime)
+		end, err := time.Parse("2006-01-02 15:04:05", endTime)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("parsing end time: %w", err)
 		}
 
 		duration := end.Sub(start)
