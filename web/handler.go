@@ -81,17 +81,30 @@ func (h *Handler) handleIndex(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (h *Handler) handleConversations(w http.ResponseWriter, r *http.Request) {
-	streamID := r.URL.Query().Get("stream")
-	if streamID == "" {
-		http.Error(w, "Missing stream ID", http.StatusBadRequest)
+	conversations, err := h.db.GetRecentStreamsWithTranscriptionCount("", "", 10)
+	if err != nil {
+		h.logger.Error("failed to get conversations", "error", err.Error())
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
-	transcriptions, err := h.db.GetTranscriptionsForStream(streamID)
-	if err != nil {
-		h.logger.Error("failed to get transcriptions", "error", err.Error())
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
-		return
+	type ConversationWithTranscriptions struct {
+		Stream         db.Stream
+		Transcriptions []db.Transcription
+	}
+
+	var conversationsWithTranscriptions []ConversationWithTranscriptions
+
+	for _, conv := range conversations {
+		transcriptions, err := h.db.GetTranscriptionsForStream(conv.ID)
+		if err != nil {
+			h.logger.Error("failed to get transcriptions", "error", err.Error())
+			continue
+		}
+		conversationsWithTranscriptions = append(conversationsWithTranscriptions, ConversationWithTranscriptions{
+			Stream:         conv,
+			Transcriptions: transcriptions,
+		})
 	}
 
 	tmpl := template.Must(template.New("conversations").Parse(`
@@ -100,33 +113,35 @@ func (h *Handler) handleConversations(w http.ResponseWriter, r *http.Request) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Conversation</title>
+    <title>Conversations</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100">
     <div class="container mx-auto px-4 py-8">
-        <h1 class="text-3xl font-bold mb-6">Conversation</h1>
-        <div class="space-y-4">
-            {{if .}}
-                <div class="flex flex-wrap gap-2">
-                    {{range .}}
-                    <div class="bg-white shadow rounded-lg p-4 flex-grow">
+        <h1 class="text-3xl font-bold mb-6">Recent Conversations</h1>
+        {{range .}}
+            <div class="mb-8 bg-white shadow rounded-lg p-6">
+                <h2 class="text-2xl font-semibold mb-4">Conversation from {{.Stream.CreatedAt.Format "2006-01-02 15:04:05"}}</h2>
+                <p class="mb-4">Transcription count: {{.Stream.TranscriptionCount}}</p>
+                <div class="space-y-4">
+                    {{range .Transcriptions}}
+                    <div class="bg-gray-50 rounded-lg p-4">
                         <p class="text-gray-600 text-sm">{{.Timestamp.Format "2006-01-02 15:04:05"}}</p>
                         <p class="text-lg"><span class="font-bold">{{.Emoji}}</span> {{.Text}}</p>
                         <a href="/stream-audio/?stream={{.StreamID}}&start={{.Timestamp.Format "2006-01-02T15:04:05Z07:00"}}&end={{.Timestamp.Add (1 * time.Second).Format "2006-01-02T15:04:05Z07:00"}}" class="text-blue-600 hover:text-blue-800 mt-2 inline-block" target="_blank">🔊 Listen</a>
                     </div>
                     {{end}}
                 </div>
-            {{else}}
-                <p>No transcriptions found for this conversation.</p>
-            {{end}}
-        </div>
+            </div>
+        {{else}}
+            <p>No conversations found.</p>
+        {{end}}
     </div>
 </body>
 </html>
 `))
 
-	err = tmpl.Execute(w, transcriptions)
+	err = tmpl.Execute(w, conversationsWithTranscriptions)
 	if err != nil {
 		h.logger.Error("failed to execute template", "error", err.Error())
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
