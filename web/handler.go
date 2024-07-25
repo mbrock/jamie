@@ -162,6 +162,10 @@ func (h *Handler) handleConversations(
                 <p class="text-gray-600 text-sm">Start: {{.StartTime.Format "2006-01-02 15:04:05"}}</p>
                 <p class="text-gray-600 text-sm">End: {{.EndTime.Format "2006-01-02 15:04:05"}}</p>
                 <p class="text-lg mb-2">Duration: {{.EndTime.Sub .StartTime}}</p>
+                <audio controls class="w-full mb-2">
+                    <source src="/stream-audio/?stream={{.Transcriptions.0.StreamID}}&start={{.StartTime.Format "2006-01-02T15:04:05Z07:00"}}&end={{.EndTime.Format "2006-01-02T15:04:05Z07:00"}}" type="audio/ogg">
+                    Your browser does not support the audio element.
+                </audio>
                 <details>
                     <summary class="cursor-pointer text-blue-600 hover:text-blue-800">Show Transcriptions ({{len .Transcriptions}})</summary>
                     <div class="mt-2">
@@ -197,6 +201,7 @@ type Transcription struct {
 	Emoji     string
 	Text      string
 	Timestamp time.Time
+	StreamID  string
 }
 
 func (h *Handler) handleStreamAudio(w http.ResponseWriter, r *http.Request) {

@@ -862,7 +862,7 @@ func (db *DB) GetTranscriptionsForTimeRange(
 	startTime, endTime time.Time,
 ) ([]Transcription, error) {
 	query := `
-		SELECT s.emoji, r.text, r.created_at
+		SELECT s.emoji, r.text, r.created_at, r.stream
 		FROM recognitions r
 		JOIN speakers s ON r.stream = s.stream
 		WHERE r.created_at BETWEEN ? AND ?
@@ -892,7 +892,7 @@ func (db *DB) GetTranscriptionsForTimeRange(
 	for rows.Next() {
 		var t Transcription
 		var timestampStr string
-		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr)
+		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr, &t.StreamID)
 		if err != nil {
 			db.logger.Error("Error scanning row", "error", err)
 			return nil, err
