@@ -26,6 +26,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch r.URL.Path {
 	case "/":
 		h.handleIndex(w, r)
+	case "/conversations":
+		h.handleConversations(w, r)
 	default:
 		http.NotFound(w, r)
 	}
@@ -65,6 +67,47 @@ func (h *Handler) handleIndex(w http.ResponseWriter, _ *http.Request) {
 `))
 
 	err = tmpl.Execute(w, transcriptions)
+	if err != nil {
+		h.logger.Error("failed to execute template", "error", err.Error())
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+	}
+}
+
+func (h *Handler) handleConversations(w http.ResponseWriter, _ *http.Request) {
+	conversations, err := h.db.GetConversationTimeRanges(3 * time.Minute)
+	if err != nil {
+		h.logger.Error("failed to get conversations", "error", err.Error())
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
+	}
+
+	tmpl := template.Must(template.New("conversations").Parse(`
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conversations</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100">
+    <div class="container mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold mb-6">Conversations</h1>
+        <div class="space-y-4">
+            {{range .}}
+            <div class="bg-white shadow rounded-lg p-4">
+                <p class="text-gray-600 text-sm">Start: {{.StartTime.Format "2006-01-02 15:04:05"}}</p>
+                <p class="text-gray-600 text-sm">End: {{.EndTime.Format "2006-01-02 15:04:05"}}</p>
+                <p class="text-lg">Duration: {{.EndTime.Sub .StartTime}}</p>
+            </div>
+            {{end}}
+        </div>
+    </div>
+</body>
+</html>
+`))
+
+	err = tmpl.Execute(w, conversations)
 	if err != nil {
 		h.logger.Error("failed to execute template", "error", err.Error())
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
