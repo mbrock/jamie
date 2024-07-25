@@ -82,7 +82,7 @@ func InitDB(logger *log.Logger) error {
 		logger: logger,
 	}
 
-	if err := runMigrations(); err != nil {
+	if err := Migrate(db.DB, logger); err != nil {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 
@@ -94,13 +94,8 @@ func InitDB(logger *log.Logger) error {
 }
 
 func runMigrations() error {
-	migrations, err := LoadMigrations("db")
-	if err != nil {
-		return fmt.Errorf("load migrations: %w", err)
-	}
-
 	db.logger.Info("Starting database migration process...")
-	if err := Migrate(db.DB, migrations, db.logger); err != nil {
+	if err := Migrate(db.DB, db.logger); err != nil {
 		return fmt.Errorf("apply migrations: %w", err)
 	}
 
