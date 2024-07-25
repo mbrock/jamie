@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"sync"
 	"time"
 
 	"jamie/etc"
@@ -12,6 +13,14 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+// DB represents the database connection and prepared statements cache
+type DB struct {
+	*sql.DB
+	stmtCache sync.Map
+	logger    *log.Logger
+}
+
+// Transcription represents a single transcription entry
 type Transcription struct {
 	Emoji     string
 	Text      string
@@ -19,184 +28,137 @@ type Transcription struct {
 	SampleIdx int
 }
 
-var sqlLogger *log.Logger
-
-type DB struct {
-	*sql.DB
-	stmts map[string]*sql.Stmt
+// Stream represents a single stream entry
+type Stream struct {
+	ID                 string
+	CreatedAt          time.Time
+	TranscriptionCount int
 }
 
 var db *DB
 
+// InitDB initializes the database connection
 func InitDB(logger *log.Logger) error {
-	var err error
 	sqlDB, err := sql.Open("sqlite3", "./001.db")
 	if err != nil {
-		return fmt.Errorf("failed to open database: %w", err)
+		return fmt.Errorf("open database: %w", err)
 	}
 
 	db = &DB{
-		DB:    sqlDB,
-		stmts: make(map[string]*sql.Stmt),
+		DB:     sqlDB,
+		logger: logger,
 	}
 
-	sqlLogger = logger
-
-	// Load and apply migrations
-	migrations, err := LoadMigrations("db")
-	if err != nil {
-		return fmt.Errorf("failed to load migrations: %w", err)
+	if err := runMigrations(); err != nil {
+		return fmt.Errorf("run migrations: %w", err)
 	}
 
-	err = Migrate(db.DB, migrations, sqlLogger)
-	if err != nil {
-		return fmt.Errorf("failed to apply migrations: %w", err)
-	}
-
-	logger.Info("Creating system_prompts table...")
-	_, err = db.Exec(`
-			CREATE TABLE IF NOT EXISTS system_prompts (
-				name TEXT PRIMARY KEY,
-				prompt TEXT NOT NULL
-			);
-		`)
-	if err != nil {
+	if err := createSystemPromptsTable(); err != nil {
 		return fmt.Errorf("create system_prompts table: %w", err)
 	}
 
-	err = db.PrepareStatements()
+	return nil
+}
+
+func runMigrations() error {
+	migrations, err := LoadMigrations("db")
 	if err != nil {
-		return fmt.Errorf("failed to prepare statements: %w", err)
+		return fmt.Errorf("load migrations: %w", err)
 	}
 
+	db.logger.Info("Starting database migration process...")
+	if err := Migrate(db.DB, migrations, db.logger); err != nil {
+		return fmt.Errorf("apply migrations: %w", err)
+	}
+
+	db.logger.Info("Database migration process completed")
 	return nil
 }
 
-func (db *DB) PrepareStatements() error {
-
-	statements := map[string]string{
-		"insertStream": `
-			INSERT INTO streams (
-				id,
-				packet_seq_offset,
-				sample_idx_offset
-			) VALUES (?, ?, ?)`,
-		"insertPacket": `
-			INSERT INTO packets (
-				id,
-				stream,
-				packet_seq,
-				sample_idx,
-				payload
-			) VALUES (?, ?, ?, ?, ?)`,
-		"insertSpeaker": `
-			INSERT INTO speakers (
-				id,
-				stream,
-				emoji
-			) VALUES (?, ?, ?)`,
-		"insertDiscordSpeaker": `
-			INSERT INTO discord_speakers (
-				id,
-				speaker,
-				discord_id
-			) VALUES (?, ?, ?)`,
-		"insertDiscordChannelStream": `
-			INSERT INTO discord_channel_streams (
-				id,
-				stream,
-				discord_guild,
-				discord_channel
-			) VALUES (?, ?, ?, ?)`,
-		"insertAttribution": `
-			INSERT INTO attributions (
-				id,
-				stream,
-				speaker
-			) VALUES (?, ?, ?)`,
-		"insertRecognition": `
-			INSERT INTO recognitions (
-				id,
-				stream,
-				sample_idx,
-				sample_len,
-				text,
-				confidence
-			) VALUES (?, ?, ?, ?, ?, ?)`,
-		"selectStreamForDiscordChannelAndSpeaker": `
-			SELECT s.id 
-			FROM streams s
-			JOIN discord_channel_streams dcs ON s.id = dcs.stream
-			JOIN speakers spk ON s.id = spk.stream
-			JOIN discord_speakers ds ON spk.id = ds.speaker
-			WHERE dcs.discord_guild = ? AND dcs.discord_channel = ? AND ds.discord_id = ?
-			ORDER BY s.created_at DESC
-			LIMIT 1`,
-		"insertStreamForDiscordChannel": `
-			INSERT INTO streams (id, packet_seq_offset, sample_idx_offset) VALUES (?, ?, ?)`,
-		"insertDiscordChannelStreamForStream": `
-			INSERT INTO discord_channel_streams (id, stream, discord_guild, discord_channel) VALUES (?, ?, ?, ?)`,
-		"insertSpeakerForStream": `
-			INSERT INTO speakers (id, stream, emoji) VALUES (?, ?, ?)`,
-		"checkSpeechRecognitionSessionExists": `
-			SELECT EXISTS(SELECT 1 FROM speech_recognition_sessions WHERE stream = ?)`,
-		"insertSpeechRecognitionSession": `
-			INSERT INTO speech_recognition_sessions (stream, session_data) VALUES (?, ?)`,
-		"getSpeechRecognitionSession": `
-			SELECT session_data FROM speech_recognition_sessions WHERE stream = ?`,
-		"selectChannelAndEmojiForStream": `
-			SELECT dcs.discord_channel, s.emoji 
-			FROM discord_channel_streams dcs
-			JOIN streams st ON dcs.stream = st.id
-			JOIN speakers s ON st.id = s.stream
-			WHERE st.id = ?`,
-		"updateSpeakerEmoji": `
-			UPDATE speakers SET emoji = ? WHERE stream = ?`,
-		"selectChannelIDForStream": `
-			SELECT discord_channel FROM discord_channel_streams WHERE stream = ?`,
-		"updateStreamEndTimeForChannel": `
-			UPDATE streams
-			SET ended_at = CURRENT_TIMESTAMP
-			WHERE id IN (
-				SELECT stream
-				FROM discord_channel_streams
-				WHERE discord_guild = ? AND discord_channel = ?
-			) AND ended_at IS NULL`,
-		"getPacketsForStreamInSampleRange": `
-			SELECT payload, sample_idx
-			FROM packets
-			WHERE stream = ? AND sample_idx BETWEEN ? AND ?
-			ORDER BY sample_idx ASC`,
-	}
-
-	for name, query := range statements {
-		sqlLogger.Info("Preparing statement", "name", name)
-		stmt, err := db.Prepare(query)
-		if err != nil {
-			sqlLogger.Error(
-				"Failed to prepare statement",
-				"name",
-				name,
-				"error",
-				err,
-			)
-			return err
-		}
-		db.stmts[name] = stmt
-		sqlLogger.Info("Statement prepared successfully", "name", name)
-	}
-
-	return nil
+func createSystemPromptsTable() error {
+	_, err := db.Exec(`
+		CREATE TABLE IF NOT EXISTS system_prompts (
+			name TEXT PRIMARY KEY,
+			prompt TEXT NOT NULL
+		);
+	`)
+	return err
 }
 
+// GetDB returns the database instance
 func GetDB() *DB {
 	return db
 }
 
-func CreateStream(id string, packetSeqOffset int, sampleIdxOffset int) error {
-	_, err := db.execWithLog(
+// Close closes the database connection and clears the statement cache
+func Close() {
+	if db != nil {
+		db.stmtCache.Range(func(_, value interface{}) bool {
+			if stmt, ok := value.(*sql.Stmt); ok {
+				stmt.Close()
+			}
+			return true
+		})
+		db.DB.Close()
+	}
+}
+
+// prepareStmt prepares and caches a statement
+func (db *DB) prepareStmt(query string) (*sql.Stmt, error) {
+	if stmt, ok := db.stmtCache.Load(query); ok {
+		return stmt.(*sql.Stmt), nil
+	}
+
+	stmt, err := db.Prepare(query)
+	if err != nil {
+		return nil, err
+	}
+
+	db.stmtCache.Store(query, stmt)
+	return stmt, nil
+}
+
+// exec executes a query with logging
+func (db *DB) exec(
+	ctx context.Context,
+	query string,
+	args ...interface{},
+) (sql.Result, error) {
+	db.logger.Debug("Executing SQL statement", "query", query, "args", args)
+	stmt, err := db.prepareStmt(query)
+	if err != nil {
+		return nil, err
+	}
+	return stmt.ExecContext(ctx, args...)
+}
+
+// queryRow executes a query that returns a single row with logging
+func (db *DB) queryRow(
+	ctx context.Context,
+	query string,
+	args ...interface{},
+) *sql.Row {
+	db.logger.Debug("Executing SQL query", "query", query, "args", args)
+	stmt, err := db.prepareStmt(query)
+	if err != nil {
+		return db.QueryRowContext(ctx, query, args...)
+	}
+	return stmt.QueryRowContext(ctx, args...)
+}
+
+// CreateStream creates a new stream entry
+func (db *DB) CreateStream(
+	id string,
+	packetSeqOffset int,
+	sampleIdxOffset int,
+) error {
+	query := `
+		INSERT INTO streams (id, packet_seq_offset, sample_idx_offset)
+		VALUES (?, ?, ?)
+	`
+	_, err := db.exec(
 		context.Background(),
-		"insertStream",
+		query,
 		id,
 		packetSeqOffset,
 		sampleIdxOffset,
@@ -204,16 +166,21 @@ func CreateStream(id string, packetSeqOffset int, sampleIdxOffset int) error {
 	return err
 }
 
-func SavePacket(
+// SavePacket saves a packet entry
+func (db *DB) SavePacket(
 	id string,
 	stream string,
 	packetSeq int,
 	sampleIdx int,
 	payload []byte,
 ) error {
-	_, err := db.execWithLog(
+	query := `
+		INSERT INTO packets (id, stream, packet_seq, sample_idx, payload)
+		VALUES (?, ?, ?, ?, ?)
+	`
+	_, err := db.exec(
 		context.Background(),
-		"insertPacket",
+		query,
 		id,
 		stream,
 		packetSeq,
@@ -223,34 +190,37 @@ func SavePacket(
 	return err
 }
 
-func CreateSpeaker(id, stream, emoji string) error {
-	_, err := db.execWithLog(
-		context.Background(),
-		"insertSpeaker",
-		id,
-		stream,
-		emoji,
-	)
+// CreateSpeaker creates a new speaker entry
+func (db *DB) CreateSpeaker(id, stream, emoji string) error {
+	query := `
+		INSERT INTO speakers (id, stream, emoji)
+		VALUES (?, ?, ?)
+	`
+	_, err := db.exec(context.Background(), query, id, stream, emoji)
 	return err
 }
 
-func CreateDiscordSpeaker(id, speaker, discordID string) error {
-	_, err := db.execWithLog(
-		context.Background(),
-		"insertDiscordSpeaker",
-		id,
-		speaker,
-		discordID,
-	)
+// CreateDiscordSpeaker creates a new Discord speaker entry
+func (db *DB) CreateDiscordSpeaker(id, speaker, discordID string) error {
+	query := `
+		INSERT INTO discord_speakers (id, speaker, discord_id)
+		VALUES (?, ?, ?)
+	`
+	_, err := db.exec(context.Background(), query, id, speaker, discordID)
 	return err
 }
 
-func CreateDiscordChannelStream(
+// CreateDiscordChannelStream creates a new Discord channel stream entry
+func (db *DB) CreateDiscordChannelStream(
 	id, stream, discordGuild, discordChannel string,
 ) error {
-	_, err := db.execWithLog(
+	query := `
+		INSERT INTO discord_channel_streams (id, stream, discord_guild, discord_channel)
+		VALUES (?, ?, ?, ?)
+	`
+	_, err := db.exec(
 		context.Background(),
-		"insertDiscordChannelStream",
+		query,
 		id,
 		stream,
 		discordGuild,
@@ -259,26 +229,30 @@ func CreateDiscordChannelStream(
 	return err
 }
 
-func CreateAttribution(id, stream, speaker string) error {
-	_, err := db.execWithLog(
-		context.Background(),
-		"insertAttribution",
-		id,
-		stream,
-		speaker,
-	)
+// CreateAttribution creates a new attribution entry
+func (db *DB) CreateAttribution(id, stream, speaker string) error {
+	query := `
+		INSERT INTO attributions (id, stream, speaker)
+		VALUES (?, ?, ?)
+	`
+	_, err := db.exec(context.Background(), query, id, stream, speaker)
 	return err
 }
 
-func SaveRecognition(
+// SaveRecognition saves a recognition entry
+func (db *DB) SaveRecognition(
 	id, stream string,
 	sampleIdx, sampleLen int,
 	text string,
 	confidence float64,
 ) error {
-	_, err := db.execWithLog(
+	query := `
+		INSERT INTO recognitions (id, stream, sample_idx, sample_len, text, confidence)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`
+	_, err := db.exec(
 		context.Background(),
-		"insertRecognition",
+		query,
 		id,
 		stream,
 		sampleIdx,
@@ -289,6 +263,7 @@ func SaveRecognition(
 	return err
 }
 
+// GetRecentTranscriptions retrieves recent transcriptions
 func (db *DB) GetRecentTranscriptions() ([]Transcription, error) {
 	query := `
 		WITH ranked_recognitions AS (
@@ -345,31 +320,25 @@ func (db *DB) GetRecentTranscriptions() ([]Transcription, error) {
 	for rows.Next() {
 		var t Transcription
 		var timestampStr string
-		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr, &t.SampleIdx)
+		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr)
 		if err != nil {
 			return nil, err
 		}
 		t.Timestamp, err = time.Parse("2006-01-02 15:04:05", timestampStr)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse timestamp: %w", err)
+			return nil, fmt.Errorf("parse timestamp: %w", err)
 		}
 		transcriptions = append(transcriptions, t)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return transcriptions, nil
+	return transcriptions, rows.Err()
 }
 
-type Stream struct {
-	ID                 string
-	CreatedAt          time.Time
-	TranscriptionCount int
-}
-
-func (db *DB) GetRecentStreamsWithTranscriptionCount(guildID, channelID string, limit int) ([]Stream, error) {
+// GetRecentStreamsWithTranscriptionCount retrieves recent streams with transcription count
+func (db *DB) GetRecentStreamsWithTranscriptionCount(
+	guildID, channelID string,
+	limit int,
+) ([]Stream, error) {
 	query := `
 		SELECT s.id, s.created_at, COUNT(r.id) as transcription_count
 		FROM streams s
@@ -380,7 +349,14 @@ func (db *DB) GetRecentStreamsWithTranscriptionCount(guildID, channelID string, 
 		ORDER BY s.created_at DESC
 		LIMIT ?
 	`
-	rows, err := db.Query(query, guildID, guildID, channelID, channelID, limit)
+	rows, err := db.Query(
+		query,
+		guildID,
+		guildID,
+		channelID,
+		channelID,
+		limit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -398,7 +374,10 @@ func (db *DB) GetRecentStreamsWithTranscriptionCount(guildID, channelID string, 
 	return streams, rows.Err()
 }
 
-func (db *DB) GetTranscriptionsForStream(streamID string) ([]Transcription, error) {
+// GetTranscriptionsForStream retrieves transcriptions for a specific stream
+func (db *DB) GetTranscriptionsForStream(
+	streamID string,
+) ([]Transcription, error) {
 	query := `
 		SELECT s.emoji, r.text, r.created_at, r.sample_idx
 		FROM recognitions r
@@ -416,72 +395,42 @@ func (db *DB) GetTranscriptionsForStream(streamID string) ([]Transcription, erro
 	for rows.Next() {
 		var t Transcription
 		var timestampStr string
-		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr)
+		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr, &t.SampleIdx)
 		if err != nil {
 			return nil, err
 		}
 		t.Timestamp, err = time.Parse(time.RFC3339, timestampStr)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse timestamp: %w", err)
+			return nil, fmt.Errorf("parse timestamp: %w", err)
 		}
 		transcriptions = append(transcriptions, t)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return transcriptions, nil
+	return transcriptions, rows.Err()
 }
 
-func Close() {
-	for _, stmt := range db.stmts {
-		stmt.Close()
-	}
-	if db.DB != nil {
-		db.DB.Close()
-	}
-}
-
-func (db *DB) execWithLog(
-	ctx context.Context,
-	stmtName string,
-	args ...interface{},
-) (sql.Result, error) {
-	stmt := db.stmts[stmtName]
-	sqlLogger.Debug("Executing SQL statement", "name", stmtName, "args", args)
-	return stmt.ExecContext(ctx, args...)
-}
-
-func (db *DB) queryRowWithLog(
-	ctx context.Context,
-	stmtName string,
-	args ...interface{},
-) *sql.Row {
-	stmt := db.stmts[stmtName]
-	sqlLogger.Debug("Executing SQL query", "name", stmtName, "args", args)
-	return stmt.QueryRowContext(ctx, args...)
-}
-
-func GetStreamForDiscordChannelAndSpeaker(
+// GetStreamForDiscordChannelAndSpeaker retrieves a stream for a Discord channel and speaker
+func (db *DB) GetStreamForDiscordChannelAndSpeaker(
 	guildID, channelID, discordID string,
 ) (string, error) {
+	query := `
+		SELECT s.id 
+		FROM streams s
+		JOIN discord_channel_streams dcs ON s.id = dcs.stream
+		JOIN speakers spk ON s.id = spk.stream
+		JOIN discord_speakers ds ON spk.id = ds.speaker
+		WHERE dcs.discord_guild = ? AND dcs.discord_channel = ? AND ds.discord_id = ?
+		ORDER BY s.created_at DESC
+		LIMIT 1
+	`
 	var streamID string
-	row := db.queryRowWithLog(
-		context.Background(),
-		"selectStreamForDiscordChannelAndSpeaker",
-		guildID,
-		channelID,
-		discordID,
-	)
-	if row == nil {
-		return "", fmt.Errorf("no row returned from query")
-	}
-	err := row.Scan(&streamID)
+	err := db.queryRow(context.Background(), query, guildID, channelID, discordID).
+		Scan(&streamID)
 	return streamID, err
 }
 
-func CreateStreamForDiscordChannel(
+// CreateStreamForDiscordChannel creates a new stream for a Discord channel
+func (db *DB) CreateStreamForDiscordChannel(
 	streamID, guildID, channelID string,
 	packetSequence, packetTimestamp uint16,
 	speakerID, discordID, emoji string,
@@ -492,130 +441,145 @@ func CreateStreamForDiscordChannel(
 	}
 	defer tx.Rollback()
 
-	sqlLogger.Debug(
-		"Executing SQL statement in transaction",
-		"name",
-		"insertStreamForDiscordChannel",
-		"args",
-		[]interface{}{streamID, packetSequence, packetTimestamp},
-	)
-	_, err = tx.Stmt(db.stmts["insertStreamForDiscordChannel"]).
-		Exec(streamID, packetSequence, packetTimestamp)
-	if err != nil {
-		return err
+	queries := []struct {
+		query string
+		args  []interface{}
+	}{
+		{
+			query: `
+				INSERT INTO streams (id, packet_seq_offset, sample_idx_offset)
+				VALUES (?, ?, ?)
+			`,
+			args: []interface{}{streamID, packetSequence, packetTimestamp},
+		},
+		{
+			query: `
+				INSERT INTO discord_channel_streams (id, stream, discord_guild, discord_channel)
+				VALUES (?, ?, ?, ?)
+			`,
+			args: []interface{}{etc.Gensym(), streamID, guildID, channelID},
+		},
+		{
+			query: `
+				INSERT INTO speakers (id, stream, emoji)
+				VALUES (?, ?, ?)
+			`,
+			args: []interface{}{speakerID, streamID, emoji},
+		},
+		{
+			query: `
+				INSERT INTO discord_speakers (id, speaker, discord_id)
+				VALUES (?, ?, ?)
+			`,
+			args: []interface{}{etc.Gensym(), speakerID, discordID},
+		},
 	}
 
-	sqlLogger.Debug(
-		"Executing SQL statement in transaction",
-		"name",
-		"insertDiscordChannelStreamForStream",
-		"args",
-		[]interface{}{etc.Gensym(), streamID, guildID, channelID},
-	)
-	_, err = tx.Stmt(db.stmts["insertDiscordChannelStreamForStream"]).
-		Exec(etc.Gensym(), streamID, guildID, channelID)
-	if err != nil {
-		return err
-	}
-
-	sqlLogger.Debug(
-		"Executing SQL statement in transaction",
-		"name",
-		"insertSpeakerForStream",
-		"args",
-		[]interface{}{speakerID, streamID, emoji},
-	)
-	_, err = tx.Stmt(db.stmts["insertSpeakerForStream"]).
-		Exec(speakerID, streamID, emoji)
-	if err != nil {
-		return err
-	}
-
-	sqlLogger.Debug(
-		"Executing SQL statement in transaction",
-		"name",
-		"insertDiscordSpeaker",
-		"args",
-		[]interface{}{etc.Gensym(), speakerID, discordID},
-	)
-	_, err = tx.Stmt(db.stmts["insertDiscordSpeaker"]).
-		Exec(etc.Gensym(), speakerID, discordID)
-	if err != nil {
-		return err
+	for _, q := range queries {
+		db.logger.Debug(
+			"Executing SQL statement in transaction",
+			"query",
+			q.query,
+			"args",
+			q.args,
+		)
+		if _, err := tx.Exec(q.query, q.args...); err != nil {
+			return err
+		}
 	}
 
 	return tx.Commit()
 }
 
-func CreateSpeakerForStream(speakerID, streamID, emoji string) error {
-	_, err := db.execWithLog(
-		context.Background(),
-		"insertSpeakerForStream",
-		speakerID,
-		streamID,
-		emoji,
-	)
-	return err
-}
-
-func CheckSpeechRecognitionSessionExists(streamID string) (bool, error) {
+// CheckSpeechRecognitionSessionExists checks if a speech recognition session exists
+func (db *DB) CheckSpeechRecognitionSessionExists(
+	streamID string,
+) (bool, error) {
+	query := `
+		SELECT EXISTS(
+			SELECT 1 FROM speech_recognition_sessions WHERE stream = ?
+		)
+	`
 	var exists bool
-	err := db.queryRowWithLog(context.Background(), "checkSpeechRecognitionSessionExists", streamID).
-		Scan(&exists)
+	err := db.queryRow(context.Background(), query, streamID).Scan(&exists)
 	return exists, err
 }
 
-func SaveSpeechRecognitionSession(streamID, sessionData string) error {
-	_, err := db.execWithLog(
-		context.Background(),
-		"insertSpeechRecognitionSession",
-		streamID,
-		sessionData,
-	)
+// SaveSpeechRecognitionSession saves a speech recognition session
+func (db *DB) SaveSpeechRecognitionSession(
+	streamID, sessionData string,
+) error {
+	query := `
+		INSERT INTO speech_recognition_sessions (stream, session_data)
+		VALUES (?, ?)
+	`
+	_, err := db.exec(context.Background(), query, streamID, sessionData)
 	return err
 }
 
-func GetSpeechRecognitionSession(streamID string) (string, error) {
+// GetSpeechRecognitionSession retrieves a speech recognition session
+func (db *DB) GetSpeechRecognitionSession(streamID string) (string, error) {
+	query := `
+		SELECT session_data FROM speech_recognition_sessions WHERE stream = ?
+	`
 	var sessionData string
-	err := db.queryRowWithLog(context.Background(), "getSpeechRecognitionSession", streamID).
+	err := db.queryRow(context.Background(), query, streamID).
 		Scan(&sessionData)
 	return sessionData, err
 }
 
-func GetChannelAndEmojiForStream(streamID string) (string, string, error) {
+// GetChannelAndEmojiForStream retrieves the channel ID and emoji for a stream
+func (db *DB) GetChannelAndEmojiForStream(
+	streamID string,
+) (string, string, error) {
+	query := `
+		SELECT dcs.discord_channel, s.emoji 
+		FROM discord_channel_streams dcs
+		JOIN streams st ON dcs.stream = st.id
+		JOIN speakers s ON st.id = s.stream
+		WHERE st.id = ?
+	`
 	var channelID, emoji string
-	err := db.queryRowWithLog(context.Background(), "selectChannelAndEmojiForStream", streamID).
+	err := db.queryRow(context.Background(), query, streamID).
 		Scan(&channelID, &emoji)
 	return channelID, emoji, err
 }
 
-func UpdateSpeakerEmoji(streamID, newEmoji string) error {
-	_, err := db.execWithLog(
-		context.Background(),
-		"updateSpeakerEmoji",
-		newEmoji,
-		streamID,
-	)
+// UpdateSpeakerEmoji updates the emoji for a speaker
+func (db *DB) UpdateSpeakerEmoji(streamID, newEmoji string) error {
+	query := `
+		UPDATE speakers SET emoji = ? WHERE stream = ?
+	`
+	_, err := db.exec(context.Background(), query, newEmoji, streamID)
 	return err
 }
 
-func GetChannelIDForStream(streamID string) (string, error) {
+// GetChannelIDForStream retrieves the channel ID for a stream
+func (db *DB) GetChannelIDForStream(streamID string) (string, error) {
+	query := `
+		SELECT discord_channel FROM discord_channel_streams WHERE stream = ?
+	`
 	var channelID string
-	err := db.queryRowWithLog(context.Background(), "selectChannelIDForStream", streamID).
-		Scan(&channelID)
+	err := db.queryRow(context.Background(), query, streamID).Scan(&channelID)
 	return channelID, err
 }
 
-func EndStreamForChannel(guildID, channelID string) error {
-	_, err := db.execWithLog(
-		context.Background(),
-		"updateStreamEndTimeForChannel",
-		guildID,
-		channelID,
-	)
+// EndStreamForChannel ends a stream for a channel
+func (db *DB) EndStreamForChannel(guildID, channelID string) error {
+	query := `
+		UPDATE streams
+		SET ended_at = CURRENT_TIMESTAMP
+		WHERE id IN (
+			SELECT stream
+			FROM discord_channel_streams
+			WHERE discord_guild = ? AND discord_channel = ?
+		) AND ended_at IS NULL
+	`
+	_, err := db.exec(context.Background(), query, guildID, channelID)
 	return err
 }
 
+// GetTodayTranscriptions retrieves transcriptions for today
 func (db *DB) GetTodayTranscriptions() ([]Transcription, error) {
 	query := `
 		SELECT s.emoji, r.text, r.created_at
@@ -640,18 +604,15 @@ func (db *DB) GetTodayTranscriptions() ([]Transcription, error) {
 		}
 		t.Timestamp, err = time.Parse(time.RFC3339, timestampStr)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse timestamp: %w", err)
+			return nil, fmt.Errorf("parse timestamp: %w", err)
 		}
 		transcriptions = append(transcriptions, t)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return transcriptions, nil
+	return transcriptions, rows.Err()
 }
 
+// GetTranscriptionsForDuration retrieves transcriptions for a specific duration
 func (db *DB) GetTranscriptionsForDuration(
 	duration time.Duration,
 ) ([]Transcription, error) {
@@ -681,39 +642,38 @@ func (db *DB) GetTranscriptionsForDuration(
 		}
 		t.Timestamp, err = time.Parse(time.RFC3339, timestampStr)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse timestamp: %w", err)
+			return nil, fmt.Errorf("parse timestamp: %w", err)
 		}
 		transcriptions = append(transcriptions, t)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return transcriptions, nil
+	return transcriptions, rows.Err()
 }
 
+// SetSystemPrompt sets a system prompt
 func (db *DB) SetSystemPrompt(name, prompt string) error {
 	query := `
 		INSERT OR REPLACE INTO system_prompts (name, prompt)
 		VALUES (?, ?)
 	`
-	_, err := db.Exec(query, name, prompt)
+	_, err := db.exec(context.Background(), query, name, prompt)
 	return err
 }
 
+// GetSystemPrompt retrieves a system prompt
 func (db *DB) GetSystemPrompt(name string) (string, error) {
 	query := `
 		SELECT prompt FROM system_prompts WHERE name = ?
 	`
 	var prompt string
-	err := db.QueryRow(query, name).Scan(&prompt)
+	err := db.queryRow(context.Background(), query, name).Scan(&prompt)
 	if err == sql.ErrNoRows {
 		return "", fmt.Errorf("no prompt found with name: %s", name)
 	}
 	return prompt, err
 }
 
+// ListSystemPrompts lists all system prompts
 func (db *DB) ListSystemPrompts() (map[string]string, error) {
 	query := `
 		SELECT name, prompt FROM system_prompts
@@ -735,22 +695,7 @@ func (db *DB) ListSystemPrompts() (map[string]string, error) {
 	return prompts, rows.Err()
 }
 
-func RunMigrations(logger *log.Logger) error {
-	migrations, err := LoadMigrations("db")
-	if err != nil {
-		return fmt.Errorf("load migrations: %w", err)
-	}
-
-	logger.Info("Starting database migration process...")
-	err = Migrate(db.DB, migrations, logger)
-	if err != nil {
-		return fmt.Errorf("apply migrations: %w", err)
-	}
-
-	logger.Info("Database migration process completed")
-	return nil
-}
-
+// GetPacketsForStreamInSampleRange retrieves packets for a stream within a sample range
 func (db *DB) GetPacketsForStreamInSampleRange(
 	streamID string,
 	startSample, endSample int,
@@ -758,13 +703,15 @@ func (db *DB) GetPacketsForStreamInSampleRange(
 	Payload   []byte
 	SampleIdx int
 }, error) {
-	rows, err := db.stmts["getPacketsForStreamInSampleRange"].Query(
-		streamID,
-		startSample,
-		endSample,
-	)
+	query := `
+		SELECT payload, sample_idx
+		FROM packets
+		WHERE stream = ? AND sample_idx BETWEEN ? AND ?
+		ORDER BY sample_idx ASC
+	`
+	rows, err := db.Query(query, streamID, startSample, endSample)
 	if err != nil {
-		return nil, fmt.Errorf("query packets: %w", err)
+		return nil, err
 	}
 	defer rows.Close()
 
@@ -778,14 +725,10 @@ func (db *DB) GetPacketsForStreamInSampleRange(
 			SampleIdx int
 		}
 		if err := rows.Scan(&p.Payload, &p.SampleIdx); err != nil {
-			return nil, fmt.Errorf("scan packet data: %w", err)
+			return nil, err
 		}
 		packets = append(packets, p)
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("iterate packets: %w", err)
-	}
-
-	return packets, nil
+	return packets, rows.Err()
 }
