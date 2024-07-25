@@ -408,17 +408,7 @@ func runDiscord(cmd *cobra.Command, args []string) {
 	}
 	defer db.Close()
 
-	schema, err := db.LoadSchema("db/schema.sql")
-	if err != nil {
-		mainLogger.Fatal("load schema", "error", err.Error())
-	}
-
-	migrations, err := db.LoadMigrations("db/migrate")
-	if err != nil {
-		mainLogger.Fatal("load migrations", "error", err.Error())
-	}
-
-	err = db.Migrate(db.GetDB().DB, schema, migrations, sqlLogger)
+	err = db.Migrate(db.GetDB().DB, sqlLogger)
 	if err != nil {
 		mainLogger.Fatal("migrate database", "error", err.Error())
 	}
