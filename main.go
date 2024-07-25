@@ -499,16 +499,9 @@ func runWeb(cmd *cobra.Command, args []string) {
 	db.InitDB(sqlLogger)
 	defer db.Close()
 
-	// Run database migrations
-	if err := db.RunMigrations(sqlLogger); err != nil {
-		mainLogger.Fatal("run migrations", "error", err.Error())
-	}
+	// Database migrations are handled during InitDB, so we don't need to run them here
 
-	mainLogger.Info("Preparing database statements...")
-	if err := db.GetDB().PrepareStatements(); err != nil {
-		mainLogger.Fatal("prepare statements", "error", err.Error())
-	}
-	mainLogger.Info("Database statements prepared successfully")
+	// Database statements are prepared during InitDB, so we don't need to prepare them here
 
 	port := viper.GetInt("web_port")
 	handler := web.NewHandler(db.GetDB(), mainLogger)
