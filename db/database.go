@@ -869,11 +869,18 @@ func (db *DB) GetTranscriptionsForTimeRange(
 	startTime, endTime time.Time,
 ) ([]Transcription, error) {
 	query := `
-		SELECT s.emoji, r.text, r.created_at, r.stream
-		FROM recognitions r
-		JOIN speakers s ON r.stream = s.stream
-		WHERE r.created_at BETWEEN ? AND ?
-		ORDER BY r.created_at ASC
+		WITH ranked_recognitions AS (
+			SELECT s.emoji, r.text, r.created_at, r.stream, r.sample_idx,
+				   LEAD(r.created_at) OVER (PARTITION BY r.stream ORDER BY r.created_at) AS next_created_at
+			FROM recognitions r
+			JOIN speakers s ON r.stream = s.stream
+			WHERE r.created_at >= ?
+			ORDER BY r.created_at ASC
+		)
+		SELECT emoji, text, created_at, stream, sample_idx
+		FROM ranked_recognitions
+		WHERE created_at <= ? OR (next_created_at IS NULL AND created_at <= datetime(?, '+10 seconds'))
+		ORDER BY created_at ASC
 	`
 
 	db.logger.Debug(
@@ -887,6 +894,7 @@ func (db *DB) GetTranscriptionsForTimeRange(
 	rows, err := db.Query(
 		query,
 		startTime.Format("2006-01-02 15:04:05"),
+		endTime.Format("2006-01-02 15:04:05"),
 		endTime.Format("2006-01-02 15:04:05"),
 	)
 	if err != nil {

@@ -185,11 +185,7 @@ func (h *Handler) handleStreamAudio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	endTime, err := time.Parse(time.RFC3339, endTimeStr)
-	if err != nil {
-		http.Error(w, "Invalid end time format", http.StatusBadRequest)
-		return
-	}
+	endTime := startTime.Add(10 * time.Second)
 
 	transcriptions, err := h.db.GetTranscriptionsForTimeRange(
 		startTime,
