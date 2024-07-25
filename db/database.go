@@ -404,7 +404,7 @@ func (db *DB) GetTranscriptionsForStream(
 ) ([]Transcription, error) {
 	query := `
 		SELECT s.emoji, r.text, r.created_at, r.sample_idx, r.stream,
-			   LEAD(r.created_at) OVER (ORDER BY r.created_at) AS end_time
+			   COALESCE(LEAD(r.created_at) OVER (ORDER BY r.created_at), '') AS end_time
 		FROM recognitions r
 		JOIN speakers s ON r.stream = s.stream
 		WHERE r.stream = ?
@@ -918,12 +918,19 @@ func (db *DB) GetTranscriptionsForTimeRange(
 	for rows.Next() {
 		var t Transcription
 		var timestampStr, nextTimestampStr sql.NullString
-		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr, &t.StreamID, &t.SampleIdx, &nextTimestampStr)
+		err := rows.Scan(
+			&t.Emoji,
+			&t.Text,
+			&timestampStr,
+			&t.StreamID,
+			&t.SampleIdx,
+			&nextTimestampStr,
+		)
 		if err != nil {
 			db.logger.Error("Error scanning row", "error", err)
 			return nil, err
 		}
-		t.Timestamp, err = time.Parse("2006-01-02 15:04:05", timestampStr)
+		t.Timestamp, err = time.Parse(time.RFC3339, timestampStr.String)
 		if err != nil {
 			db.logger.Error(
 				"Error parsing timestamp",
@@ -935,7 +942,10 @@ func (db *DB) GetTranscriptionsForTimeRange(
 			return nil, fmt.Errorf("parse timestamp: %w", err)
 		}
 		if nextTimestampStr.Valid {
-			t.EndTime, err = time.Parse("2006-01-02 15:04:05", nextTimestampStr.String)
+			t.EndTime, err = time.Parse(
+				"2006-01-02 15:04:05",
+				nextTimestampStr.String,
+			)
 			if err != nil {
 				db.logger.Error(
 					"Error parsing next timestamp",
