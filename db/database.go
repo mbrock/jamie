@@ -295,7 +295,7 @@ func (db *DB) GetRecentTranscriptions() ([]Transcription, error) {
 		FROM final_groups
 	`
 
-	return db.queryRowsGeneric(query, nil, func(rows *sql.Rows) (Transcription, error) {
+	return queryRowsGeneric(db, query, nil, func(rows *sql.Rows) (Transcription, error) {
 		var t Transcription
 		var timestampStr string
 		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr)
