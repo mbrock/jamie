@@ -10,6 +10,7 @@ import (
 	"jamie/db"
 	"jamie/etc"
 	"jamie/llm"
+	"jamie/ogg"
 	"jamie/stt"
 	"jamie/txt"
 	"strings"
@@ -18,8 +19,6 @@ import (
 	discordsdk "github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
 	"github.com/haguro/elevenlabs-go"
-	"github.com/pion/rtp"
-	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
 	"github.com/tosone/minimp3"
 	"layeh.com/gopus"
 )
@@ -420,7 +419,14 @@ func (bot *Bot) processSegment(streamID string, segmentDrafts <-chan string) {
 		}
 
 		recognitionID := etc.Gensym()
-		err = bot.db.SaveRecognition(recognitionID, streamID, 0, 0, final, 1.0)
+		err = bot.db.SaveRecognition(
+			recognitionID,
+			streamID,
+			0,
+			0,
+			final,
+			1.0,
+		)
 		if err != nil {
 			bot.log.Error(
 				"failed to save recognition to database",
@@ -643,13 +649,10 @@ func (bot *Bot) handleListPromptsCommand(
 	return nil
 }
 
-import (
-	"jamie/ogg"
-)
-
-// ... (other imports and code)
-
-func (bot *Bot) GenerateOggOpusBlob(streamID string, startSample, endSample int) ([]byte, error) {
+func (bot *Bot) GenerateOggOpusBlob(
+	streamID string,
+	startSample, endSample int,
+) ([]byte, error) {
 	return ogg.GenerateOggOpusBlob(streamID, startSample, endSample)
 }
 
