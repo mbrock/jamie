@@ -892,7 +892,7 @@ func (db *DB) GetTranscriptionsForTimeRange(
 	for rows.Next() {
 		var t Transcription
 		var timestampStr string
-		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr, &t.StreamID)
+		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr)
 		if err != nil {
 			db.logger.Error("Error scanning row", "error", err)
 			return nil, err
