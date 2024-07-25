@@ -3,7 +3,6 @@ package db
 import (
 	"database/sql"
 	"fmt"
-	"time"
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/log"
@@ -120,49 +119,41 @@ var migrations = []Migration{
 		Description: "Update timestamp columns to use REAL type",
 		Up: func(tx *sql.Tx) error {
 			_, err := tx.Exec(`
-				-- Update streams table
 				ALTER TABLE streams ADD COLUMN created_at_new REAL DEFAULT (julianday('now'));
 				UPDATE streams SET created_at_new = created_at;
 				ALTER TABLE streams DROP COLUMN created_at;
 				ALTER TABLE streams RENAME COLUMN created_at_new TO created_at;
 
-				-- Update packets table
 				ALTER TABLE packets ADD COLUMN received_at_new REAL DEFAULT (julianday('now'));
 				UPDATE packets SET received_at_new = received_at;
 				ALTER TABLE packets DROP COLUMN received_at;
 				ALTER TABLE packets RENAME COLUMN received_at_new TO received_at;
 
-				-- Update speakers table
 				ALTER TABLE speakers ADD COLUMN created_at_new REAL DEFAULT (julianday('now'));
 				UPDATE speakers SET created_at_new = created_at;
 				ALTER TABLE speakers DROP COLUMN created_at;
 				ALTER TABLE speakers RENAME COLUMN created_at_new TO created_at;
 
-				-- Update discord_speakers table
 				ALTER TABLE discord_speakers ADD COLUMN created_at_new REAL DEFAULT (julianday('now'));
 				UPDATE discord_speakers SET created_at_new = created_at;
 				ALTER TABLE discord_speakers DROP COLUMN created_at;
 				ALTER TABLE discord_speakers RENAME COLUMN created_at_new TO created_at;
 
-				-- Update discord_channel_streams table
 				ALTER TABLE discord_channel_streams ADD COLUMN created_at_new REAL DEFAULT (julianday('now'));
 				UPDATE discord_channel_streams SET created_at_new = created_at;
 				ALTER TABLE discord_channel_streams DROP COLUMN created_at;
 				ALTER TABLE discord_channel_streams RENAME COLUMN created_at_new TO created_at;
 
-				-- Update attributions table
 				ALTER TABLE attributions ADD COLUMN created_at_new REAL DEFAULT (julianday('now'));
 				UPDATE attributions SET created_at_new = created_at;
 				ALTER TABLE attributions DROP COLUMN created_at;
 				ALTER TABLE attributions RENAME COLUMN created_at_new TO created_at;
 
-				-- Update recognitions table
 				ALTER TABLE recognitions ADD COLUMN created_at_new REAL DEFAULT (julianday('now'));
 				UPDATE recognitions SET created_at_new = created_at;
 				ALTER TABLE recognitions DROP COLUMN created_at;
 				ALTER TABLE recognitions RENAME COLUMN created_at_new TO created_at;
 
-				-- Update speech_recognition_sessions table
 				ALTER TABLE speech_recognition_sessions ADD COLUMN created_at_new REAL DEFAULT (julianday('now'));
 				UPDATE speech_recognition_sessions SET created_at_new = created_at;
 				ALTER TABLE speech_recognition_sessions DROP COLUMN created_at;
@@ -172,7 +163,9 @@ var migrations = []Migration{
 		},
 		Down: func(tx *sql.Tx) error {
 			// This is a complex migration to revert, so we'll just log a warning
-			log.Warn("Reverting migration 002_update_timestamp_columns is not supported")
+			log.Warn(
+				"Reverting migration 002_update_timestamp_columns is not supported",
+			)
 			return nil
 		},
 	},
@@ -192,13 +185,18 @@ func Migrate(db *sql.DB, logger *log.Logger) error {
 
 	for _, migration := range migrations {
 		var applied bool
-		err := db.QueryRow("SELECT 1 FROM migration_history WHERE id = ?", migration.ID).Scan(&applied)
+		err := db.QueryRow("SELECT 1 FROM migration_history WHERE id = ?", migration.ID).
+			Scan(&applied)
 		if err != nil && err != sql.ErrNoRows {
 			return fmt.Errorf("error checking migration status: %w", err)
 		}
 
 		if applied {
-			logger.Info("Skipping migration (already applied)", "id", migration.ID)
+			logger.Info(
+				"Skipping migration (already applied)",
+				"id",
+				migration.ID,
+			)
 			continue
 		}
 
@@ -228,18 +226,33 @@ func Migrate(db *sql.DB, logger *log.Logger) error {
 		err = migration.Up(tx)
 		if err != nil {
 			tx.Rollback()
-			return fmt.Errorf("error applying migration %s: %w", migration.ID, err)
+			return fmt.Errorf(
+				"error applying migration %s: %w",
+				migration.ID,
+				err,
+			)
 		}
 
-		_, err = tx.Exec("INSERT INTO migration_history (id, applied_at) VALUES (?, julianday('now'))", migration.ID)
+		_, err = tx.Exec(
+			"INSERT INTO migration_history (id, applied_at) VALUES (?, julianday('now'))",
+			migration.ID,
+		)
 		if err != nil {
 			tx.Rollback()
-			return fmt.Errorf("error recording migration %s: %w", migration.ID, err)
+			return fmt.Errorf(
+				"error recording migration %s: %w",
+				migration.ID,
+				err,
+			)
 		}
 
 		err = tx.Commit()
 		if err != nil {
-			return fmt.Errorf("error committing migration %s: %w", migration.ID, err)
+			return fmt.Errorf(
+				"error committing migration %s: %w",
+				migration.ID,
+				err,
+			)
 		}
 
 		logger.Info("Successfully applied migration", "id", migration.ID)
