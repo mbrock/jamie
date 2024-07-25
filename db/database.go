@@ -888,7 +888,7 @@ func (db *DB) GetTranscriptionsForTimeRange(
 			WHERE r.created_at >= ?
 			ORDER BY r.created_at ASC
 		)
-		SELECT emoji, text, created_at, stream, sample_idx
+		SELECT emoji, text, created_at, stream, sample_idx, next_created_at
 		FROM ranked_recognitions
 		WHERE created_at <= ? OR (next_created_at IS NULL AND created_at <= datetime(?, '+10 seconds'))
 		ORDER BY created_at ASC
@@ -917,13 +917,13 @@ func (db *DB) GetTranscriptionsForTimeRange(
 	var transcriptions []Transcription
 	for rows.Next() {
 		var t Transcription
-		var timestampStr string
-		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr)
+		var timestampStr, nextTimestampStr sql.NullString
+		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr, &t.StreamID, &t.SampleIdx, &nextTimestampStr)
 		if err != nil {
 			db.logger.Error("Error scanning row", "error", err)
 			return nil, err
 		}
-		t.Timestamp, err = time.Parse(time.RFC3339, timestampStr)
+		t.Timestamp, err = time.Parse("2006-01-02 15:04:05", timestampStr)
 		if err != nil {
 			db.logger.Error(
 				"Error parsing timestamp",
@@ -933,6 +933,21 @@ func (db *DB) GetTranscriptionsForTimeRange(
 				timestampStr,
 			)
 			return nil, fmt.Errorf("parse timestamp: %w", err)
+		}
+		if nextTimestampStr.Valid {
+			t.EndTime, err = time.Parse("2006-01-02 15:04:05", nextTimestampStr.String)
+			if err != nil {
+				db.logger.Error(
+					"Error parsing next timestamp",
+					"error",
+					err,
+					"nextTimestampStr",
+					nextTimestampStr.String,
+				)
+				return nil, fmt.Errorf("parse next timestamp: %w", err)
+			}
+		} else {
+			t.EndTime = t.Timestamp.Add(10 * time.Second)
 		}
 		transcriptions = append(transcriptions, t)
 	}
