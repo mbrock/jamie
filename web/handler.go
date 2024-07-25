@@ -92,10 +92,11 @@ func (h *Handler) handleConversations(w http.ResponseWriter, _ *http.Request) {
 	for _, conv := range conversations {
 		transcriptions, err := h.db.GetTranscriptionsForTimeRange(conv.StartTime, conv.EndTime)
 		if err != nil {
-			h.logger.Error("failed to get transcriptions for conversation", "error", err.Error())
+			h.logger.Error("failed to get transcriptions for conversation", "error", err.Error(), "start_time", conv.StartTime, "end_time", conv.EndTime)
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 			return
 		}
+		h.logger.Debug("Fetched transcriptions", "count", len(transcriptions), "start_time", conv.StartTime, "end_time", conv.EndTime)
 		conversationsWithTranscriptions = append(conversationsWithTranscriptions, ConversationWithTranscriptions{
 			StartTime:      conv.StartTime,
 			EndTime:        conv.EndTime,
@@ -122,12 +123,16 @@ func (h *Handler) handleConversations(w http.ResponseWriter, _ *http.Request) {
                 <p class="text-gray-600 text-sm">End: {{.EndTime.Format "2006-01-02 15:04:05"}}</p>
                 <p class="text-lg mb-2">Duration: {{.EndTime.Sub .StartTime}}</p>
                 <details>
-                    <summary class="cursor-pointer text-blue-600 hover:text-blue-800">Show Transcriptions</summary>
+                    <summary class="cursor-pointer text-blue-600 hover:text-blue-800">Show Transcriptions ({{len .Transcriptions}})</summary>
                     <div class="mt-2 space-y-2">
-                        {{range .Transcriptions}}
-                        <div class="bg-gray-100 p-2 rounded">
-                            <span class="font-bold">{{.Emoji}}</span> {{.Text}}
-                        </div>
+                        {{if .Transcriptions}}
+                            {{range .Transcriptions}}
+                            <div class="bg-gray-100 p-2 rounded">
+                                <span class="font-bold">{{.Emoji}}</span> {{.Text}}
+                            </div>
+                            {{end}}
+                        {{else}}
+                            <p>No transcriptions found for this conversation.</p>
                         {{end}}
                     </div>
                 </details>
