@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -15,8 +14,6 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/log"
-	"github.com/pion/rtp"
-	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
 	"github.com/sashabaranov/go-openai"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -24,6 +21,7 @@ import (
 	"jamie/db"
 	"jamie/discordbot"
 	"jamie/llm"
+	"jamie/ogg"
 	"jamie/stt"
 	"jamie/web"
 )
@@ -261,13 +259,10 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	fmt.Printf("Audio file generated: %s\n", outputFileName)
 }
 
-import (
-	"jamie/ogg"
-)
-
-// ... (other imports and code)
-
-func generateOggOpusBlob(streamID string, startSample, endSample int) ([]byte, error) {
+func generateOggOpusBlob(
+	streamID string,
+	startSample, endSample int,
+) ([]byte, error) {
 	return ogg.GenerateOggOpusBlob(streamID, startSample, endSample)
 }
 
