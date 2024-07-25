@@ -57,6 +57,7 @@ type Transcription struct {
 	Text      string
 	Timestamp time.Time
 	SampleIdx int
+	StreamID  string
 }
 
 // Stream represents a single stream entry
@@ -417,7 +418,13 @@ func (db *DB) GetTranscriptionsForStream(
 	for rows.Next() {
 		var t Transcription
 		var timestampStr string
-		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr, &t.SampleIdx, &t.StreamID)
+		err := rows.Scan(
+			&t.Emoji,
+			&t.Text,
+			&timestampStr,
+			&t.SampleIdx,
+			&t.StreamID,
+		)
 		if err != nil {
 			return nil, err
 		}

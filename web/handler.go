@@ -80,8 +80,15 @@ func (h *Handler) handleIndex(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-func (h *Handler) handleConversations(w http.ResponseWriter, r *http.Request) {
-	conversations, err := h.db.GetRecentStreamsWithTranscriptionCount("", "", 10)
+func (h *Handler) handleConversations(
+	w http.ResponseWriter,
+	_ *http.Request,
+) {
+	conversations, err := h.db.GetRecentStreamsWithTranscriptionCount(
+		"",
+		"",
+		10,
+	)
 	if err != nil {
 		h.logger.Error("failed to get conversations", "error", err.Error())
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -98,13 +105,20 @@ func (h *Handler) handleConversations(w http.ResponseWriter, r *http.Request) {
 	for _, conv := range conversations {
 		transcriptions, err := h.db.GetTranscriptionsForStream(conv.ID)
 		if err != nil {
-			h.logger.Error("failed to get transcriptions", "error", err.Error())
+			h.logger.Error(
+				"failed to get transcriptions",
+				"error",
+				err.Error(),
+			)
 			continue
 		}
-		conversationsWithTranscriptions = append(conversationsWithTranscriptions, ConversationWithTranscriptions{
-			Stream:         conv,
-			Transcriptions: transcriptions,
-		})
+		conversationsWithTranscriptions = append(
+			conversationsWithTranscriptions,
+			ConversationWithTranscriptions{
+				Stream:         conv,
+				Transcriptions: transcriptions,
+			},
+		)
 	}
 
 	tmpl := template.Must(template.New("conversations").Parse(`
@@ -128,7 +142,7 @@ func (h *Handler) handleConversations(w http.ResponseWriter, r *http.Request) {
                     <div class="bg-gray-50 rounded-lg p-4">
                         <p class="text-gray-600 text-sm">{{.Timestamp.Format "2006-01-02 15:04:05"}}</p>
                         <p class="text-lg"><span class="font-bold">{{.Emoji}}</span> {{.Text}}</p>
-                        <a href="/stream-audio/?stream={{.StreamID}}&start={{.Timestamp.Format "2006-01-02T15:04:05Z07:00"}}&end={{.Timestamp.Add (1 * time.Second).Format "2006-01-02T15:04:05Z07:00"}}" class="text-blue-600 hover:text-blue-800 mt-2 inline-block" target="_blank">🔊 Listen</a>
+                        <a href="/stream-audio/?stream={{.StreamID}}&start={{.Timestamp.Format "2006-01-02T15:04:05Z07:00"}}&end={{.Timestamp.Add(1 * time.Second).Format "2006-01-02T15:04:05Z07:00"}}" class="text-blue-600 hover:text-blue-800 mt-2 inline-block" target="_blank">🔊 Listen</a>
                     </div>
                     {{end}}
                 </div>
