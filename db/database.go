@@ -742,7 +742,7 @@ func (db *DB) GetPacketsForStreamInSampleRange(
 
 	return packets, rows.Err()
 }
-func (db *DB) GetConversationTimeRanges(minSilence time.Duration, maxClusterGap time.Duration) ([]struct {
+func (db *DB) GetConversationTimeRanges(minSilence time.Duration) ([]struct {
 	StartTime time.Time
 	EndTime   time.Time
 }, error) {
@@ -791,14 +791,12 @@ func (db *DB) GetConversationTimeRanges(minSilence time.Duration, maxClusterGap 
 		)
 		SELECT start_time, end_time
 		FROM conversation_ranges
-		WHERE JULIANDAY(end_time) - JULIANDAY(start_time) <= ?
 		ORDER BY start_time
 	`
 
 	minSilenceSeconds := minSilence.Seconds()
-	maxClusterGapSeconds := maxClusterGap.Seconds()
 
-	rows, err := db.Query(query, minSilenceSeconds, minSilenceSeconds, minSilenceSeconds, minSilenceSeconds, maxClusterGapSeconds)
+	rows, err := db.Query(query, minSilenceSeconds, minSilenceSeconds, minSilenceSeconds, minSilenceSeconds)
 	if err != nil {
 		return nil, err
 	}
@@ -823,6 +821,11 @@ func (db *DB) GetConversationTimeRanges(minSilence time.Duration, maxClusterGap 
 		end, err := time.Parse(time.RFC3339, endTime)
 		if err != nil {
 			return nil, err
+		}
+
+		duration := end.Sub(start)
+		if duration > 8*time.Hour {
+			return nil, fmt.Errorf("conversation duration exceeds 8 hours: %v to %v", start, end)
 		}
 
 		results = append(results, struct {
