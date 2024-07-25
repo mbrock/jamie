@@ -21,6 +21,25 @@ func (db *DB) execContext(query string, args ...interface{}) error {
 	return err
 }
 
+func (db *DB) queryRows(query string, args []interface{}, parser func(*sql.Rows) (interface{}, error)) ([]interface{}, error) {
+	rows, err := db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []interface{}
+	for rows.Next() {
+		result, err := parser(rows)
+		if err != nil {
+			return nil, err
+		}
+		results = append(results, result)
+	}
+
+	return results, rows.Err()
+}
+
 // DB represents the database connection and prepared statements cache
 type DB struct {
 	*sql.DB
@@ -350,19 +369,27 @@ func (db *DB) GetRecentStreamsWithTranscriptionCount(
 		ORDER BY s.created_at DESC
 		LIMIT ?
 	`
-	return queryRowsGeneric(
-		db,
+	results, err := db.queryRows(
 		query,
 		[]interface{}{guildID, guildID, channelID, channelID, limit},
-		func(rows *sql.Rows) (Stream, error) {
+		func(rows *sql.Rows) (interface{}, error) {
 			var s Stream
 			err := rows.Scan(&s.ID, &s.CreatedAt, &s.TranscriptionCount)
 			if err != nil {
-				return Stream{}, err
+				return nil, err
 			}
 			return s, nil
 		},
 	)
+	if err != nil {
+		return nil, err
+	}
+
+	streams := make([]Stream, len(results))
+	for i, result := range results {
+		streams[i] = result.(Stream)
+	}
+	return streams, nil
 }
 
 // GetTranscriptionsForStream retrieves transcriptions for a specific stream
@@ -714,4 +741,102 @@ func (db *DB) GetPacketsForStreamInSampleRange(
 	}
 
 	return packets, rows.Err()
+}
+func (db *DB) GetConversationTimeRanges(minSilence time.Duration, maxClusterGap time.Duration) ([]struct {
+	StartTime time.Time
+	EndTime   time.Time
+}, error) {
+	query := `
+		WITH ranked_recognitions AS (
+			SELECT 
+				created_at,
+				LAG(created_at) OVER (ORDER BY created_at) AS prev_created_at,
+				LEAD(created_at) OVER (ORDER BY created_at) AS next_created_at
+			FROM recognitions
+			ORDER BY created_at
+		),
+		gaps AS (
+			SELECT 
+				created_at,
+				JULIANDAY(created_at) - JULIANDAY(prev_created_at) AS prev_gap,
+				JULIANDAY(next_created_at) - JULIANDAY(created_at) AS next_gap
+			FROM ranked_recognitions
+		),
+		conversation_boundaries AS (
+			SELECT 
+				created_at,
+				CASE 
+					WHEN prev_gap IS NULL OR prev_gap * 24 * 60 * 60 >= ? THEN 'start'
+					WHEN next_gap IS NULL OR next_gap * 24 * 60 * 60 >= ? THEN 'end'
+					ELSE NULL 
+				END AS boundary_type
+			FROM gaps
+			WHERE prev_gap IS NULL OR next_gap IS NULL OR 
+				  prev_gap * 24 * 60 * 60 >= ? OR 
+				  next_gap * 24 * 60 * 60 >= ?
+		),
+		conversation_ranges AS (
+			SELECT 
+				MAX(CASE WHEN boundary_type = 'start' THEN created_at END) AS start_time,
+				MIN(CASE WHEN boundary_type = 'end' THEN created_at END) AS end_time
+			FROM (
+				SELECT 
+					created_at, 
+					boundary_type,
+					SUM(CASE WHEN boundary_type = 'start' THEN 1 ELSE 0 END) OVER (ORDER BY created_at) AS conversation_group
+				FROM conversation_boundaries
+			)
+			GROUP BY conversation_group
+			HAVING start_time IS NOT NULL AND end_time IS NOT NULL
+		)
+		SELECT start_time, end_time
+		FROM conversation_ranges
+		WHERE JULIANDAY(end_time) - JULIANDAY(start_time) <= ?
+		ORDER BY start_time
+	`
+
+	minSilenceSeconds := minSilence.Seconds()
+	maxClusterGapSeconds := maxClusterGap.Seconds()
+
+	rows, err := db.Query(query, minSilenceSeconds, minSilenceSeconds, minSilenceSeconds, minSilenceSeconds, maxClusterGapSeconds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []struct {
+		StartTime time.Time
+		EndTime   time.Time
+	}
+
+	for rows.Next() {
+		var startTime, endTime string
+		if err := rows.Scan(&startTime, &endTime); err != nil {
+			return nil, err
+		}
+
+		start, err := time.Parse(time.RFC3339, startTime)
+		if err != nil {
+			return nil, err
+		}
+
+		end, err := time.Parse(time.RFC3339, endTime)
+		if err != nil {
+			return nil, err
+		}
+
+		results = append(results, struct {
+			StartTime time.Time
+			EndTime   time.Time
+		}{
+			StartTime: start,
+			EndTime:   end,
+		})
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return results, nil
 }
