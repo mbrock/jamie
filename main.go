@@ -131,7 +131,8 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	defer db.Close()
 
 	// Fetch recent streams
-	streams, err := db.GetDB().GetRecentStreamsWithTranscriptionCount("", "", 100)
+	streams, err := db.GetDB().
+		GetRecentStreamsWithTranscriptionCount("", "", 100)
 	if err != nil {
 		mainLogger.Fatal("fetch recent streams", "error", err.Error())
 	}
@@ -281,10 +282,7 @@ func generateOggOpusBlob(
 	for i, packet := range packets {
 		if err := oggWriter.WriteRTP(&rtp.Packet{
 			Header: rtp.Header{
-				Version:        2,
-				PayloadType:    111,
-				SequenceNumber: uint16(i),
-				Timestamp:      uint32(i * 960),
+				Timestamp: uint32(i * 960),
 			},
 			Payload: packet,
 		}); err != nil {

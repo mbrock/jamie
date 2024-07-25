@@ -35,6 +35,7 @@ type Bot struct {
 	openaiAPIKey             string
 	commands                 map[string]CommandHandler
 	elevenLabsAPIKey         string
+	messageCreate            chan *discordsdk.MessageCreate
 }
 
 func NewBot(
@@ -54,6 +55,7 @@ func NewBot(
 		openaiAPIKey:     openaiAPIKey,
 		commands:         make(map[string]CommandHandler),
 		elevenLabsAPIKey: elevenLabsAPIKey,
+		messageCreate:    make(chan *discordsdk.MessageCreate),
 	}
 
 	bot.registerCommands()
@@ -85,7 +87,6 @@ func (bot *Bot) registerCommands() {
 	bot.commands["summary"] = bot.handleSummaryCommand
 	bot.commands["prompt"] = bot.handlePromptCommand
 	bot.commands["listprompts"] = bot.handleListPromptsCommand
-	bot.commands["audio"] = bot.handleAudioCommand
 }
 
 func (bot *Bot) Close() error {
@@ -111,6 +112,14 @@ func (bot *Bot) handleMessageCreate(
 	s *discordsdk.Session,
 	m *discordsdk.MessageCreate,
 ) {
+	// Send the message to the channel for processing by waitForResponse
+	select {
+	case bot.messageCreate <- m:
+	default:
+		// Channel is full, log a warning
+		bot.log.Warn("messageCreate channel is full, dropping message")
+	}
+
 	// Ignore messages from the bot itself
 	if m.Author.ID == s.State.User.ID {
 		return
@@ -629,44 +638,6 @@ func (bot *Bot) handleListPromptsCommand(
 	_, err = s.ChannelMessageSend(m.ChannelID, message.String())
 	if err != nil {
 		return fmt.Errorf("failed to send prompts list: %w", err)
-	}
-
-	return nil
-}
-
-func (bot *Bot) handleAudioCommand(
-	s *discordsdk.Session,
-	m *discordsdk.MessageCreate,
-	args []string,
-) error {
-	if len(args) < 2 {
-		return fmt.Errorf("usage: !audio <stream_id> <duration>")
-	}
-
-	streamID := args[0]
-	durationStr := args[1]
-
-	duration, err := time.ParseDuration(durationStr)
-	if err != nil {
-		return fmt.Errorf("invalid duration format: %w", err)
-	}
-
-	endTime := time.Now()
-	startTime := endTime.Add(-duration)
-
-	oggData, err := bot.GenerateOggOpusBlob(streamID, startTime, endTime)
-	if err != nil {
-		return fmt.Errorf("failed to generate OGG Opus blob: %w", err)
-	}
-
-	// Send the OGG Opus blob as a file
-	_, err = s.ChannelFileSend(
-		m.ChannelID,
-		"audio.ogg",
-		bytes.NewReader(oggData),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to send audio file: %w", err)
 	}
 
 	return nil
