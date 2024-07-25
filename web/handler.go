@@ -142,7 +142,7 @@ func (h *Handler) handleConversations(
                     <div class="bg-gray-50 rounded-lg p-4">
                         <p class="text-gray-600 text-sm">{{.Timestamp.Format "2006-01-02 15:04:05"}}</p>
                         <p class="text-lg"><span class="font-bold">{{.Emoji}}</span> {{.Text}}</p>
-                        <a href="/stream-audio/?stream={{.StreamID}}&start={{.Timestamp.Format "2006-01-02T15:04:05Z07:00"}}" class="text-blue-600 hover:text-blue-800 mt-2 inline-block" target="_blank">🔊 Listen</a>
+                        <a href="/stream-audio/{{.StreamID}}/{{.Timestamp.Format "2006-01-02T15:04:05Z07:00"}}/{{.EndTime.Format "2006-01-02T15:04:05Z07:00"}}" class="text-blue-600 hover:text-blue-800 mt-2 inline-block" target="_blank">🔊 Listen</a>
                     </div>
                     {{end}}
                 </div>
@@ -170,13 +170,15 @@ type Transcription struct {
 }
 
 func (h *Handler) handleStreamAudio(w http.ResponseWriter, r *http.Request) {
-	streamID := r.URL.Query().Get("stream")
-	startTimeStr := r.URL.Query().Get("start")
-
-	if streamID == "" || startTimeStr == "" {
-		http.Error(w, "Missing required parameters", http.StatusBadRequest)
+	parts := strings.Split(r.URL.Path, "/")
+	if len(parts) != 5 {
+		http.Error(w, "Invalid URL format", http.StatusBadRequest)
 		return
 	}
+
+	streamID := parts[2]
+	startTimeStr := parts[3]
+	endTimeStr := parts[4]
 
 	startTime, err := time.Parse(time.RFC3339, startTimeStr)
 	if err != nil {
@@ -184,12 +186,13 @@ func (h *Handler) handleStreamAudio(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	endTime := startTime.Add(10 * time.Second)
+	endTime, err := time.Parse(time.RFC3339, endTimeStr)
+	if err != nil {
+		http.Error(w, "Invalid end time format", http.StatusBadRequest)
+		return
+	}
 
-	transcriptions, err := h.db.GetTranscriptionsForTimeRange(
-		startTime,
-		endTime,
-	)
+	transcriptions, err := h.db.GetTranscriptionsForTimeRange(startTime, endTime)
 	if err != nil {
 		h.logger.Error("failed to get transcriptions", "error", err.Error())
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -197,41 +200,27 @@ func (h *Handler) handleStreamAudio(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(transcriptions) == 0 {
-		http.Error(
-			w,
-			"No transcriptions found for the given time range",
-			http.StatusNotFound,
-		)
+		http.Error(w, "No transcriptions found for the given time range", http.StatusNotFound)
 		return
 	}
 
 	startSample := transcriptions[0].SampleIdx
 	endSample := transcriptions[len(transcriptions)-1].SampleIdx
-	actualEndTime := transcriptions[len(transcriptions)-1].Timestamp
 
 	oggData, err := generateOggOpusBlob(streamID, startSample, endSample)
 	if err != nil {
-		h.logger.Error(
-			"failed to generate OGG Opus blob",
-			"error",
-			err.Error(),
-		)
+		h.logger.Error("failed to generate OGG Opus blob", "error", err.Error())
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "audio/ogg")
-	w.Header().
-		Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"audio_%s_%s_%s.ogg\"", streamID, startTimeStr, actualEndTime.Format(time.RFC3339)))
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"audio_%s_%s_%s.ogg\"", streamID, startTimeStr, endTimeStr))
 	w.Header().Set("Content-Length", strconv.Itoa(len(oggData)))
 
 	_, err = w.Write(oggData)
 	if err != nil {
-		h.logger.Error(
-			"failed to write OGG data to response",
-			"error",
-			err.Error(),
-		)
+		h.logger.Error("failed to write OGG data to response", "error", err.Error())
 	}
 }
 

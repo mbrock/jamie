@@ -56,6 +56,7 @@ type Transcription struct {
 	Emoji     string
 	Text      string
 	Timestamp time.Time
+	EndTime   time.Time
 	SampleIdx int
 	StreamID  string
 }
@@ -402,7 +403,8 @@ func (db *DB) GetTranscriptionsForStream(
 	streamID string,
 ) ([]Transcription, error) {
 	query := `
-		SELECT s.emoji, r.text, r.created_at, r.sample_idx, r.stream
+		SELECT s.emoji, r.text, r.created_at, r.sample_idx, r.stream,
+			   LEAD(r.created_at) OVER (ORDER BY r.created_at) AS end_time
 		FROM recognitions r
 		JOIN speakers s ON r.stream = s.stream
 		WHERE r.stream = ?
@@ -417,13 +419,14 @@ func (db *DB) GetTranscriptionsForStream(
 	var transcriptions []Transcription
 	for rows.Next() {
 		var t Transcription
-		var timestampStr string
+		var timestampStr, endTimeStr string
 		err := rows.Scan(
 			&t.Emoji,
 			&t.Text,
 			&timestampStr,
 			&t.SampleIdx,
 			&t.StreamID,
+			&endTimeStr,
 		)
 		if err != nil {
 			return nil, err
@@ -431,6 +434,14 @@ func (db *DB) GetTranscriptionsForStream(
 		t.Timestamp, err = time.Parse(time.RFC3339, timestampStr)
 		if err != nil {
 			return nil, fmt.Errorf("parse timestamp: %w", err)
+		}
+		if endTimeStr != "" {
+			t.EndTime, err = time.Parse(time.RFC3339, endTimeStr)
+			if err != nil {
+				return nil, fmt.Errorf("parse end timestamp: %w", err)
+			}
+		} else {
+			t.EndTime = t.Timestamp.Add(10 * time.Second)
 		}
 		transcriptions = append(transcriptions, t)
 	}
