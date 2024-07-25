@@ -401,7 +401,7 @@ func (db *DB) GetTranscriptionsForStream(
 	streamID string,
 ) ([]Transcription, error) {
 	query := `
-		SELECT s.emoji, r.text, r.created_at, r.sample_idx
+		SELECT s.emoji, r.text, r.created_at, r.sample_idx, r.stream
 		FROM recognitions r
 		JOIN speakers s ON r.stream = s.stream
 		WHERE r.stream = ?
@@ -417,11 +417,11 @@ func (db *DB) GetTranscriptionsForStream(
 	for rows.Next() {
 		var t Transcription
 		var timestampStr string
-		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr, &t.SampleIdx)
+		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr, &t.SampleIdx, &t.StreamID)
 		if err != nil {
 			return nil, err
 		}
-		t.Timestamp, err = time.Parse(time.RFC3339, timestampStr)
+		t.Timestamp, err = time.Parse("2006-01-02 15:04:05", timestampStr)
 		if err != nil {
 			return nil, fmt.Errorf("parse timestamp: %w", err)
 		}

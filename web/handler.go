@@ -80,68 +80,18 @@ func (h *Handler) handleIndex(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-func (h *Handler) handleConversations(
-	w http.ResponseWriter,
-	_ *http.Request,
-) {
-	conversations, err := h.db.GetConversationTimeRanges(3 * time.Minute)
-	if err != nil {
-		h.logger.Error("failed to get conversations", "error", err.Error())
-		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+func (h *Handler) handleConversations(w http.ResponseWriter, r *http.Request) {
+	streamID := r.URL.Query().Get("stream")
+	if streamID == "" {
+		http.Error(w, "Missing stream ID", http.StatusBadRequest)
 		return
 	}
 
-	type ConversationWithTranscriptions struct {
-		StartTime      time.Time
-		EndTime        time.Time
-		Transcriptions []db.Transcription
-	}
-
-	conversationsWithTranscriptions := make(
-		[]ConversationWithTranscriptions,
-		0,
-		len(conversations),
-	)
-
-	for _, conv := range conversations {
-		transcriptions, err := h.db.GetTranscriptionsForTimeRange(
-			conv.StartTime,
-			conv.EndTime,
-		)
-		if err != nil {
-			h.logger.Error(
-				"failed to get transcriptions for conversation",
-				"error",
-				err.Error(),
-				"start_time",
-				conv.StartTime,
-				"end_time",
-				conv.EndTime,
-			)
-			http.Error(
-				w,
-				"Internal Server Error",
-				http.StatusInternalServerError,
-			)
-			return
-		}
-		h.logger.Debug(
-			"Fetched transcriptions",
-			"count",
-			len(transcriptions),
-			"start_time",
-			conv.StartTime,
-			"end_time",
-			conv.EndTime,
-		)
-		conversationsWithTranscriptions = append(
-			conversationsWithTranscriptions,
-			ConversationWithTranscriptions{
-				StartTime:      conv.StartTime,
-				EndTime:        conv.EndTime,
-				Transcriptions: transcriptions,
-			},
-		)
+	transcriptions, err := h.db.GetTranscriptionsForStream(streamID)
+	if err != nil {
+		h.logger.Error("failed to get transcriptions", "error", err.Error())
+		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+		return
 	}
 
 	tmpl := template.Must(template.New("conversations").Parse(`
@@ -150,40 +100,25 @@ func (h *Handler) handleConversations(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Conversations</title>
+    <title>Conversation</title>
     <script src="https://cdn.tailwindcss.com"></script>
 </head>
 <body class="bg-gray-100">
     <div class="container mx-auto px-4 py-8">
-        <h1 class="text-3xl font-bold mb-6">Conversations</h1>
+        <h1 class="text-3xl font-bold mb-6">Conversation</h1>
         <div class="space-y-4">
-            {{range .}}
-            <div class="bg-white shadow rounded-lg p-4">
-                <p class="text-gray-600 text-sm">Start: {{.StartTime.Format "2006-01-02 15:04:05"}}</p>
-                <p class="text-gray-600 text-sm">End: {{.EndTime.Format "2006-01-02 15:04:05"}}</p>
-                <p class="text-lg mb-2">Duration: {{.EndTime.Sub .StartTime}}</p>
-                <audio controls class="w-full mb-2">
-                    <source src="/stream-audio/?stream={{.Transcriptions.0.StreamID}}&start={{.StartTime.Format "2006-01-02T15:04:05Z07:00"}}&end={{.EndTime.Format "2006-01-02T15:04:05Z07:00"}}" type="audio/ogg">
-                    Your browser does not support the audio element.
-                </audio>
-                <details>
-                    <summary class="cursor-pointer text-blue-600 hover:text-blue-800">Show Transcriptions ({{len .Transcriptions}})</summary>
-                    <div class="mt-2">
-                        {{if .Transcriptions}}
-                            <div class="flex flex-wrap gap-2">
-                                {{range .Transcriptions}}
-                                <div class="bg-gray-100 p-2 rounded flex-grow">
-                                    <span class="font-bold">{{.Emoji}}</span> {{.Text}}
-                                    <a href="/stream-audio/?stream={{.StreamID}}&start={{.Timestamp.Format "2006-01-02T15:04:05Z07:00"}}&end={{.Timestamp.Add (1 * time.Second).Format "2006-01-02T15:04:05Z07:00"}}" class="text-blue-600 hover:text-blue-800 ml-2" target="_blank">🔊</a>
-                                </div>
-                                {{end}}
-                            </div>
-                        {{else}}
-                            <p>No transcriptions found for this conversation.</p>
-                        {{end}}
+            {{if .}}
+                <div class="flex flex-wrap gap-2">
+                    {{range .}}
+                    <div class="bg-white shadow rounded-lg p-4 flex-grow">
+                        <p class="text-gray-600 text-sm">{{.Timestamp.Format "2006-01-02 15:04:05"}}</p>
+                        <p class="text-lg"><span class="font-bold">{{.Emoji}}</span> {{.Text}}</p>
+                        <a href="/stream-audio/?stream={{.StreamID}}&start={{.Timestamp.Format "2006-01-02T15:04:05Z07:00"}}&end={{.Timestamp.Add (1 * time.Second).Format "2006-01-02T15:04:05Z07:00"}}" class="text-blue-600 hover:text-blue-800 mt-2 inline-block" target="_blank">🔊 Listen</a>
                     </div>
-                </details>
-            </div>
+                    {{end}}
+                </div>
+            {{else}}
+                <p>No transcriptions found for this conversation.</p>
             {{end}}
         </div>
     </div>
@@ -191,7 +126,7 @@ func (h *Handler) handleConversations(
 </html>
 `))
 
-	err = tmpl.Execute(w, conversationsWithTranscriptions)
+	err = tmpl.Execute(w, transcriptions)
 	if err != nil {
 		h.logger.Error("failed to execute template", "error", err.Error())
 		http.Error(w, "Internal Server Error", http.StatusInternalServerError)
