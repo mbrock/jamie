@@ -124,13 +124,15 @@ func (h *Handler) handleConversations(w http.ResponseWriter, _ *http.Request) {
                 <p class="text-lg mb-2">Duration: {{.EndTime.Sub .StartTime}}</p>
                 <details>
                     <summary class="cursor-pointer text-blue-600 hover:text-blue-800">Show Transcriptions ({{len .Transcriptions}})</summary>
-                    <div class="mt-2 space-y-2">
+                    <div class="mt-2">
                         {{if .Transcriptions}}
-                            {{range .Transcriptions}}
-                            <div class="bg-gray-100 p-2 rounded">
-                                <span class="font-bold">{{.Emoji}}</span> {{.Text}}
+                            <div class="flex flex-wrap gap-2">
+                                {{range .Transcriptions}}
+                                <div class="bg-gray-100 p-2 rounded flex-grow">
+                                    <span class="font-bold">{{.Emoji}}</span> {{.Text}}
+                                </div>
+                                {{end}}
                             </div>
-                            {{end}}
                         {{else}}
                             <p>No transcriptions found for this conversation.</p>
                         {{end}}
