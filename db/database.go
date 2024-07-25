@@ -223,7 +223,7 @@ func (db *DB) SaveRecognition(id, stream string, sampleIdx, sampleLen int, text 
 }
 
 // queryRows is a helper function that executes a query and processes the rows using a provided parser function
-func (db *DB) queryRows[T any](query string, args []interface{}, parser func(*sql.Rows) (T, error)) ([]T, error) {
+func (db *DB) queryRows(query string, args []interface{}, parser func(*sql.Rows) (interface{}, error)) ([]interface{}, error) {
 	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, err
