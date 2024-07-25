@@ -174,6 +174,7 @@ func (h *Handler) handleConversations(
                                 {{range .Transcriptions}}
                                 <div class="bg-gray-100 p-2 rounded flex-grow">
                                     <span class="font-bold">{{.Emoji}}</span> {{.Text}}
+                                    <a href="/stream-audio/?stream={{.StreamID}}&start={{.Timestamp.Format "2006-01-02T15:04:05Z07:00"}}&end={{.Timestamp.Add (1 * time.Second).Format "2006-01-02T15:04:05Z07:00"}}" class="text-blue-600 hover:text-blue-800 ml-2" target="_blank">🔊</a>
                                 </div>
                                 {{end}}
                             </div>
