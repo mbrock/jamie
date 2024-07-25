@@ -262,27 +262,21 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 }
 
 func generateOggOpusBlob(
-	streamID string,
-	startSample, endSample int,
+	streamID string, startSample, endSample int,
 ) ([]byte, error) {
-	// Fetch packets from the database
 	packets, err := db.GetDB().
 		GetPacketsForStreamInSampleRange(streamID, startSample, endSample)
 	if err != nil {
 		return nil, fmt.Errorf("fetch packets: %w", err)
 	}
 
-	// Create a buffer to store the OGG Opus data
 	var oggBuffer bytes.Buffer
 
-	// Create an OGG writer
-	// Assuming 48kHz sample rate and 2 channels (stereo) for Opus
 	oggWriter, err := oggwriter.NewWith(&oggBuffer, 48000, 2)
 	if err != nil {
 		return nil, fmt.Errorf("create OGG writer: %w", err)
 	}
 
-	// Write packets to the OGG writer
 	var lastSampleIdx int
 	for _, packet := range packets {
 		if lastSampleIdx != 0 {
@@ -290,7 +284,7 @@ func generateOggOpusBlob(
 			if gap > 960 { // 960 samples = 20ms at 48kHz
 				silentPacketsCount := gap / 960
 				for j := 0; j < silentPacketsCount; j++ {
-					silentPacket := []byte{0xf8, 0xff, 0xfe} // Silent Opus packet
+					silentPacket := []byte{0xf8, 0xff, 0xfe}
 					if err := oggWriter.WriteRTP(&rtp.Packet{
 						Header: rtp.Header{
 							Timestamp: uint32(lastSampleIdx + (j * 960)),
@@ -318,7 +312,6 @@ func generateOggOpusBlob(
 		lastSampleIdx = packet.SampleIdx
 	}
 
-	// Close the OGG writer to finalize the file
 	if err := oggWriter.Close(); err != nil {
 		return nil, fmt.Errorf("close OGG writer: %w", err)
 	}
