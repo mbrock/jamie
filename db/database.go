@@ -13,6 +13,10 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+func julianDayToTime(jd float64) time.Time {
+	return time.Unix(int64((jd-2440587.5)*86400), 0).UTC()
+}
+
 // Helper functions
 func (db *DB) execContext(query string, args ...interface{}) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -414,27 +418,21 @@ func (db *DB) GetTranscriptionsForStream(
 	var transcriptions []Transcription
 	for rows.Next() {
 		var t Transcription
-		var timestampStr, endTimeStr string
+		var julianDay, endJulianDay sql.NullFloat64
 		err := rows.Scan(
 			&t.Emoji,
 			&t.Text,
-			&timestampStr,
+			&julianDay,
 			&t.SampleIdx,
 			&t.StreamID,
-			&endTimeStr,
+			&endJulianDay,
 		)
 		if err != nil {
 			return nil, err
 		}
-		t.Timestamp, err = time.Parse(time.RFC3339, timestampStr)
-		if err != nil {
-			return nil, fmt.Errorf("parse timestamp: %w", err)
-		}
-		if endTimeStr != "" {
-			t.EndTime, err = time.Parse("2006-01-02 15:04:05", endTimeStr)
-			if err != nil {
-				return nil, fmt.Errorf("parse end timestamp: %w", err)
-			}
+		t.Timestamp = julianDayToTime(julianDay.Float64)
+		if endJulianDay.Valid {
+			t.EndTime = julianDayToTime(endJulianDay.Float64)
 		} else {
 			t.EndTime = t.Timestamp.Add(10 * time.Second)
 		}
@@ -624,15 +622,12 @@ func (db *DB) GetTodayTranscriptions() ([]Transcription, error) {
 	var transcriptions []Transcription
 	for rows.Next() {
 		var t Transcription
-		var timestampStr string
-		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr)
+		var julianDay float64
+		err := rows.Scan(&t.Emoji, &t.Text, &julianDay)
 		if err != nil {
 			return nil, err
 		}
-		t.Timestamp, err = time.Parse(time.RFC3339, timestampStr)
-		if err != nil {
-			return nil, fmt.Errorf("parse timestamp: %w", err)
-		}
+		t.Timestamp = julianDayToTime(julianDay)
 		transcriptions = append(transcriptions, t)
 	}
 
@@ -831,20 +826,13 @@ func (db *DB) GetConversationTimeRanges(minSilence time.Duration) ([]struct {
 	}
 
 	for rows.Next() {
-		var startTime, endTime string
-		if err := rows.Scan(&startTime, &endTime); err != nil {
+		var startJulianDay, endJulianDay float64
+		if err := rows.Scan(&startJulianDay, &endJulianDay); err != nil {
 			return nil, err
 		}
 
-		start, err := time.Parse("2006-01-02 15:04:05", startTime)
-		if err != nil {
-			return nil, fmt.Errorf("parsing start time: %w", err)
-		}
-
-		end, err := time.Parse("2006-01-02 15:04:05", endTime)
-		if err != nil {
-			return nil, fmt.Errorf("parsing end time: %w", err)
-		}
+		start := julianDayToTime(startJulianDay)
+		end := julianDayToTime(endJulianDay)
 
 		duration := end.Sub(start)
 		if duration > 8*time.Hour {
