@@ -20,7 +20,10 @@ func NewDeepgramClient(
 	token string,
 	logger *log.Logger,
 ) (*DeepgramClient, error) {
-	return &DeepgramClient{token: token, logger: logger}, nil
+	return &DeepgramClient{
+		token:  token,
+		logger: logger,
+	}, nil
 }
 
 func (c *DeepgramClient) Start(
