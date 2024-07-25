@@ -165,7 +165,7 @@ func (db *DB) CreateStream(id string, packetSeqOffset int, sampleIdxOffset int) 
 		INSERT INTO streams (id, packet_seq_offset, sample_idx_offset)
 		VALUES (?, ?, ?)
 	`
-	return db.execContext(context.Background(), query, id, packetSeqOffset, sampleIdxOffset)
+	return db.execContext(query, id, packetSeqOffset, sampleIdxOffset)
 }
 
 // SavePacket saves a packet entry
