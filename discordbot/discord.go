@@ -382,15 +382,15 @@ func (bot *Bot) speechRecognitionLoop(
 	)
 }
 
-func (bot *Bot) processSegment(streamID string, segmentDrafts <-chan string) {
-	var final string
+func (bot *Bot) processSegment(streamID string, segmentDrafts <-chan stt.Result) {
+	var finalResult stt.Result
 
 	for draft := range segmentDrafts {
-		final = draft
+		finalResult = draft
 	}
 
-	if final != "" {
-		if strings.EqualFold(final, "Change my identity.") {
+	if finalResult.Text != "" {
+		if strings.EqualFold(finalResult.Text, "Change my identity.") {
 			bot.handleAvatarChangeRequest(streamID)
 			return
 		}
@@ -407,7 +407,7 @@ func (bot *Bot) processSegment(streamID string, segmentDrafts <-chan string) {
 
 		_, err = bot.conn.ChannelMessageSend(
 			channelID,
-			fmt.Sprintf("%s %s", emoji, final),
+			fmt.Sprintf("%s %s", emoji, finalResult.Text),
 		)
 
 		if err != nil {
@@ -422,9 +422,9 @@ func (bot *Bot) processSegment(streamID string, segmentDrafts <-chan string) {
 		err = bot.db.SaveRecognition(
 			recognitionID,
 			streamID,
-			0,
-			0,
-			final,
+			int(finalResult.Start * 48000), // Convert seconds to samples (48kHz sample rate)
+			int(finalResult.Duration * 48000), // Convert seconds to samples
+			finalResult.Text,
 			1.0,
 		)
 		if err != nil {

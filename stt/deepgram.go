@@ -74,9 +74,9 @@ func (c *DeepgramClient) Start(
 
 type DeepgramSession struct {
 	client              *listen.WebSocketClient
-	transcriptions      chan chan string
+	transcriptions      chan chan Result
 	logger              *log.Logger
-	currentTranscriptCh chan string
+	currentTranscriptCh chan Result
 }
 
 func (s *DeepgramSession) Stop() error {
@@ -93,7 +93,7 @@ func (s *DeepgramSession) SendAudio(data []byte) error {
 	return s.client.WriteBinary(data)
 }
 
-func (s *DeepgramSession) Receive() <-chan chan string {
+func (s *DeepgramSession) Receive() <-chan chan Result {
 	return s.transcriptions
 }
 
@@ -108,15 +108,21 @@ func (s *DeepgramSession) Message(mr *api.MessageResponse) error {
 		return nil
 	}
 
-	s.logger.Info("hear", "txt", transcript)
+	result := Result{
+		Text:     transcript,
+		Start:    mr.Start,
+		Duration: mr.Duration,
+	}
+
+	s.logger.Info("hear", "txt", transcript, "start", mr.Start, "duration", mr.Duration)
 
 	if s.currentTranscriptCh == nil {
 		s.logger.Info("next")
-		s.currentTranscriptCh = make(chan string)
+		s.currentTranscriptCh = make(chan Result)
 		s.transcriptions <- s.currentTranscriptCh
 	}
 
-	s.currentTranscriptCh <- transcript
+	s.currentTranscriptCh <- result
 
 	if mr.IsFinal {
 		close(s.currentTranscriptCh)
