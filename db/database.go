@@ -506,8 +506,7 @@ func (db *DB) UpdateSpeakerEmoji(streamID, newEmoji string) error {
 	query := `
 		UPDATE speakers SET emoji = ? WHERE stream = ?
 	`
-	_, err := db.exec(context.Background(), query, newEmoji, streamID)
-	return err
+	return db.execContext(context.Background(), query, newEmoji, streamID)
 }
 
 // GetChannelIDForStream retrieves the channel ID for a stream
@@ -531,8 +530,7 @@ func (db *DB) EndStreamForChannel(guildID, channelID string) error {
 			WHERE discord_guild = ? AND discord_channel = ?
 		) AND ended_at IS NULL
 	`
-	_, err := db.exec(context.Background(), query, guildID, channelID)
-	return err
+	return db.execContext(context.Background(), query, guildID, channelID)
 }
 
 // GetTodayTranscriptions retrieves transcriptions for today
