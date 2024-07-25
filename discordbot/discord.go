@@ -273,7 +273,7 @@ func (bot *Bot) processVoicePacket(
 	}
 
 	packetID := etc.Gensym()
-	err = db.SavePacket(
+	err = bot.db.SavePacket(
 		packetID,
 		streamID,
 		int(packet.Sequence),
@@ -311,7 +311,7 @@ func (bot *Bot) getOrCreateVoiceStream(
 		"%d",
 		packet.SSRC,
 	) // Using SSRC as a unique identifier for the Discord user
-	streamID, err := db.GetStreamForDiscordChannelAndSpeaker(
+	streamID, err := bot.db.GetStreamForDiscordChannelAndSpeaker(
 		guildID,
 		channelID,
 		discordID,
@@ -321,7 +321,7 @@ func (bot *Bot) getOrCreateVoiceStream(
 		streamID = etc.Gensym()
 		speakerID := etc.Gensym()
 		emoji := txt.RandomAvatar()
-		err = db.CreateStreamForDiscordChannel(
+		err = bot.db.CreateStreamForDiscordChannel(
 			streamID,
 			guildID,
 			channelID,
@@ -396,7 +396,7 @@ func (bot *Bot) processSegment(streamID string, segmentDrafts <-chan string) {
 			return
 		}
 
-		channelID, emoji, err := db.GetChannelAndEmojiForStream(streamID)
+		channelID, emoji, err := bot.db.GetChannelAndEmojiForStream(streamID)
 		if err != nil {
 			bot.log.Error(
 				"failed to get channel and emoji",
@@ -420,7 +420,7 @@ func (bot *Bot) processSegment(streamID string, segmentDrafts <-chan string) {
 		}
 
 		recognitionID := etc.Gensym()
-		err = db.SaveRecognition(recognitionID, streamID, 0, 0, final, 1.0)
+		err = bot.db.SaveRecognition(recognitionID, streamID, 0, 0, final, 1.0)
 		if err != nil {
 			bot.log.Error(
 				"failed to save recognition to database",
@@ -434,13 +434,13 @@ func (bot *Bot) processSegment(streamID string, segmentDrafts <-chan string) {
 func (bot *Bot) handleAvatarChangeRequest(streamID string) {
 	newEmoji := txt.RandomAvatar()
 
-	err := db.UpdateSpeakerEmoji(streamID, newEmoji)
+	err := bot.db.UpdateSpeakerEmoji(streamID, newEmoji)
 	if err != nil {
 		bot.log.Error("failed to update speaker emoji", "error", err.Error())
 		return
 	}
 
-	channelID, err := db.GetChannelIDForStream(streamID)
+	channelID, err := bot.db.GetChannelIDForStream(streamID)
 	if err != nil {
 		bot.log.Error("failed to get channel ID", "error", err.Error())
 		return
@@ -469,7 +469,7 @@ func (bot *Bot) handleVoiceStateUpdate(
 
 	if v.ChannelID == "" {
 		// User left a voice channel
-		err := db.EndStreamForChannel(v.GuildID, v.ChannelID)
+		err := bot.db.EndStreamForChannel(v.GuildID, v.ChannelID)
 		if err != nil {
 			bot.log.Error(
 				"failed to update stream end time",
@@ -483,7 +483,7 @@ func (bot *Bot) handleVoiceStateUpdate(
 		speakerID := etc.Gensym()
 		discordID := v.UserID
 		emoji := txt.RandomAvatar()
-		err := db.CreateStreamForDiscordChannel(streamID, v.GuildID, v.ChannelID, 0, uint16(0), speakerID, discordID, emoji)
+		err := bot.db.CreateStreamForDiscordChannel(streamID, v.GuildID, v.ChannelID, 0, uint16(0), speakerID, discordID, emoji)
 		if err != nil {
 			bot.log.Error("failed to create new stream for user join", "error", err.Error())
 		}
