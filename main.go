@@ -290,10 +290,7 @@ func generateOggOpusBlob(
 			if gap > 960 { // 960 samples = 20ms at 48kHz
 				silentPacketsCount := gap / 960
 				for j := 0; j < silentPacketsCount; j++ {
-					silentPacket := make(
-						[]byte,
-						2,
-					) // Minimum valid Opus packet
+					silentPacket := []byte{0xf8, 0xff, 0xfe} // Silent Opus packet
 					if err := oggWriter.WriteRTP(&rtp.Packet{
 						Header: rtp.Header{
 							Timestamp: uint32(lastSampleIdx + (j * 960)),
