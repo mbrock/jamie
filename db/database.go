@@ -222,8 +222,8 @@ func (db *DB) SaveRecognition(id, stream string, sampleIdx, sampleLen int, text 
 	return db.execContext(query, id, stream, sampleIdx, sampleLen, text, confidence)
 }
 
-// queryRows is a helper function that executes a query and processes the rows using a provided parser function
-func (db *DB) queryRows(query string, args []interface{}, parser func(*sql.Rows) (interface{}, error)) ([]interface{}, error) {
+// queryRowsGeneric is a generic helper function that executes a query and processes the rows using a provided parser function
+func (db *DB) queryRowsGeneric[T any](query string, args []interface{}, parser func(*sql.Rows) (T, error)) ([]T, error) {
 	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, err
@@ -240,6 +240,11 @@ func (db *DB) queryRows(query string, args []interface{}, parser func(*sql.Rows)
 	}
 
 	return results, rows.Err()
+}
+
+// queryRows is a non-generic wrapper for queryRowsGeneric that returns []interface{}
+func (db *DB) queryRows(query string, args []interface{}, parser func(*sql.Rows) (interface{}, error)) ([]interface{}, error) {
+	return db.queryRowsGeneric(query, args, parser)
 }
 
 // GetRecentTranscriptions retrieves recent transcriptions
@@ -290,7 +295,7 @@ func (db *DB) GetRecentTranscriptions() ([]Transcription, error) {
 		FROM final_groups
 	`
 
-	return db.queryRows(query, nil, func(rows *sql.Rows) (Transcription, error) {
+	return db.queryRowsGeneric(query, nil, func(rows *sql.Rows) (Transcription, error) {
 		var t Transcription
 		var timestampStr string
 		err := rows.Scan(&t.Emoji, &t.Text, &timestampStr)
