@@ -425,7 +425,7 @@ func (bot *Bot) processSegment(streamID string, segmentDrafts <-chan stt.Result)
 			int(finalResult.Start * 48000), // Convert seconds to samples (48kHz sample rate)
 			int(finalResult.Duration * 48000), // Convert seconds to samples
 			finalResult.Text,
-			1.0,
+			finalResult.Confidence,
 		)
 		if err != nil {
 			bot.log.Error(

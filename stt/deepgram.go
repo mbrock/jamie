@@ -109,9 +109,10 @@ func (s *DeepgramSession) Message(mr *api.MessageResponse) error {
 	}
 
 	result := Result{
-		Text:     transcript,
-		Start:    mr.Start,
-		Duration: mr.Duration,
+		Text:       transcript,
+		Start:      mr.Start,
+		Duration:   mr.Duration,
+		Confidence: mr.Channel.Alternatives[0].Confidence,
 	}
 
 	s.logger.Info("hear", "txt", transcript, "start", mr.Start, "duration", mr.Duration)

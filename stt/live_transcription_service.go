@@ -5,9 +5,10 @@ import (
 )
 
 type Result struct {
-	Text      string
-	Start     float64
-	Duration  float64
+	Text       string
+	Start      float64
+	Duration   float64
+	Confidence float64
 }
 
 type LiveTranscriptionSession interface {
