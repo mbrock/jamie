@@ -643,51 +643,14 @@ func (bot *Bot) handleListPromptsCommand(
 	return nil
 }
 
-func (bot *Bot) GenerateOggOpusBlob(
-	streamID string,
-	startSample, endSample int,
-) ([]byte, error) {
-	// Fetch packets from the database
-	packets, err := bot.db.GetPacketsForStreamInSampleRange(
-		streamID,
-		startSample,
-		endSample,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("fetch packets: %w", err)
-	}
+import (
+	"jamie/ogg"
+)
 
-	// Create a buffer to store the OGG Opus data
-	var oggBuffer bytes.Buffer
+// ... (other imports and code)
 
-	// Create an OGG writer
-	// Assuming 48kHz sample rate and 2 channels (stereo) for Opus
-	oggWriter, err := oggwriter.NewWith(&oggBuffer, 48000, 2)
-	if err != nil {
-		return nil, fmt.Errorf("create OGG writer: %w", err)
-	}
-
-	// Write packets to the OGG writer
-	for i, packet := range packets {
-		if err := oggWriter.WriteRTP(&rtp.Packet{
-			Header: rtp.Header{
-				Version:        2,
-				PayloadType:    111,
-				SequenceNumber: uint16(i),
-				Timestamp:      uint32(packet.SampleIdx),
-			},
-			Payload: packet.Payload,
-		}); err != nil {
-			return nil, fmt.Errorf("write Opus packet: %w", err)
-		}
-	}
-
-	// Close the OGG writer to finalize the file
-	if err := oggWriter.Close(); err != nil {
-		return nil, fmt.Errorf("close OGG writer: %w", err)
-	}
-
-	return oggBuffer.Bytes(), nil
+func (bot *Bot) GenerateOggOpusBlob(streamID string, startSample, endSample int) ([]byte, error) {
+	return ogg.GenerateOggOpusBlob(streamID, startSample, endSample)
 }
 
 func (bot *Bot) textToSpeech(text string) ([]byte, error) {
