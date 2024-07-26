@@ -342,9 +342,7 @@ func (bot *Bot) handleVoiceConnection(
 	guildID, channelID string,
 ) {
 	go func() {
-		vc.Lock()
 		vc.AddHandler(bot.handleVoiceSpeakingUpdate)
-		vc.Unlock()
 	}()
 
 	for {
@@ -973,15 +971,16 @@ func (bot *Bot) handleYoCommand(
 
 	prompt := strings.Join(args, " ")
 
-	// Send an initial response to acknowledge the command
-	bot.sendAndSaveMessage(s, m.ChannelID, "Processing your request...")
-
 	// Start a goroutine to handle the command asynchronously
 	go func() {
 		response, err := bot.processYoCommand(s, m, prompt)
 		if err != nil {
 			bot.log.Error("Failed to process yo command", "error", err)
-			bot.sendAndSaveMessage(s, m.ChannelID, fmt.Sprintf("An error occurred: %v", err))
+			bot.sendAndSaveMessage(
+				s,
+				m.ChannelID,
+				fmt.Sprintf("An error occurred: %v", err),
+			)
 			return
 		}
 
@@ -989,7 +988,11 @@ func (bot *Bot) handleYoCommand(
 		err = bot.speakInChannel(s, m.ChannelID, response)
 		if err != nil {
 			bot.log.Error("Failed to speak response", "error", err)
-			bot.sendAndSaveMessage(s, m.ChannelID, fmt.Sprintf("Failed to speak the response: %v", err))
+			bot.sendAndSaveMessage(
+				s,
+				m.ChannelID,
+				fmt.Sprintf("Failed to speak the response: %v", err),
+			)
 		}
 
 		// Also send the response as a text message
@@ -1128,7 +1131,7 @@ func (bot *Bot) speakInChannel(
 		return fmt.Errorf("no active voice channel found")
 	}
 
-	//	bot.mu.Lock()
+	bot.mu.Lock()
 	// Join the voice channel if not already connected
 	vc, ok := bot.voiceConnections[voiceChannelID]
 	if !ok {
@@ -1140,7 +1143,7 @@ func (bot *Bot) speakInChannel(
 		}
 		bot.voiceConnections[voiceChannelID] = vc
 	}
-	//	bot.mu.Unlock()
+	bot.mu.Unlock()
 
 	// Generate speech
 	speechData, err := bot.TextToSpeech(text)
@@ -1157,6 +1160,7 @@ func (bot *Bot) speakInChannel(
 	// Send Opus packets
 	bot.log.Debug("Starting to send Opus packets")
 	vc.Speaking(true)
+	bot.log.Debug("Speaking true")
 	defer vc.Speaking(false)
 
 	for i, packet := range opusPackets {
