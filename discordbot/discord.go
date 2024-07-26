@@ -10,7 +10,6 @@ import (
 	"jamie/llm"
 	"jamie/ogg"
 	"jamie/stt"
-	"jamie/txt"
 	"sort"
 	"strings"
 	"time"
@@ -424,7 +423,13 @@ func (bot *Bot) getOrCreateVoiceStream(
 	packet *discordsdk.Packet,
 	guildID, channelID string,
 ) (string, error) {
-	voiceState, err := bot.db.GetVoiceState(context.Background(), int64(packet.SSRC), "")
+	voiceState, err := bot.db.GetVoiceState(
+		context.Background(),
+		db.GetVoiceStateParams{
+			Ssrc:   int64(packet.SSRC),
+			UserID: "",
+		},
+	)
 	if err != nil {
 		return "", fmt.Errorf("failed to get voice state: %w", err)
 	}
@@ -494,7 +499,7 @@ func (bot *Bot) getOrCreateVoiceStream(
 				ID:        etc.Gensym(),
 				Speaker:   speakerID,
 				DiscordID: discordID,
-				SSRC:      int64(packet.SSRC),
+				Ssrc:      int64(packet.SSRC),
 				Username:  username,
 			},
 		)
@@ -523,7 +528,13 @@ func (bot *Bot) getOrCreateVoiceStream(
 func (bot *Bot) getUsernameFromID(userID string) string {
 	user, err := bot.conn.User(userID)
 	if err != nil {
-		bot.log.Error("Failed to get username", "userID", userID, "error", err)
+		bot.log.Error(
+			"Failed to get username",
+			"userID",
+			userID,
+			"error",
+			err,
+		)
 		return "Unknown User"
 	}
 	return user.Username
@@ -620,43 +631,6 @@ func (bot *Bot) processSegment(
 				err.Error(),
 			)
 		}
-	}
-}
-
-func (bot *Bot) handleAvatarChangeRequest(streamID string) {
-	newEmoji := txt.RandomAvatar()
-
-	err := bot.db.UpdateSpeakerEmoji(
-		context.Background(),
-		db.UpdateSpeakerEmojiParams{
-			Stream: streamID,
-			Emoji:  newEmoji,
-		},
-	)
-	if err != nil {
-		bot.log.Error("failed to update speaker emoji", "error", err.Error())
-		return
-	}
-
-	channelID, err := bot.db.GetChannelIDForStream(
-		context.Background(),
-		streamID,
-	)
-	if err != nil {
-		bot.log.Error("failed to get channel ID", "error", err.Error())
-		return
-	}
-
-	_, err = bot.conn.ChannelMessageSend(
-		channelID,
-		fmt.Sprintf("You are now %s.", newEmoji),
-	)
-	if err != nil {
-		bot.log.Error(
-			"failed to send identity change message",
-			"error",
-			err.Error(),
-		)
 	}
 }
 
