@@ -17,6 +17,7 @@ import (
 	discordsdk "github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
 	"github.com/haguro/elevenlabs-go"
+	"github.com/sashabaranov/go-openai"
 )
 
 type CommandHandler func(*discordsdk.Session, *discordsdk.MessageCreate, []string) error
@@ -83,6 +84,7 @@ func (bot *Bot) registerCommands() {
 	bot.commands["summary"] = bot.handleSummaryCommand
 	bot.commands["prompt"] = bot.handlePromptCommand
 	bot.commands["listprompts"] = bot.handleListPromptsCommand
+	bot.commands["yo"] = bot.handleYoCommand
 }
 
 func (bot *Bot) Close() error {
@@ -749,6 +751,109 @@ func (bot *Bot) handleListPromptsCommand(
 	_, err = s.ChannelMessageSend(m.ChannelID, message.String())
 	if err != nil {
 		return fmt.Errorf("failed to send prompts list: %w", err)
+	}
+
+	return nil
+}
+
+func (bot *Bot) handleYoCommand(s *discordsdk.Session, m *discordsdk.MessageCreate, args []string) error {
+	if len(args) == 0 {
+		return fmt.Errorf("usage: !yo <prompt>")
+	}
+
+	prompt := strings.Join(args, " ")
+
+	// Create OpenAI client
+	client := openai.NewClient(bot.openaiAPIKey)
+	ctx := context.Background()
+
+	// Generate response using GPT-4
+	resp, err := client.CreateChatCompletion(
+		ctx,
+		openai.ChatCompletionRequest{
+			Model: openai.GPT4,
+			Messages: []openai.ChatCompletionMessage{
+				{
+					Role:    openai.ChatMessageRoleUser,
+					Content: prompt,
+				},
+			},
+		},
+	)
+
+	if err != nil {
+		return fmt.Errorf("failed to generate GPT-4 response: %w", err)
+	}
+
+	response := resp.Choices[0].Message.Content
+
+	// Speak the response
+	err = bot.speakInChannel(s, m.ChannelID, response)
+	if err != nil {
+		return fmt.Errorf("failed to speak response: %w", err)
+	}
+
+	// Also send the response as a text message
+	_, err = s.ChannelMessageSend(m.ChannelID, response)
+	if err != nil {
+		return fmt.Errorf("failed to send text response: %w", err)
+	}
+
+	return nil
+}
+
+func (bot *Bot) speakInChannel(s *discordsdk.Session, channelID string, text string) error {
+	// Find the voice channel associated with the text channel
+	channel, err := s.Channel(channelID)
+	if err != nil {
+		return fmt.Errorf("failed to get channel: %w", err)
+	}
+
+	guild, err := s.State.Guild(channel.GuildID)
+	if err != nil {
+		return fmt.Errorf("failed to get guild: %w", err)
+	}
+
+	var voiceChannelID string
+	for _, vs := range guild.VoiceStates {
+		if vs.ChannelID != "" {
+			voiceChannelID = vs.ChannelID
+			break
+		}
+	}
+
+	if voiceChannelID == "" {
+		return fmt.Errorf("no active voice channel found")
+	}
+
+	// Join the voice channel if not already connected
+	vc, ok := bot.voiceConnections[voiceChannelID]
+	if !ok {
+		vc, err = s.ChannelVoiceJoin(guild.ID, voiceChannelID, false, true)
+		if err != nil {
+			return fmt.Errorf("failed to join voice channel: %w", err)
+		}
+		bot.voiceConnections[voiceChannelID] = vc
+	}
+
+	// Generate speech
+	speechData, err := bot.TextToSpeech(text)
+	if err != nil {
+		return fmt.Errorf("failed to generate speech: %w", err)
+	}
+
+	// Convert to Opus packets
+	opusPackets, err := ogg.ConvertToOpus(speechData)
+	if err != nil {
+		return fmt.Errorf("failed to convert to Opus: %w", err)
+	}
+
+	// Send Opus packets
+	vc.Speaking(true)
+	defer vc.Speaking(false)
+
+	for _, packet := range opusPackets {
+		vc.OpusSend <- packet
 	}
 
 	return nil
