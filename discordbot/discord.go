@@ -567,78 +567,10 @@ func (bot *Bot) getOrCreateVoiceStream(
 	)
 
 	if errors.Is(err, sql.ErrNoRows) {
-		streamID = etc.Gensym()
-		speakerID := etc.Gensym()
-		err = bot.db.CreateStream(
-			context.Background(),
-			db.CreateStreamParams{
-				ID:              streamID,
-				PacketSeqOffset: int64(packet.Sequence),
-				SampleIdxOffset: int64(packet.Timestamp),
-			},
-		)
+		streamID, err = bot.createNewVoiceStream(packet, guildID, channelID, discordID, username)
 		if err != nil {
-			return "", fmt.Errorf("failed to create new stream: %w", err)
+			return "", err
 		}
-
-		err := bot.db.CreateDiscordChannelStream(
-			context.Background(),
-			db.CreateDiscordChannelStreamParams{
-				ID:             etc.Gensym(),
-				DiscordGuild:   guildID,
-				DiscordChannel: channelID,
-				Stream:         streamID,
-			},
-		)
-
-		if err != nil {
-			return "", fmt.Errorf(
-				"failed to create discord channel stream: %w",
-				err,
-			)
-		}
-
-		err = bot.db.CreateSpeaker(
-			context.Background(),
-			db.CreateSpeakerParams{
-				ID:     speakerID,
-				Stream: streamID,
-				Emoji:  "", // We're not using emoji anymore
-			},
-		)
-
-		if err != nil {
-			return "", fmt.Errorf(
-				"failed to create speaker: %w",
-				err,
-			)
-		}
-
-		err = bot.db.CreateDiscordSpeaker(
-			context.Background(),
-			db.CreateDiscordSpeakerParams{
-				ID:        etc.Gensym(),
-				Speaker:   speakerID,
-				DiscordID: discordID,
-				Ssrc:      int64(packet.SSRC),
-				Username:  username,
-			},
-		)
-
-		if err != nil {
-			return "", fmt.Errorf(
-				"failed to create discord speaker: %w",
-				err,
-			)
-		}
-
-		bot.log.Info(
-			"created new voice stream",
-			"streamID", streamID,
-			"speakerID", speakerID,
-			"discordID", discordID,
-			"username", username,
-		)
 	} else if err != nil {
 		return "", fmt.Errorf("failed to query for stream: %w", err)
 	}
@@ -647,6 +579,75 @@ func (bot *Bot) getOrCreateVoiceStream(
 	bot.voiceStreamCacheMu.Lock()
 	bot.voiceStreamCache[cacheKey] = streamID
 	bot.voiceStreamCacheMu.Unlock()
+
+	return streamID, nil
+}
+
+func (bot *Bot) createNewVoiceStream(
+	packet *discordsdk.Packet,
+	guildID, channelID, discordID, username string,
+) (string, error) {
+	streamID := etc.Gensym()
+	speakerID := etc.Gensym()
+	
+	err := bot.db.CreateStream(
+		context.Background(),
+		db.CreateStreamParams{
+			ID:              streamID,
+			PacketSeqOffset: int64(packet.Sequence),
+			SampleIdxOffset: int64(packet.Timestamp),
+		},
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to create new stream: %w", err)
+	}
+
+	err = bot.db.CreateDiscordChannelStream(
+		context.Background(),
+		db.CreateDiscordChannelStreamParams{
+			ID:             etc.Gensym(),
+			DiscordGuild:   guildID,
+			DiscordChannel: channelID,
+			Stream:         streamID,
+		},
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to create discord channel stream: %w", err)
+	}
+
+	err = bot.db.CreateSpeaker(
+		context.Background(),
+		db.CreateSpeakerParams{
+			ID:     speakerID,
+			Stream: streamID,
+			Emoji:  "", // We're not using emoji anymore
+		},
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to create speaker: %w", err)
+	}
+
+	err = bot.db.CreateDiscordSpeaker(
+		context.Background(),
+		db.CreateDiscordSpeakerParams{
+			ID:        etc.Gensym(),
+			Speaker:   speakerID,
+			DiscordID: discordID,
+			Ssrc:      int64(packet.SSRC),
+			Username:  username,
+		},
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to create discord speaker: %w", err)
+	}
+
+	bot.log.Info(
+		"created new voice stream",
+		"streamID", streamID,
+		"speakerID", speakerID,
+		"discordID", discordID,
+		"username", username,
+	)
 
 	return streamID, nil
 }
