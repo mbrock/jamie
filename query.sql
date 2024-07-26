@@ -174,3 +174,20 @@ SELECT payload, sample_idx
 FROM packets
 WHERE stream = ? AND sample_idx BETWEEN ? AND ?
 ORDER BY sample_idx ASC;
+
+-- name: SaveTextMessage :exec
+INSERT INTO text_messages (id, discord_channel, discord_user, content, is_bot)
+VALUES (?, ?, ?, ?, ?);
+
+-- name: GetRecentTextMessages :many
+SELECT id, discord_channel, discord_user, content, is_bot, created_at
+FROM text_messages
+WHERE discord_channel = ?
+ORDER BY created_at DESC
+LIMIT ?;
+
+-- name: GetTextMessagesInTimeRange :many
+SELECT id, discord_channel, discord_user, content, is_bot, created_at
+FROM text_messages
+WHERE discord_channel = ? AND created_at BETWEEN ? AND ?
+ORDER BY created_at ASC;

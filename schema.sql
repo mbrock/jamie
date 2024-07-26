@@ -74,3 +74,12 @@ CREATE TABLE IF NOT EXISTS system_prompts (
     created_at REAL NOT NULL DEFAULT (julianday('now')),
     updated_at REAL NOT NULL DEFAULT (julianday('now'))
 );
+
+CREATE TABLE IF NOT EXISTS text_messages (
+    id TEXT PRIMARY KEY,
+    discord_channel TEXT NOT NULL,
+    discord_user TEXT NOT NULL,
+    content TEXT NOT NULL,
+    is_bot BOOLEAN NOT NULL,
+    created_at REAL NOT NULL DEFAULT (julianday('now'))
+);
