@@ -303,7 +303,7 @@ func (bot *Bot) processSegment(
 			// Send the transcription to the Discord channel
 			_, err = bot.conn.ChannelMessageSend(
 				row.DiscordChannel,
-				fmt.Sprintf("%s: %s", row.Username, finalResult.Text),
+				fmt.Sprintf("> %s: %s", row.Username, finalResult.Text),
 			)
 			if err != nil {
 				bot.log.Error(
