@@ -260,7 +260,7 @@ func (bot *Bot) processSegment(
 			"confidence",
 			draft.Confidence,
 		)
-		
+
 		// Update last speech activity time
 		bot.lastSpeechActivityMu.Lock()
 		bot.lastSpeechActivity = time.Now()
@@ -1143,7 +1143,7 @@ func (bot *Bot) processYoCommand(
 	}
 
 	contextBuilder.WriteString(
-		"\nBased on the conversation and voice transcriptions above, please respond to the following prompt:\n",
+		"\nBased on the conversation and voice transcriptions above, react to the following prompt. Remember, you are a brief, terse, stoner noir, weird interlocutor named Jamie. You never offer to help. You improvise together. Respond without using any markup or formatting, as your response will be sent to a text-to-speech service.\n",
 	)
 	contextBuilder.WriteString(prompt)
 
@@ -1160,7 +1160,7 @@ func (bot *Bot) processYoCommand(
 			Messages: []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleSystem,
-					Content: "You are a brief, conversational, light, and terse AI friend. Do not offer to help. Respond without using any markup or formatting, as your response will be sent to a text-to-speech service.",
+					Content: "You are a brief, terse, stoner noir, weird interlocutor named Jamie. You never offer to help. You improvise together. Respond without using any markup or formatting, as your response will be sent to a text-to-speech service.",
 				},
 				{
 					Role:    openai.ChatMessageRoleUser,
