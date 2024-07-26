@@ -536,12 +536,9 @@ func (bot *Bot) getOrCreateVoiceStream(
 	cacheKey := fmt.Sprintf("%d:%s:%s", packet.SSRC, guildID, channelID)
 
 	// Check cache first
-	bot.voiceStreamCacheMu.RLock()
-	if streamID, ok := bot.voiceStreamCache[cacheKey]; ok {
-		bot.voiceStreamCacheMu.RUnlock()
+	if streamID, ok := bot.getVoiceStream(cacheKey); ok {
 		return streamID, nil
 	}
-	bot.voiceStreamCacheMu.RUnlock()
 
 	voiceState, err := bot.db.GetVoiceState(
 		context.Background(),
@@ -581,6 +578,13 @@ func (bot *Bot) getOrCreateVoiceStream(
 	bot.voiceStreamCacheMu.Unlock()
 
 	return streamID, nil
+}
+
+func (bot *Bot) getVoiceStream(cacheKey string) (string, bool) {
+	bot.voiceStreamCacheMu.RLock()
+	streamID, ok := bot.voiceStreamCache[cacheKey]
+	bot.voiceStreamCacheMu.RUnlock()
+	return streamID, ok
 }
 
 func (bot *Bot) createNewVoiceStream(
