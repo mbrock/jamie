@@ -253,18 +253,10 @@ func (bot *Bot) processSegment(
 	streamID string,
 	segmentDrafts <-chan stt.Result,
 ) {
-	bot.log.Debug("Processing segment", "streamID", streamID)
 	var finalResult stt.Result
 
 	for draft := range segmentDrafts {
 		finalResult = draft
-		bot.log.Info(
-			"Received draft result",
-			"text",
-			draft.Text,
-			"confidence",
-			draft.Confidence,
-		)
 
 		// Update last speech activity time
 		bot.lastSpeechActivityMu.Lock()
@@ -274,9 +266,7 @@ func (bot *Bot) processSegment(
 
 	if finalResult.Text != "" {
 		bot.log.Info(
-			"Final result received",
-			"streamID",
-			streamID,
+			"heard",
 			"text",
 			finalResult.Text,
 		)
@@ -348,8 +338,6 @@ func (bot *Bot) processSegment(
 					"error", err.Error(),
 					"channel", row.DiscordChannel,
 				)
-			} else {
-				bot.log.Info("Sent transcribed message in talk mode", "channel", row.DiscordChannel)
 			}
 		} else {
 			// Send the transcribed message as usual
@@ -364,19 +352,11 @@ func (bot *Bot) processSegment(
 					"error", err.Error(),
 					"channel", row.DiscordChannel,
 				)
-			} else {
-				bot.log.Info("Sent transcribed message", "channel", row.DiscordChannel)
 			}
 		}
 
 		recognitionID := etc.Gensym()
-		bot.log.Debug(
-			"Saving recognition",
-			"recognitionID",
-			recognitionID,
-			"streamID",
-			streamID,
-		)
+
 		err = bot.db.SaveRecognition(
 			context.Background(),
 			db.SaveRecognitionParams{
@@ -394,11 +374,7 @@ func (bot *Bot) processSegment(
 				"error", err.Error(),
 				"recognitionID", recognitionID,
 			)
-		} else {
-			bot.log.Info("Saved recognition to database", "recognitionID", recognitionID)
 		}
-	} else {
-		bot.log.Debug("Received empty final result", "streamID", streamID)
 	}
 }
 
@@ -441,51 +417,6 @@ func (bot *Bot) joinVoiceChannel(guildID, channelID string) error {
 	return nil
 }
 
-func (bot *Bot) sayInVoiceChannel(
-	vc *discordsdk.VoiceConnection,
-	text string,
-) error {
-	bot.log.Info("Starting text-to-speech", "text", text)
-
-	// Generate speech
-	mp3Data, err := bot.TextToSpeech(text)
-	if err != nil {
-		bot.log.Error("Failed to generate speech", "error", err)
-		return fmt.Errorf("failed to generate speech: %w", err)
-	}
-	bot.log.Debug("Speech generated successfully", "mp3Size", len(mp3Data))
-
-	// Convert to Opus packets
-	opusPackets, err := ogg.ConvertToOpus(mp3Data)
-	if err != nil {
-		bot.log.Error("Failed to convert to Opus", "error", err)
-		return fmt.Errorf("failed to convert to Opus: %w", err)
-	}
-	bot.log.Debug(
-		"Converted to Opus packets",
-		"packetCount",
-		len(opusPackets),
-	)
-
-	// Send Opus packets
-	bot.log.Info("Sending audio to voice channel")
-	vc.Speaking(true)
-	defer vc.Speaking(false)
-	for i, packet := range opusPackets {
-		vc.OpusSend <- packet
-		if i%100 == 0 {
-			bot.log.Debug(
-				"Sending Opus packets",
-				"progress",
-				fmt.Sprintf("%d/%d", i+1, len(opusPackets)),
-			)
-		}
-	}
-
-	bot.log.Info("Finished sending audio to voice channel")
-	return nil
-}
-
 func (bot *Bot) joinAllVoiceChannels(guildID string) error {
 	channels, err := bot.conn.GuildChannels(guildID)
 	if err != nil {
@@ -518,20 +449,12 @@ func (bot *Bot) handleVoiceConnection(
 		vc.AddHandler(bot.handleVoiceSpeakingUpdate)
 	}()
 
-	for {
+	for packet := range vc.OpusRecv {
 		select {
-		case packet, ok := <-vc.OpusRecv:
-			if !ok {
-				bot.log.Info("voice channel closed")
-				return
-			}
-
-			select {
-			case bot.voicePacketChan <- &voicePacket{packet: packet, guildID: guildID, channelID: channelID}:
-				// Packet sent to channel successfully
-			default:
-				bot.log.Warn("voice packet channel full, dropping packet")
-			}
+		case bot.voicePacketChan <- &voicePacket{packet: packet, guildID: guildID, channelID: channelID}:
+			// Packet sent to channel successfully
+		default:
+			bot.log.Warn("voice packet channel full, dropping packet")
 		}
 	}
 }
@@ -795,7 +718,6 @@ func (bot *Bot) speechRecognitionLoop(
 	bot.log.Info("Starting speech recognition loop", "streamID", streamID)
 
 	for segmentDrafts := range session.Receive() {
-		bot.log.Debug("Received segment drafts", "streamID", streamID)
 		bot.processSegment(streamID, segmentDrafts)
 	}
 
@@ -811,39 +733,8 @@ func (bot *Bot) handleVoiceStateUpdate(
 	v *discordsdk.VoiceStateUpdate,
 ) {
 	if v.UserID == bot.conn.State.User.ID {
-		return // Ignore bot's own voice state updates
+		return
 	}
-
-	// if v.ChannelID == "" {
-	// 	// User left a voice channel
-	// 	err := bot.db.EndStreamForChannel(v.GuildID, v.ChannelID)
-	// 	if err != nil {
-	// 		bot.log.Error(
-	// 			"failed to update stream end time",
-	// 			"error",
-	// 			err.Error(),
-	// 		)
-	// 	}
-	// } else {
-	// 	// // User joined or moved to a voice channel
-	// 	// streamID := etc.Gensym()
-	// 	// speakerID := etc.Gensym()
-	// 	// discordID := v.UserID
-	// 	// emoji := txt.RandomAvatar()
-	// 	// err := bot.db.CreateStreamForDiscordChannel(
-	// 	// 	streamID,
-	// 	// 	v.GuildID,
-	// 	// 	v.ChannelID,
-	// 	// 	0,
-	// 	// 	0,
-	// 	// 	speakerID,
-	// 	// 	discordID,
-	// 	// 	emoji,
-	// 	// )
-	// 	// if err != nil {
-	// 	// 	bot.log.Error("failed to create new stream for user join", "error", err.Error())
-	// 	// }
-	// }
 }
 
 func (bot *Bot) handleSummaryCommand(
@@ -1338,7 +1229,7 @@ func (bot *Bot) GenerateOggOpusBlob(
 }
 
 func (bot *Bot) TextToSpeech(text string) ([]byte, error) {
-	bot.log.Info("Starting text-to-speech generation", "text", text)
+	bot.log.Info("speaking", "text", text)
 	elevenlabs.SetAPIKey(bot.elevenLabsAPIKey)
 
 	ttsReq := elevenlabs.TextToSpeechRequest{
@@ -1346,7 +1237,6 @@ func (bot *Bot) TextToSpeech(text string) ([]byte, error) {
 		ModelID: "eleven_turbo_v2_5",
 	}
 
-	bot.log.Debug("Sending request to ElevenLabs API")
 	audio, err := elevenlabs.TextToSpeech("XB0fDUnXU5powFXDhCwa", ttsReq)
 	if err != nil {
 		bot.log.Error(
@@ -1357,11 +1247,6 @@ func (bot *Bot) TextToSpeech(text string) ([]byte, error) {
 		return nil, fmt.Errorf("failed to generate speech: %w", err)
 	}
 
-	bot.log.Info(
-		"Text-to-speech generation successful",
-		"audioSize",
-		len(audio),
-	)
 	return audio, nil
 }
 
