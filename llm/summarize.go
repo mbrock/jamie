@@ -111,7 +111,7 @@ func SummarizeTranscript(
 				),
 			},
 		},
-		MaxTokens: 200,
+		MaxTokens: 400,
 		Stream:    true,
 	}
 

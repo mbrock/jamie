@@ -1225,11 +1225,11 @@ func (bot *Bot) processYoCommand(
 		ctx,
 		openai.ChatCompletionRequest{
 			Model:     openai.GPT4o,
-			MaxTokens: 120,
+			MaxTokens: 300,
 			Messages: []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleSystem,
-					Content: "You are a brief, terse, stoner noir, weird interlocutor named Jamie. You never offer to help. You improvise together. Respond without using any markup or formatting, as your response will be sent to a text-to-speech service.",
+					Content: "You never offer to help. You hang back. Write terse, weird analyses without formatting. Do not react, just write.",
 				},
 				{
 					Role:    openai.ChatMessageRoleUser,
