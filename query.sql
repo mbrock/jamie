@@ -203,3 +203,10 @@ ON CONFLICT (id) DO UPDATE SET
 
 -- name: GetVoiceState :one
 SELECT * FROM voice_states WHERE ssrc = ? OR user_id = ?;
+
+-- name: GetRecentRecognitions :many
+SELECT s.emoji, r.text, r.created_at
+FROM recognitions r
+JOIN speakers s ON r.stream = s.stream
+ORDER BY r.created_at DESC
+LIMIT ?;

@@ -886,32 +886,67 @@ func (bot *Bot) handleYoCommand(
 
 	prompt := strings.Join(args, " ")
 
-	// Fetch today's text messages
+	// Fetch today's text messages and recognitions
 	messages, err := bot.db.GetRecentTextMessages(
 		context.Background(),
 		db.GetRecentTextMessagesParams{
 			DiscordChannel: m.ChannelID,
-			Limit:          100,
+			Limit:          50,
 		},
 	)
 	if err != nil {
 		return fmt.Errorf("failed to fetch today's messages: %w", err)
 	}
 
-	// Create context from today's messages
+	recognitions, err := bot.db.GetRecentRecognitions(
+		context.Background(),
+		50,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to fetch recent recognitions: %w", err)
+	}
+
+	// Create context from today's messages and recognitions
 	var contextBuilder strings.Builder
-	contextBuilder.WriteString("Today's conversation:\n")
+	contextBuilder.WriteString("Today's conversation and voice transcriptions:\n")
+
+	// Combine and sort messages and recognitions
+	type contextItem struct {
+		content   string
+		createdAt float64
+	}
+	var items []contextItem
+
 	for _, msg := range messages {
 		sender := "User"
 		if msg.IsBot {
 			sender = "Bot"
 		}
-		contextBuilder.WriteString(
-			fmt.Sprintf("%s: %s\n", sender, msg.Content),
-		)
+		items = append(items, contextItem{
+			content:   fmt.Sprintf("%s: %s", sender, msg.Content),
+			createdAt: msg.CreatedAt,
+		})
 	}
+
+	for _, rec := range recognitions {
+		items = append(items, contextItem{
+			content:   fmt.Sprintf("%s: %s", rec.Emoji, rec.Text),
+			createdAt: rec.CreatedAt,
+		})
+	}
+
+	// Sort items by createdAt
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].createdAt < items[j].createdAt
+	})
+
+	// Add sorted items to context
+	for _, item := range items {
+		contextBuilder.WriteString(item.content + "\n")
+	}
+
 	contextBuilder.WriteString(
-		"\nBased on the conversation above, please respond to the following prompt:\n",
+		"\nBased on the conversation and voice transcriptions above, please respond to the following prompt:\n",
 	)
 	contextBuilder.WriteString(prompt)
 
