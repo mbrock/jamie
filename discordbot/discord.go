@@ -171,25 +171,36 @@ func (bot *Bot) sayInVoiceChannel(
 	vc *discordsdk.VoiceConnection,
 	text string,
 ) error {
+	bot.log.Info("Starting text-to-speech", "text", text)
+
 	// Generate speech
 	mp3Data, err := bot.TextToSpeech(text)
 	if err != nil {
+		bot.log.Error("Failed to generate speech", "error", err)
 		return fmt.Errorf("failed to generate speech: %w", err)
 	}
+	bot.log.Debug("Speech generated successfully", "mp3Size", len(mp3Data))
 
 	// Convert to Opus packets
 	opusPackets, err := ogg.ConvertToOpus(mp3Data)
 	if err != nil {
+		bot.log.Error("Failed to convert to Opus", "error", err)
 		return fmt.Errorf("failed to convert to Opus: %w", err)
 	}
+	bot.log.Debug("Converted to Opus packets", "packetCount", len(opusPackets))
 
 	// Send Opus packets
+	bot.log.Info("Sending audio to voice channel")
 	vc.Speaking(true)
 	defer vc.Speaking(false)
-	for _, packet := range opusPackets {
+	for i, packet := range opusPackets {
 		vc.OpusSend <- packet
+		if i%100 == 0 {
+			bot.log.Debug("Sending Opus packets", "progress", fmt.Sprintf("%d/%d", i+1, len(opusPackets)))
+		}
 	}
 
+	bot.log.Info("Finished sending audio to voice channel")
 	return nil
 }
 
@@ -743,6 +754,7 @@ func (bot *Bot) GenerateOggOpusBlob(
 }
 
 func (bot *Bot) TextToSpeech(text string) ([]byte, error) {
+	bot.log.Info("Starting text-to-speech generation", "text", text)
 	elevenlabs.SetAPIKey(bot.elevenLabsAPIKey)
 
 	ttsReq := elevenlabs.TextToSpeechRequest{
@@ -750,10 +762,13 @@ func (bot *Bot) TextToSpeech(text string) ([]byte, error) {
 		ModelID: "eleven_monolingual_v1",
 	}
 
+	bot.log.Debug("Sending request to ElevenLabs API")
 	audio, err := elevenlabs.TextToSpeech("pNInz6obpgDQGcFmaJgB", ttsReq)
 	if err != nil {
+		bot.log.Error("Failed to generate speech from ElevenLabs", "error", err)
 		return nil, fmt.Errorf("failed to generate speech: %w", err)
 	}
 
+	bot.log.Info("Text-to-speech generation successful", "audioSize", len(audio))
 	return audio, nil
 }
