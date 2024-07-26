@@ -189,6 +189,5 @@ LIMIT ?;
 -- name: GetTextMessagesInTimeRange :many
 SELECT id, discord_channel, discord_user, content, is_bot, created_at
 FROM text_messages
-WHERE discord_channel = sqlc.arg(discord_channel)
-  AND created_at BETWEEN sqlc.arg(start_time) AND sqlc.arg(end_time)
+WHERE discord_channel = ? AND created_at BETWEEN ? AND ?
 ORDER BY created_at ASC;
