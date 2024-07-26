@@ -792,65 +792,9 @@ func (bot *Bot) handleSummaryCommand(
 		speak = true
 	}
 
-	// Fetch recent text messages and recognitions
-	messages, err := bot.db.GetRecentTextMessages(
-		context.Background(),
-		db.GetRecentTextMessagesParams{
-			DiscordChannel: m.ChannelID,
-			Limit:          100,
-		},
-	)
+	context, err := bot.getRecentConversationContext(m.ChannelID)
 	if err != nil {
-		return fmt.Errorf("failed to fetch recent messages: %w", err)
-	}
-
-	recognitions, err := bot.db.GetRecentRecognitions(
-		context.Background(),
-		2000,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to fetch recent recognitions: %w", err)
-	}
-
-	// Create context from recent messages and recognitions
-	var contextBuilder strings.Builder
-	contextBuilder.WriteString(
-		"Recent conversation and voice transcriptions:\n",
-	)
-
-	// Combine and sort messages and recognitions
-	type contextItem struct {
-		content   string
-		createdAt float64
-	}
-	var items []contextItem
-
-	for _, msg := range messages {
-		sender := "User"
-		if msg.IsBot {
-			sender = "Bot"
-		}
-		items = append(items, contextItem{
-			content:   fmt.Sprintf("%s: %s", sender, msg.Content),
-			createdAt: msg.CreatedAt,
-		})
-	}
-
-	for _, rec := range recognitions {
-		items = append(items, contextItem{
-			content:   fmt.Sprintf("%s: %s", rec.Emoji, rec.Text),
-			createdAt: rec.CreatedAt,
-		})
-	}
-
-	// Sort items by createdAt
-	sort.Slice(items, func(i, j int) bool {
-		return items[i].createdAt < items[j].createdAt
-	})
-
-	// Add sorted items to context
-	for _, item := range items {
-		contextBuilder.WriteString(item.content + "\n")
+		return fmt.Errorf("failed to get recent conversation context: %w", err)
 	}
 
 	// Generate summary
@@ -901,6 +845,71 @@ func (bot *Bot) handleSummaryCommand(
 	}
 
 	return nil
+}
+
+func (bot *Bot) getRecentConversationContext(channelID string) (string, error) {
+	// Fetch recent text messages and recognitions
+	messages, err := bot.db.GetRecentTextMessages(
+		context.Background(),
+		db.GetRecentTextMessagesParams{
+			DiscordChannel: channelID,
+			Limit:          100,
+		},
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch recent messages: %w", err)
+	}
+
+	recognitions, err := bot.db.GetRecentRecognitions(
+		context.Background(),
+		2000,
+	)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch recent recognitions: %w", err)
+	}
+
+	// Create context from recent messages and recognitions
+	var contextBuilder strings.Builder
+	contextBuilder.WriteString(
+		"Recent conversation and voice transcriptions:\n",
+	)
+
+	// Combine and sort messages and recognitions
+	type contextItem struct {
+		content   string
+		createdAt float64
+	}
+	var items []contextItem
+
+	for _, msg := range messages {
+		sender := "User"
+		if msg.IsBot {
+			sender = "Bot"
+		}
+		items = append(items, contextItem{
+			content:   fmt.Sprintf("%s: %s", sender, msg.Content),
+			createdAt: msg.CreatedAt,
+		})
+	}
+
+	for _, rec := range recognitions {
+		items = append(items, contextItem{
+			content:   fmt.Sprintf("%s: %s", rec.Emoji, rec.Text),
+			createdAt: rec.CreatedAt,
+		})
+	}
+
+	// Sort items by createdAt
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].createdAt < items[j].createdAt
+	})
+
+	// Add sorted items to context
+	for _, item := range items {
+		contextBuilder.WriteString(item.content + "\n")
+	}
+
+	return contextBuilder.String(), nil
 }
 
 func (bot *Bot) updateMessageWithSummary(
