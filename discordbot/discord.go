@@ -290,10 +290,13 @@ func (bot *Bot) processSegment(
 		// Check if the channel is in talk mode
 		if bot.talkModeChannels[row.DiscordChannel] {
 			bot.speakingMu.Lock()
-			isSpeaking := false
+			isSpeaking := bot.isSpeaking
 			bot.speakingMu.Unlock()
 
 			if !isSpeaking {
+				bot.speakingMu.Lock()
+				bot.isSpeaking = true
+				bot.speakingMu.Unlock()
 				// Process the speech recognition result as a yo command
 				bot.handleYoCommand(bot.conn, &discordsdk.MessageCreate{
 					Message: &discordsdk.Message{
