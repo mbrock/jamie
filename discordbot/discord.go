@@ -20,6 +20,16 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
+func (bot *Bot) saveTextMessage(channelID, userID, content string, isBot bool) error {
+	return bot.db.SaveTextMessage(context.Background(), db.SaveTextMessageParams{
+		ID:             etc.Gensym(),
+		DiscordChannel: channelID,
+		DiscordUser:    userID,
+		Content:        content,
+		IsBot:          isBot,
+	})
+}
+
 type CommandHandler func(*discordsdk.Session, *discordsdk.MessageCreate, []string) error
 
 type Bot struct {
@@ -110,6 +120,12 @@ func (bot *Bot) handleMessageCreate(
 	s *discordsdk.Session,
 	m *discordsdk.MessageCreate,
 ) {
+	// Save the received message
+	err := bot.saveTextMessage(m.ChannelID, m.Author.ID, m.Content, m.Author.Bot)
+	if err != nil {
+		bot.log.Error("Failed to save received message", "error", err.Error())
+	}
+
 	// Ignore messages from the bot itself
 	if m.Author.ID == s.State.User.ID {
 		return
@@ -129,14 +145,11 @@ func (bot *Bot) handleMessageCreate(
 	commandName := args[0]
 	handler, exists := bot.commands[commandName]
 	if !exists {
-		s.ChannelMessageSend(
-			m.ChannelID,
-			fmt.Sprintf("Unknown command: %s", commandName),
-		)
+		bot.sendAndSaveMessage(s, m.ChannelID, fmt.Sprintf("Unknown command: %s", commandName))
 		return
 	}
 
-	err := handler(s, m, args[1:])
+	err = handler(s, m, args[1:])
 	if err != nil {
 		bot.log.Error(
 			"Command execution failed",
@@ -145,10 +158,20 @@ func (bot *Bot) handleMessageCreate(
 			"error",
 			err.Error(),
 		)
-		s.ChannelMessageSend(
-			m.ChannelID,
-			fmt.Sprintf("Error executing command: %s", err.Error()),
-		)
+		bot.sendAndSaveMessage(s, m.ChannelID, fmt.Sprintf("Error executing command: %s", err.Error()))
+	}
+}
+
+func (bot *Bot) sendAndSaveMessage(s *discordsdk.Session, channelID, content string) {
+	msg, err := s.ChannelMessageSend(channelID, content)
+	if err != nil {
+		bot.log.Error("Failed to send message", "error", err.Error())
+		return
+	}
+
+	err = bot.saveTextMessage(channelID, s.State.User.ID, content, true)
+	if err != nil {
+		bot.log.Error("Failed to save sent message", "error", err.Error())
 	}
 }
 
@@ -635,7 +658,7 @@ func (bot *Bot) handleSummaryCommand(
 	}
 
 	// Send initial message
-	message, err := s.ChannelMessageSend(m.ChannelID, "Generating summary...")
+	message, err := bot.sendAndSaveMessage(s, m.ChannelID, "Generating summary...")
 	if err != nil {
 		return fmt.Errorf("failed to send initial message: %w", err)
 	}
@@ -683,6 +706,12 @@ DONE:
 		return fmt.Errorf("failed to send final summary message: %w", err)
 	}
 
+	// Save the final summary message
+	err = bot.saveTextMessage(m.ChannelID, s.State.User.ID, fullSummary.String(), true)
+	if err != nil {
+		bot.log.Error("Failed to save final summary message", "error", err.Error())
+	}
+
 	if speak {
 		err = bot.speakSummary(s, m, fullSummary.String())
 		if err != nil {
@@ -716,13 +745,7 @@ func (bot *Bot) handlePromptCommand(
 		return fmt.Errorf("failed to set system prompt: %w", err)
 	}
 
-	_, err = s.ChannelMessageSend(
-		m.ChannelID,
-		fmt.Sprintf("System prompt '%s' has been set.", name),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to send confirmation message: %w", err)
-	}
+	bot.sendAndSaveMessage(s, m.ChannelID, fmt.Sprintf("System prompt '%s' has been set.", name))
 
 	return nil
 }
@@ -738,13 +761,7 @@ func (bot *Bot) handleListPromptsCommand(
 	}
 
 	if len(prompts) == 0 {
-		_, err = s.ChannelMessageSend(
-			m.ChannelID,
-			"No system prompts have been set.",
-		)
-		if err != nil {
-			return fmt.Errorf("failed to send message: %w", err)
-		}
+		bot.sendAndSaveMessage(s, m.ChannelID, "No system prompts have been set.")
 		return nil
 	}
 
@@ -756,10 +773,7 @@ func (bot *Bot) handleListPromptsCommand(
 		)
 	}
 
-	_, err = s.ChannelMessageSend(m.ChannelID, message.String())
-	if err != nil {
-		return fmt.Errorf("failed to send prompts list: %w", err)
-	}
+	bot.sendAndSaveMessage(s, m.ChannelID, message.String())
 
 	return nil
 }
@@ -811,10 +825,7 @@ func (bot *Bot) handleYoCommand(
 	}
 
 	// Also send the response as a text message
-	_, err = s.ChannelMessageSend(m.ChannelID, response)
-	if err != nil {
-		return fmt.Errorf("failed to send text response: %w", err)
-	}
+	bot.sendAndSaveMessage(s, m.ChannelID, response)
 
 	return nil
 }
