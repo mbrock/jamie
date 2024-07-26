@@ -82,7 +82,7 @@ func ConvertToOpus(mp3Data []byte) ([][]byte, error) {
 	log.Info("Starting ConvertToOpus function")
 
 	// Create a temporary file for the input MP3
-	inputFile, err := os.CreateTemp("/Users/mbrock/", "input*.mp3")
+	inputFile, err := os.CreateTemp("", "input*.mp3")
 	if err != nil {
 		log.Error("Failed to create temporary input file", "error", err)
 		return nil, fmt.Errorf(
@@ -109,7 +109,7 @@ func ConvertToOpus(mp3Data []byte) ([][]byte, error) {
 	inputFile.Close()
 
 	// Create a temporary file for the output PCM
-	outputFile, err := os.CreateTemp("/Users/mbrock", "output*.pcm")
+	outputFile, err := os.CreateTemp("", "output*.pcm")
 	if err != nil {
 		log.Error("Failed to create temporary output file", "error", err)
 		return nil, fmt.Errorf(
