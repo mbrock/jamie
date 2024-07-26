@@ -47,16 +47,16 @@ type Bot struct {
 	conn                     *discordsdk.Session
 	speechRecognitionService stt.SpeechRecognitionService
 	db                       *db.Queries
-	sessions                 map[string]stt.LiveTranscriptionSession
+	sessions                 map[string]stt.LiveTranscriptionSession // streamID -> LiveTranscriptionSession
 	openaiAPIKey             string
-	commands                 map[string]CommandHandler
+	commands                 map[string]CommandHandler // command name -> CommandHandler function
 	elevenLabsAPIKey         string
-	voiceConnections         map[string]*discordsdk.VoiceConnection
-	talkModeChannels         map[string]bool
+	voiceConnections         map[string]*discordsdk.VoiceConnection // channelID -> VoiceConnection
+	talkModeChannels         map[string]bool // channelID -> isTalkModeEnabled
 	mu                       sync.Mutex
 	voicePacketChan          chan *voicePacket
-	audioBuffers             map[string]chan []byte
-	voiceStreamCache         map[string]string
+	audioBuffers             map[string]chan []byte // streamID -> channel of audio bytes
+	voiceStreamCache         map[string]string // cacheKey -> streamID
 	voiceStreamCacheMu       sync.RWMutex
 	isSpeaking               bool
 	speakingMu               sync.Mutex
