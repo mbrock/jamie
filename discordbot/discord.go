@@ -191,7 +191,11 @@ func (bot *Bot) sayInVoiceChannel(
 		bot.log.Error("Failed to convert to Opus", "error", err)
 		return fmt.Errorf("failed to convert to Opus: %w", err)
 	}
-	bot.log.Debug("Converted to Opus packets", "packetCount", len(opusPackets))
+	bot.log.Debug(
+		"Converted to Opus packets",
+		"packetCount",
+		len(opusPackets),
+	)
 
 	// Send Opus packets
 	bot.log.Info("Sending audio to voice channel")
@@ -200,7 +204,11 @@ func (bot *Bot) sayInVoiceChannel(
 	for i, packet := range opusPackets {
 		vc.OpusSend <- packet
 		if i%100 == 0 {
-			bot.log.Debug("Sending Opus packets", "progress", fmt.Sprintf("%d/%d", i+1, len(opusPackets)))
+			bot.log.Debug(
+				"Sending Opus packets",
+				"progress",
+				fmt.Sprintf("%d/%d", i+1, len(opusPackets)),
+			)
 		}
 	}
 
@@ -756,7 +764,11 @@ func (bot *Bot) handleListPromptsCommand(
 	return nil
 }
 
-func (bot *Bot) handleYoCommand(s *discordsdk.Session, m *discordsdk.MessageCreate, args []string) error {
+func (bot *Bot) handleYoCommand(
+	s *discordsdk.Session,
+	m *discordsdk.MessageCreate,
+	args []string,
+) error {
 	if len(args) == 0 {
 		return fmt.Errorf("usage: !yo <prompt>")
 	}
@@ -771,7 +783,8 @@ func (bot *Bot) handleYoCommand(s *discordsdk.Session, m *discordsdk.MessageCrea
 	resp, err := client.CreateChatCompletion(
 		ctx,
 		openai.ChatCompletionRequest{
-			Model: openai.GPT4,
+			Model:     openai.GPT4o,
+			MaxTokens: 100,
 			Messages: []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleUser,
@@ -802,7 +815,11 @@ func (bot *Bot) handleYoCommand(s *discordsdk.Session, m *discordsdk.MessageCrea
 	return nil
 }
 
-func (bot *Bot) speakInChannel(s *discordsdk.Session, channelID string, text string) error {
+func (bot *Bot) speakInChannel(
+	s *discordsdk.Session,
+	channelID string,
+	text string,
+) error {
 	// Find the voice channel associated with the text channel
 	channel, err := s.Channel(channelID)
 	if err != nil {
@@ -883,14 +900,27 @@ func (bot *Bot) TextToSpeech(text string) ([]byte, error) {
 	bot.log.Debug("Sending request to ElevenLabs API")
 	audio, err := elevenlabs.TextToSpeech("pNInz6obpgDQGcFmaJgB", ttsReq)
 	if err != nil {
-		bot.log.Error("Failed to generate speech from ElevenLabs", "error", err)
+		bot.log.Error(
+			"Failed to generate speech from ElevenLabs",
+			"error",
+			err,
+		)
 		return nil, fmt.Errorf("failed to generate speech: %w", err)
 	}
 
-	bot.log.Info("Text-to-speech generation successful", "audioSize", len(audio))
+	bot.log.Info(
+		"Text-to-speech generation successful",
+		"audioSize",
+		len(audio),
+	)
 	return audio, nil
 }
-func (bot *Bot) speakSummary(s *discordsdk.Session, m *discordsdk.MessageCreate, summary string) error {
+
+func (bot *Bot) speakSummary(
+	s *discordsdk.Session,
+	m *discordsdk.MessageCreate,
+	summary string,
+) error {
 	// Find the voice channel the user is in
 	guild, err := s.State.Guild(m.GuildID)
 	if err != nil {
