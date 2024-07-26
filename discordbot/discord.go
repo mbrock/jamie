@@ -869,19 +869,13 @@ func (bot *Bot) handleSummaryCommand(
 		return fmt.Errorf("failed to send initial message: %w", err)
 	}
 
-	err = bot.saveTextMessage(
-		m.ChannelID,
-		s.State.User.ID,
-		message.ID,
-		"Generating summary...",
-		true,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to save initial message: %w", err)
-	}
-
 	// Update the message with the summary
-	fullSummary := bot.updateMessageWithSummary(s, m.ChannelID, message.ID, summaryChan)
+	fullSummary := bot.updateMessageWithSummary(
+		s,
+		m.ChannelID,
+		message.ID,
+		summaryChan,
+	)
 
 	// Save the final summary message
 	err = bot.saveTextMessage(
@@ -900,7 +894,7 @@ func (bot *Bot) handleSummaryCommand(
 	}
 
 	if speak {
-		err = bot.speakSummary(s, m, fullSummary.String())
+		err = bot.speakSummary(s, m, fullSummary)
 		if err != nil {
 			return fmt.Errorf("failed to speak summary: %w", err)
 		}
@@ -909,7 +903,12 @@ func (bot *Bot) handleSummaryCommand(
 	return nil
 }
 
-func (bot *Bot) updateMessageWithSummary(s *discordsdk.Session, channelID string, messageID string, summaryChan <-chan string) string {
+func (bot *Bot) updateMessageWithSummary(
+	s *discordsdk.Session,
+	channelID string,
+	messageID string,
+	summaryChan <-chan string,
+) string {
 	var fullSummary strings.Builder
 	updateTicker := time.NewTicker(2 * time.Second)
 	defer updateTicker.Stop()
