@@ -369,18 +369,12 @@ func (bot *Bot) handleVoicePacket(
 	packet *discordsdk.Packet,
 	guildID, channelID string,
 ) error {
-	start := time.Now()
 	streamID, err := bot.getOrCreateVoiceStream(
 		packet,
 		guildID,
 		channelID,
 	)
-	elapsed := time.Since(start)
-	bot.log.Debug("getOrCreateVoiceStream timing",
-		"duration", elapsed,
-		"guildID", guildID,
-		"channelID", channelID,
-	)
+
 	if err != nil {
 		bot.log.Error("Failed to get or create voice stream",
 			"error", err,
@@ -1114,7 +1108,7 @@ func (bot *Bot) speakInChannel(
 		return fmt.Errorf("no active voice channel found")
 	}
 
-	bot.mu.Lock()
+	//	bot.mu.Lock()
 	// Join the voice channel if not already connected
 	vc, ok := bot.voiceConnections[voiceChannelID]
 	if !ok {
@@ -1126,7 +1120,7 @@ func (bot *Bot) speakInChannel(
 		}
 		bot.voiceConnections[voiceChannelID] = vc
 	}
-	bot.mu.Unlock()
+	//	bot.mu.Unlock()
 
 	// Generate speech
 	speechData, err := bot.TextToSpeech(text)
@@ -1141,12 +1135,22 @@ func (bot *Bot) speakInChannel(
 	}
 
 	// Send Opus packets
+	bot.log.Debug("Starting to send Opus packets")
 	vc.Speaking(true)
 	defer vc.Speaking(false)
 
-	for _, packet := range opusPackets {
+	for i, packet := range opusPackets {
+		bot.log.Debug(
+			"Sending Opus packet",
+			"packetNumber",
+			i+1,
+			"totalPackets",
+			len(opusPackets),
+		)
 		vc.OpusSend <- packet
 	}
+
+	bot.log.Debug("Finished sending all Opus packets")
 
 	return nil
 }
@@ -1249,7 +1253,6 @@ func (bot *Bot) speakSummary(
 
 func (bot *Bot) processVoicePackets() {
 	for packet := range bot.voicePacketChan {
-		fmt.Println("!")
 		err := bot.handleVoicePacket(
 			packet.packet,
 			packet.guildID,
