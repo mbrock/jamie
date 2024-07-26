@@ -21,6 +21,8 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
+const silenceDuration = 3 * time.Second
+
 func (bot *Bot) saveTextMessage(
 	channelID, userID, messageID, content string,
 	isBot bool,
@@ -58,6 +60,8 @@ type Bot struct {
 	voiceStreamCacheMu       sync.RWMutex
 	isSpeaking               bool
 	speakingMu               sync.Mutex
+	lastSpeechActivity       time.Time
+	lastSpeechActivityMu     sync.Mutex
 }
 
 type voicePacket struct {
@@ -256,6 +260,11 @@ func (bot *Bot) processSegment(
 			"confidence",
 			draft.Confidence,
 		)
+		
+		// Update last speech activity time
+		bot.lastSpeechActivityMu.Lock()
+		bot.lastSpeechActivity = time.Now()
+		bot.lastSpeechActivityMu.Unlock()
 	}
 
 	if finalResult.Text != "" {
@@ -266,6 +275,18 @@ func (bot *Bot) processSegment(
 			"text",
 			finalResult.Text,
 		)
+
+		// Wait for 3 seconds of silence before processing
+		time.Sleep(silenceDuration)
+
+		bot.lastSpeechActivityMu.Lock()
+		elapsed := time.Since(bot.lastSpeechActivity)
+		bot.lastSpeechActivityMu.Unlock()
+
+		if elapsed < silenceDuration {
+			bot.log.Debug("Skipping processing due to recent speech activity")
+			return
+		}
 
 		row, err := bot.db.GetChannelAndUsernameForStream(
 			context.Background(),
