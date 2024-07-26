@@ -40,6 +40,12 @@ func (bot *Bot) saveTextMessage(
 
 type CommandHandler func(*discordsdk.Session, *discordsdk.MessageCreate, []string) error
 
+type VoiceChannel struct {
+	Connection     *discordsdk.VoiceConnection
+	TalkModeEnabled bool
+	PacketChan     chan *voicePacket
+}
+
 type Bot struct {
 	log                      *log.Logger
 	conn                     *discordsdk.Session
@@ -49,12 +55,10 @@ type Bot struct {
 	openaiAPIKey             string
 	commands                 map[string]CommandHandler // command name -> CommandHandler function
 	elevenLabsAPIKey         string
-	voiceConnections         map[string]*discordsdk.VoiceConnection // channelID -> VoiceConnection
-	talkModeChannels         map[string]bool                        // channelID -> isTalkModeEnabled
+	voiceChannels            map[string]*VoiceChannel  // channelID -> VoiceChannel
 	mu                       sync.Mutex
-	voicePacketChans         map[string]chan *voicePacket // channelID -> voice packet channel
-	audioBuffers             map[string]chan []byte       // streamID -> channel of audio bytes
-	voiceStreamCache         map[string]string            // cacheKey -> streamID
+	audioBuffers             map[string]chan []byte    // streamID -> channel of audio bytes
+	voiceStreamCache         map[string]string         // cacheKey -> streamID
 	voiceStreamCacheMu       sync.RWMutex
 	isSpeaking               bool
 	speakingMu               sync.Mutex
@@ -78,17 +82,13 @@ func NewBot(
 		speechRecognitionService: speechRecognitionService,
 		log:                      logger,
 		db:                       db,
-		sessions: make(
-			map[string]stt.LiveTranscriptionSession,
-		),
-		openaiAPIKey:     openaiAPIKey,
-		elevenLabsAPIKey: elevenLabsAPIKey,
-		commands:         make(map[string]CommandHandler),
-		voiceConnections: make(map[string]*discordsdk.VoiceConnection),
-		talkModeChannels: make(map[string]bool),
-		voicePacketChans: make(map[string]chan *voicePacket),
-		audioBuffers:     make(map[string]chan []byte),
-		voiceStreamCache: make(map[string]string),
+		sessions:                 make(map[string]stt.LiveTranscriptionSession),
+		openaiAPIKey:             openaiAPIKey,
+		elevenLabsAPIKey:         elevenLabsAPIKey,
+		commands:                 make(map[string]CommandHandler),
+		voiceChannels:            make(map[string]*VoiceChannel),
+		audioBuffers:             make(map[string]chan []byte),
+		voiceStreamCache:         make(map[string]string),
 	}
 
 	bot.registerCommands()
@@ -172,11 +172,14 @@ func (bot *Bot) handleMessageCreate(
 	}
 	bot.speakingMu.Unlock()
 
-	// Check if the channel is in talk mode
-	if bot.talkModeChannels[m.ChannelID] {
+	bot.mu.Lock()
+	voiceChannel, ok := bot.voiceChannels[m.ChannelID]
+	bot.mu.Unlock()
+
+	if ok && voiceChannel.TalkModeEnabled {
 		if strings.HasPrefix(m.Content, "!talk") {
 			// Turn off talk mode
-			delete(bot.talkModeChannels, m.ChannelID)
+			voiceChannel.TalkModeEnabled = false
 			bot.sendAndSaveMessage(s, m.ChannelID, "Talk mode deactivated.")
 		} else {
 			// Process the message as a talk command
@@ -199,12 +202,20 @@ func (bot *Bot) handleMessageCreate(
 	commandName := args[0]
 	if commandName == "talk" {
 		// Turn on talk mode
-		bot.talkModeChannels[m.ChannelID] = true
-		bot.sendAndSaveMessage(
-			s,
-			m.ChannelID,
-			"Talk mode activated. Type !talk again to deactivate.",
-		)
+		if ok {
+			voiceChannel.TalkModeEnabled = true
+			bot.sendAndSaveMessage(
+				s,
+				m.ChannelID,
+				"Talk mode activated. Type !talk again to deactivate.",
+			)
+		} else {
+			bot.sendAndSaveMessage(
+				s,
+				m.ChannelID,
+				"You must be in a voice channel to activate talk mode.",
+			)
+		}
 		return
 	}
 
@@ -373,16 +384,16 @@ func (bot *Bot) joinVoiceChannel(guildID, channelID string) error {
 
 	bot.log.Info("joined voice channel", "channel", channelID)
 
-	bot.voiceConnections[channelID] = vc
+	packetChan := make(chan *voicePacket, 3*1000/20) // three seconds of 20ms frames
+	voiceChannel := &VoiceChannel{
+		Connection:     vc,
+		TalkModeEnabled: false,
+		PacketChan:     packetChan,
+	}
+	bot.voiceChannels[channelID] = voiceChannel
 
-	packetChan := make(
-		chan *voicePacket,
-		3*1000/20,
-	) // three seconds of 20ms frames
-	bot.voicePacketChans[channelID] = packetChan
 	go bot.processVoicePackets(packetChan)
-
-	go bot.handleVoiceConnection(vc, guildID, channelID)
+	go bot.handleVoiceConnection(voiceChannel, guildID, channelID)
 	return nil
 }
 
@@ -411,28 +422,16 @@ func (bot *Bot) joinAllVoiceChannels(guildID string) error {
 }
 
 func (bot *Bot) handleVoiceConnection(
-	vc *discordsdk.VoiceConnection,
+	voiceChannel *VoiceChannel,
 	guildID, channelID string,
 ) {
 	go func() {
-		vc.AddHandler(bot.handleVoiceSpeakingUpdate)
+		voiceChannel.Connection.AddHandler(bot.handleVoiceSpeakingUpdate)
 	}()
 
-	bot.mu.Lock()
-	packetChan, ok := bot.voicePacketChans[channelID]
-	if !ok {
-		packetChan = make(
-			chan *voicePacket,
-			3*1000/20,
-		) // three seconds of 20ms frames
-		bot.voicePacketChans[channelID] = packetChan
-		go bot.processVoicePackets(packetChan)
-	}
-	bot.mu.Unlock()
-
-	for packet := range vc.OpusRecv {
+	for packet := range voiceChannel.Connection.OpusRecv {
 		select {
-		case packetChan <- &voicePacket{packet: packet, guildID: guildID, channelID: channelID}:
+		case voiceChannel.PacketChan <- &voicePacket{packet: packet, guildID: guildID, channelID: channelID}:
 			// Packet sent to channel successfully
 		default:
 			bot.log.Warn(
@@ -1152,15 +1151,22 @@ func (bot *Bot) speakInChannel(
 
 	bot.mu.Lock()
 	// Join the voice channel if not already connected
-	vc, ok := bot.voiceConnections[voiceChannelID]
+	voiceChannel, ok := bot.voiceChannels[voiceChannelID]
 	if !ok {
-		var err error
-		vc, err = s.ChannelVoiceJoin(guild.ID, voiceChannelID, false, true)
+		vc, err := s.ChannelVoiceJoin(guild.ID, voiceChannelID, false, true)
 		if err != nil {
 			bot.mu.Unlock()
 			return fmt.Errorf("failed to join voice channel: %w", err)
 		}
-		bot.voiceConnections[voiceChannelID] = vc
+		packetChan := make(chan *voicePacket, 3*1000/20)
+		voiceChannel = &VoiceChannel{
+			Connection:     vc,
+			TalkModeEnabled: false,
+			PacketChan:     packetChan,
+		}
+		bot.voiceChannels[voiceChannelID] = voiceChannel
+		go bot.processVoicePackets(packetChan)
+		go bot.handleVoiceConnection(voiceChannel, guild.ID, voiceChannelID)
 	}
 	bot.mu.Unlock()
 
