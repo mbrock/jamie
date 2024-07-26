@@ -455,7 +455,7 @@ func (bot *Bot) handleVoicePacket(
 	packet *discordsdk.Packet,
 	guildID, channelID string,
 ) error {
-	streamID, err := bot.getOrCreateVoiceStream(
+	streamID, err := bot.ensureVoiceStream(
 		packet,
 		guildID,
 		channelID,
@@ -529,24 +529,21 @@ func (bot *Bot) handleVoiceSpeakingUpdate(
 	}
 }
 
-func (bot *Bot) getOrCreateVoiceStream(
+func (bot *Bot) ensureVoiceStream(
 	packet *discordsdk.Packet,
 	guildID, channelID string,
 ) (string, error) {
 	cacheKey := fmt.Sprintf("%d:%s:%s", packet.SSRC, guildID, channelID)
 
-	// Check cache first
 	if streamID, ok := bot.getCachedVoiceStream(cacheKey); ok {
 		return streamID, nil
 	}
 
-	// Get non-cached voice stream
-	streamID, err := bot.getNonCachedVoiceStream(packet, guildID, channelID)
+	streamID, err := bot.findOrSaveVoiceStream(packet, guildID, channelID)
 	if err != nil {
 		return "", err
 	}
 
-	// Add to cache
 	bot.voiceStreamCacheMu.Lock()
 	bot.voiceStreamCache[cacheKey] = streamID
 	bot.voiceStreamCacheMu.Unlock()
@@ -561,10 +558,43 @@ func (bot *Bot) getCachedVoiceStream(cacheKey string) (string, bool) {
 	return streamID, ok
 }
 
-func (bot *Bot) getNonCachedVoiceStream(
+func (bot *Bot) findOrSaveVoiceStream(
 	packet *discordsdk.Packet,
 	guildID, channelID string,
 ) (string, error) {
+	discordID, username, streamID, err := bot.findVoiceStream(
+		packet,
+		guildID,
+		channelID,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			streamID, err = bot.createNewVoiceStream(
+				packet,
+				guildID,
+				channelID,
+				discordID,
+				username,
+			)
+			if err != nil {
+				return "", fmt.Errorf(
+					"failed to create new voice stream: %w",
+					err,
+				)
+			}
+		} else {
+			return "", fmt.Errorf("failed to find voice stream: %w", err)
+		}
+	}
+
+	return streamID, nil
+}
+
+func (bot *Bot) findVoiceStream(
+	packet *discordsdk.Packet,
+	guildID string,
+	channelID string,
+) (string, string, string, error) {
 	voiceState, err := bot.db.GetVoiceState(
 		context.Background(),
 		db.GetVoiceStateParams{
@@ -573,7 +603,7 @@ func (bot *Bot) getNonCachedVoiceStream(
 		},
 	)
 	if err != nil {
-		return "", fmt.Errorf("failed to get voice state: %w", err)
+		return "", "", "", fmt.Errorf("failed to get voice state: %w", err)
 	}
 
 	discordID := voiceState.UserID
@@ -587,17 +617,11 @@ func (bot *Bot) getNonCachedVoiceStream(
 			DiscordID:      discordID,
 		},
 	)
-
-	if errors.Is(err, sql.ErrNoRows) {
-		streamID, err = bot.createNewVoiceStream(packet, guildID, channelID, discordID, username)
-		if err != nil {
-			return "", err
-		}
-	} else if err != nil {
-		return "", fmt.Errorf("failed to query for stream: %w", err)
+	if err != nil {
+		return discordID, username, "", err
 	}
 
-	return streamID, nil
+	return discordID, username, streamID, nil
 }
 
 func (bot *Bot) createNewVoiceStream(
@@ -606,7 +630,7 @@ func (bot *Bot) createNewVoiceStream(
 ) (string, error) {
 	streamID := etc.Gensym()
 	speakerID := etc.Gensym()
-	
+
 	err := bot.db.CreateStream(
 		context.Background(),
 		db.CreateStreamParams{
@@ -629,7 +653,10 @@ func (bot *Bot) createNewVoiceStream(
 		},
 	)
 	if err != nil {
-		return "", fmt.Errorf("failed to create discord channel stream: %w", err)
+		return "", fmt.Errorf(
+			"failed to create discord channel stream: %w",
+			err,
+		)
 	}
 
 	err = bot.db.CreateSpeaker(
@@ -692,11 +719,6 @@ func (bot *Bot) getSpeechRecognitionSession(
 
 	session, exists := bot.sessions[streamID]
 	if !exists {
-		bot.log.Info(
-			"Creating new speech recognition session",
-			"streamID",
-			streamID,
-		)
 		var err error
 		session, err = bot.speechRecognitionService.Start(
 			context.Background(),
@@ -715,7 +737,6 @@ func (bot *Bot) getSpeechRecognitionSession(
 			)
 		}
 		bot.sessions[streamID] = session
-		bot.log.Info("Started speech recognition loop", "streamID", streamID)
 		go bot.speechRecognitionLoop(streamID, session)
 	}
 	return session, nil
@@ -725,8 +746,6 @@ func (bot *Bot) speechRecognitionLoop(
 	streamID string,
 	session stt.LiveTranscriptionSession,
 ) {
-	bot.log.Info("Starting speech recognition loop", "streamID", streamID)
-
 	for segmentDrafts := range session.Receive() {
 		bot.processSegment(streamID, segmentDrafts)
 	}
