@@ -99,6 +99,7 @@ func NewBot(
 		),
 		audioBuffers:     make(map[string]chan []byte),
 		voiceStreamCache: make(map[string]string),
+		lastSpeakTime:    time.Now().Add(-20 * time.Second), // Initialize lastSpeakTime
 	}
 
 	bot.registerCommands()
