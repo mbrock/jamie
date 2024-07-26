@@ -81,7 +81,6 @@ func (bot *Bot) registerCommands() {
 	bot.commands["summary"] = bot.handleSummaryCommand
 	bot.commands["prompt"] = bot.handlePromptCommand
 	bot.commands["listprompts"] = bot.handleListPromptsCommand
-	bot.commands["say"] = bot.handleSayCommand
 }
 
 func (bot *Bot) Close() error {
@@ -156,7 +155,38 @@ func (bot *Bot) joinVoiceChannel(guildID, channelID string) error {
 	}
 
 	bot.log.Info("joined voice channel", "channel", channelID)
+	
+	// Generate and say greeting
+	greeting := "Hello, I've joined the channel!"
+	err = bot.sayInVoiceChannel(vc, greeting)
+	if err != nil {
+		bot.log.Error("failed to say greeting", "error", err.Error())
+	}
+
 	go bot.handleVoiceConnection(vc, guildID, channelID)
+	return nil
+}
+
+func (bot *Bot) sayInVoiceChannel(vc *discordsdk.VoiceConnection, text string) error {
+	// Generate speech
+	mp3Data, err := bot.TextToSpeech(text)
+	if err != nil {
+		return fmt.Errorf("failed to generate speech: %w", err)
+	}
+
+	// Convert to Opus packets
+	opusPackets, err := ogg.ConvertToOpus(mp3Data)
+	if err != nil {
+		return fmt.Errorf("failed to convert to Opus: %w", err)
+	}
+
+	// Send Opus packets
+	vc.Speaking(true)
+	defer vc.Speaking(false)
+	for _, packet := range opusPackets {
+		vc.OpusSend <- packet
+	}
+
 	return nil
 }
 
@@ -723,59 +753,4 @@ func (bot *Bot) TextToSpeech(text string) ([]byte, error) {
 	}
 
 	return audio, nil
-}
-func (bot *Bot) handleSayCommand(s *discordsdk.Session, m *discordsdk.MessageCreate, args []string) error {
-	if len(args) < 1 {
-		return fmt.Errorf("usage: !say <text>")
-	}
-
-	text := strings.Join(args, " ")
-
-	// Generate speech
-	mp3Data, err := bot.TextToSpeech(text)
-	if err != nil {
-		return fmt.Errorf("failed to generate speech: %w", err)
-	}
-
-	// Convert to Opus packets
-	opusPackets, err := ogg.ConvertToOpus(mp3Data)
-	if err != nil {
-		return fmt.Errorf("failed to convert to Opus: %w", err)
-	}
-
-	// Find the voice connection for the user's channel
-	guild, err := s.State.Guild(m.GuildID)
-	if err != nil {
-		return fmt.Errorf("failed to get guild: %w", err)
-	}
-
-	var voiceChannel *discordsdk.Channel
-	for _, vs := range guild.VoiceStates {
-		if vs.UserID == m.Author.ID {
-			voiceChannel, err = s.State.Channel(vs.ChannelID)
-			if err != nil {
-				return fmt.Errorf("failed to get voice channel: %w", err)
-			}
-			break
-		}
-	}
-
-	if voiceChannel == nil {
-		return fmt.Errorf("you must be in a voice channel to use this command")
-	}
-
-	// Join the voice channel if not already in it
-	vc, err := s.ChannelVoiceJoin(guild.ID, voiceChannel.ID, false, false)
-	if err != nil {
-		return fmt.Errorf("failed to join voice channel: %w", err)
-	}
-
-	// Send Opus packets
-	vc.Speaking(true)
-	defer vc.Speaking(false)
-	for _, packet := range opusPackets {
-		vc.OpusSend <- packet
-	}
-
-	return nil
 }
