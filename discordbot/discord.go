@@ -52,6 +52,13 @@ type Bot struct {
 	voiceConnections         map[string]*discordsdk.VoiceConnection
 	talkModeChannels         map[string]bool
 	mu                       sync.Mutex
+	voicePacketChan          chan *voicePacket
+}
+
+type voicePacket struct {
+	packet    *discordsdk.Packet
+	guildID   string
+	channelID string
 }
 
 func NewBot(
@@ -74,9 +81,11 @@ func NewBot(
 		commands:         make(map[string]CommandHandler),
 		voiceConnections: make(map[string]*discordsdk.VoiceConnection),
 		talkModeChannels: make(map[string]bool),
+		voicePacketChan:  make(chan *voicePacket, 100), // Adjust buffer size as needed
 	}
 
 	bot.registerCommands()
+	go bot.processVoicePackets() // Start the goroutine to process voice packets
 
 	dg, err := discordsdk.New("Bot " + discordToken)
 	if err != nil {
@@ -333,19 +342,17 @@ func (bot *Bot) handleVoiceConnection(
 				return
 			}
 
-			err := bot.waitForVoiceStateAndProcess(packet, guildID, channelID)
-			if err != nil {
-				bot.log.Error(
-					"failed to process voice packet",
-					"error",
-					err.Error(),
-				)
+			select {
+			case bot.voicePacketChan <- &voicePacket{packet: packet, guildID: guildID, channelID: channelID}:
+				// Packet sent to channel successfully
+			default:
+				bot.log.Warn("voice packet channel full, dropping packet")
 			}
 		}
 	}
 }
 
-func (bot *Bot) waitForVoiceStateAndProcess(
+func (bot *Bot) handleVoicePacket(
 	packet *discordsdk.Packet,
 	guildID, channelID string,
 ) error {
@@ -1302,4 +1309,17 @@ func (bot *Bot) speakSummary(
 	}
 
 	return nil
+}
+func (bot *Bot) processVoicePackets() {
+	for packet := range bot.voicePacketChan {
+		err := bot.handleVoicePacket(packet.packet, packet.guildID, packet.channelID)
+		if err != nil {
+			bot.log.Error(
+				"failed to process voice packet",
+				"error", err.Error(),
+				"guildID", packet.guildID,
+				"channelID", packet.channelID,
+			)
+		}
+	}
 }
