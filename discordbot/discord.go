@@ -54,6 +54,8 @@ type Bot struct {
 	mu                       sync.Mutex
 	voicePacketChan          chan *voicePacket
 	audioBuffers             map[string]chan []byte
+	voiceStreamCache         map[string]string
+	voiceStreamCacheMu       sync.RWMutex
 }
 
 type voicePacket struct {
@@ -87,7 +89,8 @@ func NewBot(
 			// three seconds of 20ms frames
 			3*1000/20,
 		),
-		audioBuffers: make(map[string]chan []byte),
+		audioBuffers:     make(map[string]chan []byte),
+		voiceStreamCache: make(map[string]string),
 	}
 
 	bot.registerCommands()
@@ -450,6 +453,16 @@ func (bot *Bot) getOrCreateVoiceStream(
 	packet *discordsdk.Packet,
 	guildID, channelID string,
 ) (string, error) {
+	cacheKey := fmt.Sprintf("%d:%s:%s", packet.SSRC, guildID, channelID)
+
+	// Check cache first
+	bot.voiceStreamCacheMu.RLock()
+	if streamID, ok := bot.voiceStreamCache[cacheKey]; ok {
+		bot.voiceStreamCacheMu.RUnlock()
+		return streamID, nil
+	}
+	bot.voiceStreamCacheMu.RUnlock()
+
 	voiceState, err := bot.db.GetVoiceState(
 		context.Background(),
 		db.GetVoiceStateParams{
@@ -548,6 +561,11 @@ func (bot *Bot) getOrCreateVoiceStream(
 	} else if err != nil {
 		return "", fmt.Errorf("failed to query for stream: %w", err)
 	}
+
+	// Add to cache
+	bot.voiceStreamCacheMu.Lock()
+	bot.voiceStreamCache[cacheKey] = streamID
+	bot.voiceStreamCacheMu.Unlock()
 
 	return streamID, nil
 }
