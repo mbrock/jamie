@@ -30,6 +30,7 @@ type Bot struct {
 	openaiAPIKey             string
 	commands                 map[string]CommandHandler
 	elevenLabsAPIKey         string
+	voiceConnections         map[string]*discordsdk.VoiceConnection
 }
 
 func NewBot(
@@ -50,6 +51,7 @@ func NewBot(
 		openaiAPIKey:     openaiAPIKey,
 		elevenLabsAPIKey: elevenLabsAPIKey,
 		commands:         make(map[string]CommandHandler),
+		voiceConnections: make(map[string]*discordsdk.VoiceConnection),
 	}
 
 	bot.registerCommands()
@@ -593,7 +595,7 @@ func (bot *Bot) handleSummaryCommand(
 	)
 
 	if len(args) < 1 {
-		return fmt.Errorf("usage: !summary <duration> [prompt_name]")
+		return fmt.Errorf("usage: !summary <duration> [prompt_name] [speak]")
 	}
 
 	timeRange := args[0]
@@ -603,8 +605,12 @@ func (bot *Bot) handleSummaryCommand(
 	}
 
 	var promptName string
+	var speak bool
 	if len(args) > 1 {
 		promptName = args[1]
+	}
+	if len(args) > 2 && args[2] == "speak" {
+		speak = true
 	}
 
 	// Generate summary
@@ -665,6 +671,13 @@ DONE:
 	)
 	if err != nil {
 		return fmt.Errorf("failed to send final summary message: %w", err)
+	}
+
+	if speak {
+		err = bot.speakSummary(s, m, fullSummary.String())
+		if err != nil {
+			return fmt.Errorf("failed to speak summary: %w", err)
+		}
 	}
 
 	return nil
@@ -771,4 +784,55 @@ func (bot *Bot) TextToSpeech(text string) ([]byte, error) {
 
 	bot.log.Info("Text-to-speech generation successful", "audioSize", len(audio))
 	return audio, nil
+}
+func (bot *Bot) speakSummary(s *discordsdk.Session, m *discordsdk.MessageCreate, summary string) error {
+	// Find the voice channel the user is in
+	guild, err := s.State.Guild(m.GuildID)
+	if err != nil {
+		return fmt.Errorf("failed to get guild: %w", err)
+	}
+
+	var voiceChannelID string
+	for _, vs := range guild.VoiceStates {
+		if vs.UserID == m.Author.ID {
+			voiceChannelID = vs.ChannelID
+			break
+		}
+	}
+
+	if voiceChannelID == "" {
+		return fmt.Errorf("user is not in a voice channel")
+	}
+
+	// Join the voice channel if not already connected
+	vc, ok := bot.voiceConnections[voiceChannelID]
+	if !ok {
+		vc, err = s.ChannelVoiceJoin(m.GuildID, voiceChannelID, false, true)
+		if err != nil {
+			return fmt.Errorf("failed to join voice channel: %w", err)
+		}
+		bot.voiceConnections[voiceChannelID] = vc
+	}
+
+	// Generate speech
+	speechData, err := bot.TextToSpeech(summary)
+	if err != nil {
+		return fmt.Errorf("failed to generate speech: %w", err)
+	}
+
+	// Convert to Opus packets
+	opusPackets, err := ogg.ConvertToOpus(speechData)
+	if err != nil {
+		return fmt.Errorf("failed to convert to Opus: %w", err)
+	}
+
+	// Send Opus packets
+	vc.Speaking(true)
+	defer vc.Speaking(false)
+
+	for _, packet := range opusPackets {
+		vc.OpusSend <- packet
+	}
+
+	return nil
 }
