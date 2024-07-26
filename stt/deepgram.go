@@ -49,6 +49,8 @@ func (c *DeepgramClient) Start(
 	session := &DeepgramSession{
 		transcriptions: make(chan chan Result),
 		logger:         c.logger,
+		audioBuffer:    make(chan []byte, 100), // Adjust buffer size as needed
+		isOpen:         false,
 	}
 
 	client, err := listen.NewWebSocket(
@@ -80,20 +82,29 @@ type DeepgramSession struct {
 	transcriptions      chan chan Result
 	logger              *log.Logger
 	currentTranscriptCh chan Result
+	audioBuffer         chan []byte
+	isOpen              bool
 }
 
 func (s *DeepgramSession) Stop() error {
+	close(s.audioBuffer)
 	s.client.Stop()
 	return nil
 }
 
 func (s *DeepgramSession) Close(ocr *api.CloseResponse) error {
 	s.logger.Info("closed", "reason", ocr.Type)
+	close(s.audioBuffer)
 	return nil
 }
 
 func (s *DeepgramSession) SendAudio(data []byte) error {
-	return s.client.WriteBinary(data)
+	select {
+	case s.audioBuffer <- data:
+		return nil
+	default:
+		return fmt.Errorf("audio buffer full")
+	}
 }
 
 func (s *DeepgramSession) Receive() <-chan chan Result {
@@ -148,6 +159,14 @@ func (s *DeepgramSession) Message(mr *api.MessageResponse) error {
 
 func (s *DeepgramSession) Open(ocr *api.OpenResponse) error {
 	s.logger.Info("open", "kind", "deepgram")
+	s.isOpen = true
+	go func() {
+		for data := range s.audioBuffer {
+			if err := s.client.WriteBinary(data); err != nil {
+				s.logger.Error("failed to write audio data", "error", err)
+			}
+		}
+	}()
 	return nil
 }
 
