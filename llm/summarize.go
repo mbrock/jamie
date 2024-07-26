@@ -5,9 +5,8 @@ import (
 	"fmt"
 	"io"
 	"jamie/db"
-	"jamie/etc"
+	"sort"
 	"strings"
-	"time"
 
 	"github.com/sashabaranov/go-openai"
 )
@@ -70,7 +69,9 @@ func SummarizeTranscript(
 
 	// Format the context
 	var formattedContext strings.Builder
-	formattedContext.WriteString("Recent conversation and voice transcriptions:\n")
+	formattedContext.WriteString(
+		"Recent conversation and voice transcriptions:\n",
+	)
 	for _, item := range items {
 		formattedContext.WriteString(item.content + "\n")
 	}
@@ -105,9 +106,8 @@ func SummarizeTranscript(
 			{
 				Role: openai.ChatMessageRoleUser,
 				Content: fmt.Sprintf(
-					"Here's the context of recent conversations and transcriptions:\n\n%s\n\nNow, summarize the following transcript:\n\n%s",
-					kontext,
-					formattedTranscript.String(),
+					"CONTEXT: %s",
+					formattedContext.String(),
 				),
 			},
 		},

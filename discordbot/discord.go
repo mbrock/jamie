@@ -947,9 +947,7 @@ func (bot *Bot) handleSummaryCommand(
 	summaryChan, err := llm.SummarizeTranscript(
 		bot.db,
 		bot.openaiAPIKey,
-		duration,
 		promptName,
-		contextBuilder.String(),
 	)
 	if err != nil {
 		return fmt.Errorf("failed to start summary generation: %w", err)
