@@ -21,8 +21,6 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
-const silenceDuration = 3 * time.Second
-
 func (bot *Bot) saveTextMessage(
 	channelID, userID, messageID, content string,
 	isBot bool,
@@ -52,11 +50,11 @@ type Bot struct {
 	commands                 map[string]CommandHandler // command name -> CommandHandler function
 	elevenLabsAPIKey         string
 	voiceConnections         map[string]*discordsdk.VoiceConnection // channelID -> VoiceConnection
-	talkModeChannels         map[string]bool // channelID -> isTalkModeEnabled
+	talkModeChannels         map[string]bool                        // channelID -> isTalkModeEnabled
 	mu                       sync.Mutex
 	voicePacketChans         map[string]chan *voicePacket // channelID -> voice packet channel
-	audioBuffers             map[string]chan []byte // streamID -> channel of audio bytes
-	voiceStreamCache         map[string]string // cacheKey -> streamID
+	audioBuffers             map[string]chan []byte       // streamID -> channel of audio bytes
+	voiceStreamCache         map[string]string            // cacheKey -> streamID
 	voiceStreamCacheMu       sync.RWMutex
 	isSpeaking               bool
 	speakingMu               sync.Mutex
@@ -377,9 +375,12 @@ func (bot *Bot) joinVoiceChannel(guildID, channelID string) error {
 
 	bot.voiceConnections[channelID] = vc
 
-	packetChan := make(chan *voicePacket, 3*1000/20) // three seconds of 20ms frames
+	packetChan := make(
+		chan *voicePacket,
+		3*1000/20,
+	) // three seconds of 20ms frames
 	bot.voicePacketChans[channelID] = packetChan
-	go bot.processVoicePackets(channelID, packetChan)
+	go bot.processVoicePackets(packetChan)
 
 	go bot.handleVoiceConnection(vc, guildID, channelID)
 	return nil
@@ -420,9 +421,12 @@ func (bot *Bot) handleVoiceConnection(
 	bot.mu.Lock()
 	packetChan, ok := bot.voicePacketChans[channelID]
 	if !ok {
-		packetChan = make(chan *voicePacket, 3*1000/20) // three seconds of 20ms frames
+		packetChan = make(
+			chan *voicePacket,
+			3*1000/20,
+		) // three seconds of 20ms frames
 		bot.voicePacketChans[channelID] = packetChan
-		go bot.processVoicePackets(channelID, packetChan)
+		go bot.processVoicePackets(packetChan)
 	}
 	bot.mu.Unlock()
 
@@ -431,7 +435,11 @@ func (bot *Bot) handleVoiceConnection(
 		case packetChan <- &voicePacket{packet: packet, guildID: guildID, channelID: channelID}:
 			// Packet sent to channel successfully
 		default:
-			bot.log.Warn("voice packet channel full, dropping packet", "channelID", channelID)
+			bot.log.Warn(
+				"voice packet channel full, dropping packet",
+				"channelID",
+				channelID,
+			)
 		}
 	}
 }
@@ -1273,7 +1281,7 @@ func (bot *Bot) speakSummary(
 	return nil
 }
 
-func (bot *Bot) processVoicePackets(channelID string, packetChan <-chan *voicePacket) {
+func (bot *Bot) processVoicePackets(packetChan <-chan *voicePacket) {
 	for packet := range packetChan {
 		err := bot.handleVoicePacket(
 			packet.packet,
