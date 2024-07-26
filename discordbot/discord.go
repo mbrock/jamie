@@ -1253,11 +1253,11 @@ func (bot *Bot) TextToSpeech(text string) ([]byte, error) {
 
 	ttsReq := elevenlabs.TextToSpeechRequest{
 		Text:    text,
-		ModelID: "eleven_monolingual_v1",
+		ModelID: "eleven_turbo_v2_5",
 	}
 
 	bot.log.Debug("Sending request to ElevenLabs API")
-	audio, err := elevenlabs.TextToSpeech("pNInz6obpgDQGcFmaJgB", ttsReq)
+	audio, err := elevenlabs.TextToSpeech("2EiwWnXFnvU5JabPnv8n", ttsReq)
 	if err != nil {
 		bot.log.Error(
 			"Failed to generate speech from ElevenLabs",
