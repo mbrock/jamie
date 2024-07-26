@@ -29,4 +29,8 @@ clean:
 drop:
 	rm -f 001.db
 
-.PHONY: build run migrate clean drop
+# Install sqlc
+install-sqlc:
+	go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.20.0
+
+.PHONY: build run migrate clean drop install-sqlc
