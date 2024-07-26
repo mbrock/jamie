@@ -34,7 +34,7 @@ func (c *DeepgramClient) Start(
 	}
 	tOptions := &interfaces.LiveTranscriptionOptions{
 		Model:          "nova-2",
-		Language:       "en-US",
+		Language:       "sv-SE",
 		Punctuate:      true,
 		Encoding:       "opus",
 		Channels:       2,
@@ -49,8 +49,11 @@ func (c *DeepgramClient) Start(
 	session := &DeepgramSession{
 		transcriptions: make(chan chan Result),
 		logger:         c.logger,
-		audioBuffer:    make(chan []byte, 100), // Adjust buffer size as needed
-		isOpen:         false,
+		audioBuffer: make(
+			chan []byte,
+			100,
+		), // Adjust buffer size as needed
+		isOpen: false,
 	}
 
 	client, err := listen.NewWebSocket(

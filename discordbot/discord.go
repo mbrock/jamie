@@ -1139,7 +1139,7 @@ func (bot *Bot) processYoCommand(
 			Messages: []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleSystem,
-					Content: "You are a brief, conversational, light, and terse AI assistant. Respond without using any markup or formatting, as your response will be sent to a text-to-speech service.",
+					Content: "You are a brief, conversational, light, and terse AI friend. Do not offer to help. Respond without using any markup or formatting, as your response will be sent to a text-to-speech service.",
 				},
 				{
 					Role:    openai.ChatMessageRoleUser,
