@@ -94,7 +94,6 @@ func NewBot(
 	}
 
 	bot.registerCommands()
-	go bot.processVoicePackets() // Start the goroutine to process voice packets
 
 	dg, err := discordsdk.New("Bot " + discordToken)
 	if err != nil {
@@ -377,6 +376,10 @@ func (bot *Bot) joinVoiceChannel(guildID, channelID string) error {
 	bot.log.Info("joined voice channel", "channel", channelID)
 
 	bot.voiceConnections[channelID] = vc
+
+	packetChan := make(chan *voicePacket, 3*1000/20) // three seconds of 20ms frames
+	bot.voicePacketChans[channelID] = packetChan
+	go bot.processVoicePackets(channelID, packetChan)
 
 	go bot.handleVoiceConnection(vc, guildID, channelID)
 	return nil
