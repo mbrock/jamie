@@ -62,6 +62,8 @@ type Bot struct {
 	speakingMu               sync.Mutex
 	lastSpeechActivity       time.Time
 	lastSpeechActivityMu     sync.Mutex
+	lastSpeakTime            time.Time
+	lastSpeakTimeMu          sync.Mutex
 }
 
 type voicePacket struct {
@@ -1044,6 +1046,16 @@ func (bot *Bot) handleYoCommand(
 	}
 
 	prompt := strings.Join(args, " ")
+
+	// Check if enough time has passed since the last speak
+	bot.lastSpeakTimeMu.Lock()
+	if time.Since(bot.lastSpeakTime) < 20*time.Second {
+		bot.lastSpeakTimeMu.Unlock()
+		bot.log.Debug("Skipping yo command due to recent speech")
+		return nil
+	}
+	bot.lastSpeakTime = time.Now()
+	bot.lastSpeakTimeMu.Unlock()
 
 	// Start a goroutine to handle the command asynchronously
 	go func() {
