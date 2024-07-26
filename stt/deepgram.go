@@ -129,16 +129,6 @@ func (s *DeepgramSession) Message(mr *api.MessageResponse) error {
 		Confidence: mr.Channel.Alternatives[0].Confidence,
 	}
 
-	s.logger.Info(
-		"hear",
-		"txt",
-		transcript,
-		"start",
-		mr.Start,
-		"duration",
-		mr.Duration,
-	)
-
 	if s.currentTranscriptCh == nil {
 		s.currentTranscriptCh = make(chan Result)
 		s.transcriptions <- s.currentTranscriptCh
@@ -147,6 +137,15 @@ func (s *DeepgramSession) Message(mr *api.MessageResponse) error {
 	s.currentTranscriptCh <- result
 
 	if mr.IsFinal {
+		s.logger.Info(
+			"hear",
+			"txt",
+			transcript,
+			"start",
+			mr.Start,
+			"duration",
+			mr.Duration,
+		)
 		close(s.currentTranscriptCh)
 		s.currentTranscriptCh = nil
 	}
