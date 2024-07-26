@@ -271,17 +271,9 @@ func (bot *Bot) processSegment(
 			finalResult.Text,
 		)
 
-		// Wait for 3 seconds of silence before processing
-		time.Sleep(silenceDuration)
-
 		bot.lastSpeechActivityMu.Lock()
 		elapsed := time.Since(bot.lastSpeechActivity)
 		bot.lastSpeechActivityMu.Unlock()
-
-		if elapsed < silenceDuration {
-			bot.log.Debug("Skipping processing due to recent speech activity")
-			return
-		}
 
 		row, err := bot.db.GetChannelAndUsernameForStream(
 			context.Background(),
@@ -295,13 +287,6 @@ func (bot *Bot) processSegment(
 			)
 			return
 		}
-		bot.log.Debug(
-			"Retrieved channel and username",
-			"channel",
-			row.DiscordChannel,
-			"username",
-			row.Username,
-		)
 
 		// Check if the channel is in talk mode
 		if bot.talkModeChannels[row.DiscordChannel] {
@@ -309,7 +294,7 @@ func (bot *Bot) processSegment(
 			isSpeaking := bot.isSpeaking
 			bot.speakingMu.Unlock()
 
-			if !isSpeaking {
+			if !isSpeaking && elapsed > silenceDuration {
 				bot.speakingMu.Lock()
 				bot.isSpeaking = true
 				bot.speakingMu.Unlock()
@@ -325,25 +310,25 @@ func (bot *Bot) processSegment(
 				},
 					strings.Fields(finalResult.Text),
 				)
-			}
 
-			// Send the transcription to the Discord channel
-			_, err = bot.conn.ChannelMessageSend(
-				row.DiscordChannel,
-				fmt.Sprintf("> %s: %s", row.Username, finalResult.Text),
-			)
-			if err != nil {
-				bot.log.Error(
-					"Failed to send transcribed message in talk mode",
-					"error", err.Error(),
-					"channel", row.DiscordChannel,
+				// Send the transcription to the Discord channel
+				_, err = bot.conn.ChannelMessageSend(
+					row.DiscordChannel,
+					fmt.Sprintf("> %s: %s", row.Username, finalResult.Text),
 				)
+				if err != nil {
+					bot.log.Error(
+						"Failed to send transcribed message in talk mode",
+						"error", err.Error(),
+						"channel", row.DiscordChannel,
+					)
+				}
 			}
 		} else {
 			// Send the transcribed message as usual
 			_, err = bot.conn.ChannelMessageSend(
 				row.DiscordChannel,
-				fmt.Sprintf("%s: %s", row.Username, finalResult.Text),
+				fmt.Sprintf("> %s: %s", row.Username, finalResult.Text),
 			)
 
 			if err != nil {
