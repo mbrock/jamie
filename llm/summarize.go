@@ -17,6 +17,7 @@ func SummarizeTranscript(
 	apiKey string,
 	duration time.Duration,
 	promptName string,
+	context string,
 ) (<-chan string, error) {
 	// Get transcriptions for the specified duration
 	transcriptions, err := queries.GetTranscriptionsForDuration(
