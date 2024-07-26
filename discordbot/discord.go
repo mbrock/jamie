@@ -1347,7 +1347,7 @@ func (bot *Bot) TextToSpeech(text string) ([]byte, error) {
 	}
 
 	bot.log.Debug("Sending request to ElevenLabs API")
-	audio, err := elevenlabs.TextToSpeech("zcAOhNBS3c14rBihAFp1", ttsReq)
+	audio, err := elevenlabs.TextToSpeech("XB0fDUnXU5powFXDhCwa", ttsReq)
 	if err != nil {
 		bot.log.Error(
 			"Failed to generate speech from ElevenLabs",
