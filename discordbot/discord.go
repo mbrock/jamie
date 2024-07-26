@@ -20,14 +20,20 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
-func (bot *Bot) saveTextMessage(channelID, userID, content string, isBot bool) error {
-	return bot.db.SaveTextMessage(context.Background(), db.SaveTextMessageParams{
-		ID:             etc.Gensym(),
-		DiscordChannel: channelID,
-		DiscordUser:    userID,
-		Content:        content,
-		IsBot:          isBot,
-	})
+func (bot *Bot) saveTextMessage(
+	channelID, userID, content string,
+	isBot bool,
+) error {
+	return bot.db.SaveTextMessage(
+		context.Background(),
+		db.SaveTextMessageParams{
+			ID:             etc.Gensym(),
+			DiscordChannel: channelID,
+			DiscordUser:    userID,
+			Content:        content,
+			IsBot:          isBot,
+		},
+	)
 }
 
 type CommandHandler func(*discordsdk.Session, *discordsdk.MessageCreate, []string) error
@@ -120,15 +126,20 @@ func (bot *Bot) handleMessageCreate(
 	s *discordsdk.Session,
 	m *discordsdk.MessageCreate,
 ) {
-	// Save the received message
-	err := bot.saveTextMessage(m.ChannelID, m.Author.ID, m.Content, m.Author.Bot)
-	if err != nil {
-		bot.log.Error("Failed to save received message", "error", err.Error())
-	}
-
 	// Ignore messages from the bot itself
 	if m.Author.ID == s.State.User.ID {
 		return
+	}
+
+	// Save the received message
+	err := bot.saveTextMessage(
+		m.ChannelID,
+		m.Author.ID,
+		m.Content,
+		m.Author.Bot,
+	)
+	if err != nil {
+		bot.log.Error("Failed to save received message", "error", err.Error())
 	}
 
 	// Check if the message starts with the command prefix
@@ -145,7 +156,11 @@ func (bot *Bot) handleMessageCreate(
 	commandName := args[0]
 	handler, exists := bot.commands[commandName]
 	if !exists {
-		bot.sendAndSaveMessage(s, m.ChannelID, fmt.Sprintf("Unknown command: %s", commandName))
+		bot.sendAndSaveMessage(
+			s,
+			m.ChannelID,
+			fmt.Sprintf("Unknown command: %s", commandName),
+		)
 		return
 	}
 
@@ -158,11 +173,18 @@ func (bot *Bot) handleMessageCreate(
 			"error",
 			err.Error(),
 		)
-		bot.sendAndSaveMessage(s, m.ChannelID, fmt.Sprintf("Error executing command: %s", err.Error()))
+		bot.sendAndSaveMessage(
+			s,
+			m.ChannelID,
+			fmt.Sprintf("Error executing command: %s", err.Error()),
+		)
 	}
 }
 
-func (bot *Bot) sendAndSaveMessage(s *discordsdk.Session, channelID, content string) {
+func (bot *Bot) sendAndSaveMessage(
+	s *discordsdk.Session,
+	channelID, content string,
+) {
 	msg, err := s.ChannelMessageSend(channelID, content)
 	if err != nil {
 		bot.log.Error("Failed to send message", "error", err.Error())
@@ -658,7 +680,11 @@ func (bot *Bot) handleSummaryCommand(
 	}
 
 	// Send initial message
-	message, err := bot.sendAndSaveMessage(s, m.ChannelID, "Generating summary...")
+	message, err := bot.sendAndSaveMessage(
+		s,
+		m.ChannelID,
+		"Generating summary...",
+	)
 	if err != nil {
 		return fmt.Errorf("failed to send initial message: %w", err)
 	}
@@ -707,9 +733,18 @@ DONE:
 	}
 
 	// Save the final summary message
-	err = bot.saveTextMessage(m.ChannelID, s.State.User.ID, fullSummary.String(), true)
+	err = bot.saveTextMessage(
+		m.ChannelID,
+		s.State.User.ID,
+		fullSummary.String(),
+		true,
+	)
 	if err != nil {
-		bot.log.Error("Failed to save final summary message", "error", err.Error())
+		bot.log.Error(
+			"Failed to save final summary message",
+			"error",
+			err.Error(),
+		)
 	}
 
 	if speak {
@@ -745,7 +780,11 @@ func (bot *Bot) handlePromptCommand(
 		return fmt.Errorf("failed to set system prompt: %w", err)
 	}
 
-	bot.sendAndSaveMessage(s, m.ChannelID, fmt.Sprintf("System prompt '%s' has been set.", name))
+	bot.sendAndSaveMessage(
+		s,
+		m.ChannelID,
+		fmt.Sprintf("System prompt '%s' has been set.", name),
+	)
 
 	return nil
 }
@@ -761,7 +800,11 @@ func (bot *Bot) handleListPromptsCommand(
 	}
 
 	if len(prompts) == 0 {
-		bot.sendAndSaveMessage(s, m.ChannelID, "No system prompts have been set.")
+		bot.sendAndSaveMessage(
+			s,
+			m.ChannelID,
+			"No system prompts have been set.",
+		)
 		return nil
 	}
 
