@@ -536,10 +536,35 @@ func (bot *Bot) getOrCreateVoiceStream(
 	cacheKey := fmt.Sprintf("%d:%s:%s", packet.SSRC, guildID, channelID)
 
 	// Check cache first
-	if streamID, ok := bot.getVoiceStream(cacheKey); ok {
+	if streamID, ok := bot.getCachedVoiceStream(cacheKey); ok {
 		return streamID, nil
 	}
 
+	// Get non-cached voice stream
+	streamID, err := bot.getNonCachedVoiceStream(packet, guildID, channelID)
+	if err != nil {
+		return "", err
+	}
+
+	// Add to cache
+	bot.voiceStreamCacheMu.Lock()
+	bot.voiceStreamCache[cacheKey] = streamID
+	bot.voiceStreamCacheMu.Unlock()
+
+	return streamID, nil
+}
+
+func (bot *Bot) getCachedVoiceStream(cacheKey string) (string, bool) {
+	bot.voiceStreamCacheMu.RLock()
+	streamID, ok := bot.voiceStreamCache[cacheKey]
+	bot.voiceStreamCacheMu.RUnlock()
+	return streamID, ok
+}
+
+func (bot *Bot) getNonCachedVoiceStream(
+	packet *discordsdk.Packet,
+	guildID, channelID string,
+) (string, error) {
 	voiceState, err := bot.db.GetVoiceState(
 		context.Background(),
 		db.GetVoiceStateParams{
@@ -572,19 +597,7 @@ func (bot *Bot) getOrCreateVoiceStream(
 		return "", fmt.Errorf("failed to query for stream: %w", err)
 	}
 
-	// Add to cache
-	bot.voiceStreamCacheMu.Lock()
-	bot.voiceStreamCache[cacheKey] = streamID
-	bot.voiceStreamCacheMu.Unlock()
-
 	return streamID, nil
-}
-
-func (bot *Bot) getVoiceStream(cacheKey string) (string, bool) {
-	bot.voiceStreamCacheMu.RLock()
-	streamID, ok := bot.voiceStreamCache[cacheKey]
-	bot.voiceStreamCacheMu.RUnlock()
-	return streamID, ok
 }
 
 func (bot *Bot) createNewVoiceStream(
