@@ -877,58 +877,18 @@ func (bot *Bot) handleSummaryCommand(
 		true,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to send initial message: %w", err)
+		return fmt.Errorf("failed to save initial message: %w", err)
 	}
 
-	// Accumulate and update summary
-	var fullSummary strings.Builder
-	updateTicker := time.NewTicker(2 * time.Second)
-	defer updateTicker.Stop()
-
-	for {
-		select {
-		case chunk, ok := <-summaryChan:
-			if !ok {
-				// Channel closed, summary generation complete
-				goto DONE
-			}
-			fullSummary.WriteString(chunk)
-		case <-updateTicker.C:
-			if fullSummary.Len() > 0 {
-				_, err = s.ChannelMessageEdit(
-					m.ChannelID,
-					message.ID,
-					fullSummary.String(),
-				)
-				if err != nil {
-					bot.log.Error(
-						"failed to update summary message",
-						"error",
-						err,
-					)
-				}
-			}
-		}
-	}
-
-DONE:
-
-	// Send final summary
-	_, err = s.ChannelMessageEdit(
-		m.ChannelID,
-		message.ID,
-		fullSummary.String(),
-	)
-	if err != nil {
-		return fmt.Errorf("failed to send final summary message: %w", err)
-	}
+	// Update the message with the summary
+	fullSummary := bot.updateMessageWithSummary(s, m.ChannelID, message.ID, summaryChan)
 
 	// Save the final summary message
 	err = bot.saveTextMessage(
 		m.ChannelID,
 		s.State.User.ID,
 		message.ID,
-		fullSummary.String(),
+		fullSummary,
 		true,
 	)
 	if err != nil {
@@ -947,6 +907,38 @@ DONE:
 	}
 
 	return nil
+}
+
+func (bot *Bot) updateMessageWithSummary(s *discordsdk.Session, channelID string, messageID string, summaryChan <-chan string) string {
+	var fullSummary strings.Builder
+	updateTicker := time.NewTicker(2 * time.Second)
+	defer updateTicker.Stop()
+
+	for {
+		select {
+		case chunk, ok := <-summaryChan:
+			if !ok {
+				// Channel closed, summary generation complete
+				return fullSummary.String()
+			}
+			fullSummary.WriteString(chunk)
+		case <-updateTicker.C:
+			if fullSummary.Len() > 0 {
+				_, err := s.ChannelMessageEdit(
+					channelID,
+					messageID,
+					fullSummary.String(),
+				)
+				if err != nil {
+					bot.log.Error(
+						"failed to update summary message",
+						"error",
+						err,
+					)
+				}
+			}
+		}
+	}
 }
 
 func (bot *Bot) handlePromptCommand(
