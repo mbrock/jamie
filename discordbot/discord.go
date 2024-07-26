@@ -289,16 +289,24 @@ func (bot *Bot) processSegment(
 
 		// Check if the channel is in talk mode
 		if bot.talkModeChannels[row.DiscordChannel] {
-			// Process the speech recognition result as a yo command
-			bot.handleYoCommand(bot.conn, &discordsdk.MessageCreate{
-				Message: &discordsdk.Message{
-					ChannelID: row.DiscordChannel,
-					Author: &discordsdk.User{
-						Username: row.Username,
+			bot.speakingMu.Lock()
+			isSpeaking := false
+			bot.speakingMu.Unlock()
+
+			if !isSpeaking {
+				// Process the speech recognition result as a yo command
+				bot.handleYoCommand(bot.conn, &discordsdk.MessageCreate{
+					Message: &discordsdk.Message{
+						ChannelID: row.DiscordChannel,
+						Author: &discordsdk.User{
+							Username: row.Username,
+						},
+						Content: finalResult.Text,
 					},
-					Content: finalResult.Text,
 				},
-			}, strings.Fields(finalResult.Text))
+					strings.Fields(finalResult.Text),
+				)
+			}
 
 			// Send the transcription to the Discord channel
 			_, err = bot.conn.ChannelMessageSend(
@@ -1045,7 +1053,7 @@ func (bot *Bot) handleYoCommand(
 }
 
 func (bot *Bot) processYoCommand(
-	s *discordsdk.Session,
+	_ *discordsdk.Session,
 	m *discordsdk.MessageCreate,
 	prompt string,
 ) (string, error) {
