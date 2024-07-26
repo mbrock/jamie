@@ -49,6 +49,7 @@ type Bot struct {
 	commands                 map[string]CommandHandler
 	elevenLabsAPIKey         string
 	voiceConnections         map[string]*discordsdk.VoiceConnection
+	talkModeChannels         map[string]bool
 }
 
 func NewBot(
@@ -70,6 +71,7 @@ func NewBot(
 		elevenLabsAPIKey: elevenLabsAPIKey,
 		commands:         make(map[string]CommandHandler),
 		voiceConnections: make(map[string]*discordsdk.VoiceConnection),
+		talkModeChannels: make(map[string]bool),
 	}
 
 	bot.registerCommands()
@@ -144,6 +146,19 @@ func (bot *Bot) handleMessageCreate(
 		bot.log.Error("Failed to save received message", "error", err.Error())
 	}
 
+	// Check if the channel is in talk mode
+	if bot.talkModeChannels[m.ChannelID] {
+		if strings.HasPrefix(m.Content, "!yo") {
+			// Turn off talk mode
+			delete(bot.talkModeChannels, m.ChannelID)
+			bot.sendAndSaveMessage(s, m.ChannelID, "Talk mode deactivated.")
+		} else {
+			// Process the message as a yo command
+			bot.handleYoCommand(s, m, strings.Fields(m.Content))
+		}
+		return
+	}
+
 	// Check if the message starts with the command prefix
 	if !strings.HasPrefix(m.Content, "!") {
 		return
@@ -156,6 +171,13 @@ func (bot *Bot) handleMessageCreate(
 	}
 
 	commandName := args[0]
+	if commandName == "yo" {
+		// Turn on talk mode
+		bot.talkModeChannels[m.ChannelID] = true
+		bot.sendAndSaveMessage(s, m.ChannelID, "Talk mode activated. Type !yo again to deactivate.")
+		return
+	}
+
 	handler, exists := bot.commands[commandName]
 	if !exists {
 		bot.sendAndSaveMessage(
