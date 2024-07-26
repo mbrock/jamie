@@ -787,6 +787,10 @@ func (bot *Bot) handleYoCommand(
 			MaxTokens: 100,
 			Messages: []openai.ChatCompletionMessage{
 				{
+					Role:    openai.ChatMessageRoleSystem,
+					Content: "You are a brief, conversational, light, and terse AI assistant. Respond without using any markup or formatting, as your response will be sent to a text-to-speech service.",
+				},
+				{
 					Role:    openai.ChatMessageRoleUser,
 					Content: prompt,
 				},
