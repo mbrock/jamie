@@ -97,8 +97,7 @@ func SummarizeTranscript(
 	}
 
 	req := openai.ChatCompletionRequest{
-		Model:     openai.GPT4o,
-		MaxTokens: 200,
+		Model: openai.GPT4o,
 		Messages: []openai.ChatCompletionMessage{
 			{
 				Role:    openai.ChatMessageRoleSystem,
@@ -112,7 +111,7 @@ func SummarizeTranscript(
 				),
 			},
 		},
-		MaxTokens: 500,
+		MaxTokens: 200,
 		Stream:    true,
 	}
 
