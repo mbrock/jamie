@@ -1,12 +1,10 @@
 package discordbot
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
-	"io"
 	"jamie/db"
 	"jamie/etc"
 	"jamie/llm"
@@ -19,8 +17,6 @@ import (
 	discordsdk "github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
 	"github.com/haguro/elevenlabs-go"
-	"github.com/tosone/minimp3"
-	"layeh.com/gopus"
 )
 
 type CommandHandler func(*discordsdk.Session, *discordsdk.MessageCreate, []string) error
@@ -197,14 +193,14 @@ func (bot *Bot) handleVoiceConnection(
 	defer ticker.Stop()
 
 	// Generate speech
-	mp3Data, err := bot.textToSpeech("hello")
+	mp3Data, err := bot.TextToSpeech("hello")
 	if err != nil {
 		bot.log.Error("Failed to generate speech", "error", err)
 		return
 	}
 
 	// Convert to Opus packets
-	opusPackets, err := convertToOpus(mp3Data)
+	opusPackets, err := ogg.ConvertToOpus(mp3Data)
 	if err != nil {
 		bot.log.Error("Failed to convert to Opus", "error", err)
 		return
@@ -740,7 +736,7 @@ func (bot *Bot) GenerateOggOpusBlob(
 	)
 }
 
-func (bot *Bot) textToSpeech(text string) ([]byte, error) {
+func (bot *Bot) TextToSpeech(text string) ([]byte, error) {
 	elevenlabs.SetAPIKey(bot.elevenLabsAPIKey)
 
 	ttsReq := elevenlabs.TextToSpeechRequest{
@@ -754,41 +750,4 @@ func (bot *Bot) textToSpeech(text string) ([]byte, error) {
 	}
 
 	return audio, nil
-}
-
-func convertToOpus(mp3Data []byte) ([][]byte, error) {
-	encoder, err := gopus.NewEncoder(48000, 2, gopus.Audio)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Opus encoder: %w", err)
-	}
-
-	decoder, err := minimp3.NewDecoder(bytes.NewReader(mp3Data))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create MP3 decoder: %w", err)
-	}
-
-	var opusPackets [][]byte
-	for {
-		var pcm = make([]byte, 1024)
-		_, err := decoder.Read(pcm)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			break
-		}
-
-		pcmInt16 := make([]int16, len(pcm)/2)
-		for i := 0; i < len(pcm); i += 2 {
-			pcmInt16[i/2] = int16(pcm[i]) | int16(pcm[i+1])<<8
-		}
-
-		opusData, err := encoder.Encode(pcmInt16, 960, 32000)
-		if err != nil {
-			return nil, fmt.Errorf("failed to encode Opus: %w", err)
-		}
-		opusPackets = append(opusPackets, opusData)
-	}
-
-	return opusPackets, nil
 }
