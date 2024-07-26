@@ -155,9 +155,9 @@ func (bot *Bot) joinVoiceChannel(guildID, channelID string) error {
 	}
 
 	bot.log.Info("joined voice channel", "channel", channelID)
-	
+
 	// Generate and say greeting
-	greeting := "Hello, I've joined the channel!"
+	greeting := "Hello, I've joined the channel! I can talk now, kind of."
 	err = bot.sayInVoiceChannel(vc, greeting)
 	if err != nil {
 		bot.log.Error("failed to say greeting", "error", err.Error())
@@ -167,7 +167,10 @@ func (bot *Bot) joinVoiceChannel(guildID, channelID string) error {
 	return nil
 }
 
-func (bot *Bot) sayInVoiceChannel(vc *discordsdk.VoiceConnection, text string) error {
+func (bot *Bot) sayInVoiceChannel(
+	vc *discordsdk.VoiceConnection,
+	text string,
+) error {
 	// Generate speech
 	mp3Data, err := bot.TextToSpeech(text)
 	if err != nil {
