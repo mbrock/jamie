@@ -12,6 +12,7 @@ import (
 	"jamie/stt"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	discordsdk "github.com/bwmarrin/discordgo"
@@ -50,6 +51,7 @@ type Bot struct {
 	elevenLabsAPIKey         string
 	voiceConnections         map[string]*discordsdk.VoiceConnection
 	talkModeChannels         map[string]bool
+	mu                       sync.Mutex
 }
 
 func NewBot(
@@ -232,6 +234,9 @@ func (bot *Bot) sendAndSaveMessage(
 }
 
 func (bot *Bot) joinVoiceChannel(guildID, channelID string) error {
+	bot.mu.Lock()
+	defer bot.mu.Unlock()
+
 	vc, err := bot.conn.ChannelVoiceJoin(guildID, channelID, false, false)
 	if err != nil {
 		return fmt.Errorf("failed to join voice channel: %w", err)
@@ -239,12 +244,7 @@ func (bot *Bot) joinVoiceChannel(guildID, channelID string) error {
 
 	bot.log.Info("joined voice channel", "channel", channelID)
 
-	// // Generate and say greeting
-	// greeting := "Hello, I've joined the channel! I can talk now, kind of."
-	// err = bot.sayInVoiceChannel(vc, greeting)
-	// if err != nil {
-	// 	bot.log.Error("failed to say greeting", "error", err.Error())
-	// }
+	bot.voiceConnections[channelID] = vc
 
 	go bot.handleVoiceConnection(vc, guildID, channelID)
 	return nil
@@ -642,6 +642,9 @@ func (bot *Bot) getUsernameFromID(userID string) string {
 func (bot *Bot) getSpeechRecognitionSession(
 	streamID string,
 ) (stt.LiveTranscriptionSession, error) {
+	bot.mu.Lock()
+	defer bot.mu.Unlock()
+
 	bot.log.Debug("Getting speech recognition session", "streamID", streamID)
 	session, exists := bot.sessions[streamID]
 	if !exists {
@@ -1168,15 +1171,19 @@ func (bot *Bot) speakInChannel(
 		return fmt.Errorf("no active voice channel found")
 	}
 
+	bot.mu.Lock()
 	// Join the voice channel if not already connected
 	vc, ok := bot.voiceConnections[voiceChannelID]
 	if !ok {
+		var err error
 		vc, err = s.ChannelVoiceJoin(guild.ID, voiceChannelID, false, true)
 		if err != nil {
+			bot.mu.Unlock()
 			return fmt.Errorf("failed to join voice channel: %w", err)
 		}
 		bot.voiceConnections[voiceChannelID] = vc
 	}
+	bot.mu.Unlock()
 
 	// Generate speech
 	speechData, err := bot.TextToSpeech(text)
