@@ -27,9 +27,7 @@ func TimeToJulianDay(t time.Time) float64 {
 
 	// Convert Unix timestamp to Julian day
 	unixTime := float64(t.Unix()) + float64(t.Nanosecond())/1e9
-	return unixTime/86400.0 + julianEpoch
-		int64((unixTime-float64(int64(unixTime)))*1e9),
-	)
+	julianDay := unixTime/86400.0 + julianEpoch
 
 	// Check if the date is within the allowed range
 	if t.Year() < 2000 || t.Year() > 2100 {
@@ -39,5 +37,5 @@ func TimeToJulianDay(t time.Time) float64 {
 		))
 	}
 
-	return t
+	return julianDay
 }
