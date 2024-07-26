@@ -21,17 +21,18 @@ import (
 )
 
 func (bot *Bot) saveTextMessage(
-	channelID, userID, content string,
+	channelID, userID, messageID, content string,
 	isBot bool,
 ) error {
 	return bot.db.SaveTextMessage(
 		context.Background(),
 		db.SaveTextMessageParams{
-			ID:             etc.Gensym(),
-			DiscordChannel: channelID,
-			DiscordUser:    userID,
-			Content:        content,
-			IsBot:          isBot,
+			ID:               etc.Gensym(),
+			DiscordChannel:   channelID,
+			DiscordUser:      userID,
+			DiscordMessageID: messageID,
+			Content:          content,
+			IsBot:            isBot,
 		},
 	)
 }
@@ -135,6 +136,7 @@ func (bot *Bot) handleMessageCreate(
 	err := bot.saveTextMessage(
 		m.ChannelID,
 		m.Author.ID,
+		m.ID,
 		m.Content,
 		m.Author.Bot,
 	)
@@ -191,7 +193,7 @@ func (bot *Bot) sendAndSaveMessage(
 		return
 	}
 
-	err = bot.saveTextMessage(channelID, s.State.User.ID, content, true)
+	err = bot.saveTextMessage(channelID, s.State.User.ID, msg.ID, content, true)
 	if err != nil {
 		bot.log.Error("Failed to save sent message", "error", err.Error())
 	}

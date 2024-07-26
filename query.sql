@@ -176,8 +176,8 @@ WHERE stream = ? AND sample_idx BETWEEN ? AND ?
 ORDER BY sample_idx ASC;
 
 -- name: SaveTextMessage :exec
-INSERT INTO text_messages (id, discord_channel, discord_user, content, is_bot)
-VALUES (?, ?, ?, ?, ?);
+INSERT INTO text_messages (id, discord_channel, discord_user, discord_message_id, content, is_bot)
+VALUES (?, ?, ?, ?, ?, ?);
 
 -- name: GetRecentTextMessages :many
 SELECT id, discord_channel, discord_user, content, is_bot, created_at
