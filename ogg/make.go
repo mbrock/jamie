@@ -1,12 +1,11 @@
 package ogg
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
+	"os"
+	"os/exec"
 
-	"github.com/tosone/minimp3"
 	"layeh.com/gopus"
 
 	"jamie/db"
@@ -78,39 +77,61 @@ func GenerateOggOpusBlob(
 }
 
 func ConvertToOpus(mp3Data []byte) ([][]byte, error) {
-	// Create an Opus encoder with 48kHz sample rate, 2 channels (stereo), and optimized for audio
+	// Create a temporary file for the input MP3
+	inputFile, err := os.CreateTemp("", "input*.mp3")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temporary input file: %w", err)
+	}
+	defer os.Remove(inputFile.Name())
+	defer inputFile.Close()
+
+	// Write MP3 data to the temporary file
+	if _, err := inputFile.Write(mp3Data); err != nil {
+		return nil, fmt.Errorf("failed to write MP3 data to temporary file: %w", err)
+	}
+
+	// Create a temporary file for the output PCM
+	outputFile, err := os.CreateTemp("", "output*.pcm")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temporary output file: %w", err)
+	}
+	defer os.Remove(outputFile.Name())
+	defer outputFile.Close()
+
+	// Use ffmpeg to convert MP3 to 48kHz stereo PCM
+	cmd := exec.Command("ffmpeg", "-i", inputFile.Name(), "-ar", "48000", "-ac", "2", "-f", "s16le", outputFile.Name())
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("failed to execute ffmpeg: %w", err)
+	}
+
+	// Read the converted PCM data
+	pcmData, err := os.ReadFile(outputFile.Name())
+	if err != nil {
+		return nil, fmt.Errorf("failed to read converted PCM data: %w", err)
+	}
+
+	// Create an Opus encoder
 	encoder, err := gopus.NewEncoder(48000, 2, gopus.Audio)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Opus encoder: %w", err)
 	}
 
-	// Create an MP3 decoder from the input data
-	decoder, err := minimp3.NewDecoder(bytes.NewReader(mp3Data))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create MP3 decoder: %w", err)
-	}
-
 	var opusPackets [][]byte
-	// Buffer to hold exactly 960 mono samples (1920 bytes for 16-bit PCM)
-	pcmBuffer := make([]byte, 960*2)
-	for {
-		// Read 960 stereo samples (1920 bytes) from the MP3 decoder
-		_, err := io.ReadFull(decoder, pcmBuffer)
-		if err == io.EOF || err == io.ErrUnexpectedEOF {
-			break // End of MP3 data
+	frameSize := 960 * 2 * 2 // 960 samples * 2 channels * 2 bytes per sample
+	for i := 0; i < len(pcmData); i += frameSize {
+		end := i + frameSize
+		if end > len(pcmData) {
+			end = len(pcmData)
 		}
-		if err != nil {
-			return nil, fmt.Errorf("failed to read from MP3 decoder: %w", err)
+		frame := pcmData[i:end]
+
+		// Convert byte PCM to int16 PCM
+		pcmInt16 := make([]int16, len(frame)/2)
+		for j := 0; j < len(frame); j += 2 {
+			pcmInt16[j/2] = int16(frame[j]) | int16(frame[j+1])<<8
 		}
 
-		// Convert byte PCM to int16 PCM and duplicate for stereo
-		pcmInt16 := make([]int16, 960)
-		for i := 0; i < 960; i += 1 {
-			sample := int16(pcmBuffer[i*2]) | int16(pcmBuffer[i*2+1])<<8
-			pcmInt16[i] = sample
-		}
-
-		// Encode the 960 stereo samples to Opus
+		// Encode the frame to Opus
 		opusData, err := encoder.Encode(pcmInt16, 960, 32000)
 		if err != nil {
 			return nil, fmt.Errorf("failed to encode Opus: %w", err)
