@@ -849,12 +849,11 @@ func (bot *Bot) handleYoCommand(
 	prompt := strings.Join(args, " ")
 
 	// Fetch today's text messages
-	messages, err := bot.db.GetTextMessagesInTimeRange(
+	messages, err := bot.db.GetRecentTextMessages(
 		context.Background(),
-		db.GetTextMessagesInTimeRangeParams{
+		db.GetRecentTextMessagesParams{
 			DiscordChannel: m.ChannelID,
-			StartTime:      etc.TimeToJulianDay(time.Now().Truncate(24 * time.Hour)),
-			EndTime:        etc.TimeToJulianDay(time.Now()),
+			Limit:          100,
 		},
 	)
 	if err != nil {
