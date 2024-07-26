@@ -288,6 +288,21 @@ func (bot *Bot) processSegment(
 					Content: finalResult.Text,
 				},
 			}, strings.Fields(finalResult.Text))
+
+			// Send the transcription to the Discord channel
+			_, err = bot.conn.ChannelMessageSend(
+				row.DiscordChannel,
+				fmt.Sprintf("%s: %s", row.Username, finalResult.Text),
+			)
+			if err != nil {
+				bot.log.Error(
+					"Failed to send transcribed message in talk mode",
+					"error", err.Error(),
+					"channel", row.DiscordChannel,
+				)
+			} else {
+				bot.log.Info("Sent transcribed message in talk mode", "channel", row.DiscordChannel)
+			}
 		} else {
 			// Send the transcribed message as usual
 			_, err = bot.conn.ChannelMessageSend(
