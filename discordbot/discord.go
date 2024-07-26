@@ -333,7 +333,7 @@ func (bot *Bot) handleVoiceConnection(
 				return
 			}
 
-			err := bot.processVoicePacket(packet, guildID, channelID)
+			err := bot.waitForVoiceStateAndProcess(packet, guildID, channelID)
 			if err != nil {
 				bot.log.Error(
 					"failed to process voice packet",
@@ -343,6 +343,33 @@ func (bot *Bot) handleVoiceConnection(
 			}
 		}
 	}
+}
+
+func (bot *Bot) waitForVoiceStateAndProcess(packet *discordsdk.Packet, guildID, channelID string) error {
+	maxRetries := 10
+	retryInterval := 100 * time.Millisecond
+
+	for i := 0; i < maxRetries; i++ {
+		_, err := bot.db.GetVoiceState(context.Background(), db.GetVoiceStateParams{
+			Ssrc:   int64(packet.SSRC),
+			UserID: "",
+		})
+
+		if err == nil {
+			// Voice state found, process the packet
+			return bot.processVoicePacket(packet, guildID, channelID)
+		}
+
+		if err != sql.ErrNoRows {
+			// Unexpected error
+			return fmt.Errorf("error checking voice state: %w", err)
+		}
+
+		// Voice state not found, wait and retry
+		time.Sleep(retryInterval)
+	}
+
+	return fmt.Errorf("voice state not found after %d retries", maxRetries)
 }
 
 func (bot *Bot) handleVoiceSpeakingUpdate(
