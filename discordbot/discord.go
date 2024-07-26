@@ -842,6 +842,33 @@ func (bot *Bot) handleYoCommand(
 
 	prompt := strings.Join(args, " ")
 
+	// Fetch today's text messages
+	today := time.Now().Format("2006-01-02")
+	messages, err := bot.db.GetTextMessagesInTimeRange(
+		context.Background(),
+		db.GetTextMessagesInTimeRangeParams{
+			DiscordChannel: m.ChannelID,
+			StartTime:      etc.TimeToJulianDay(time.Now().Truncate(24 * time.Hour)),
+			EndTime:        etc.TimeToJulianDay(time.Now()),
+		},
+	)
+	if err != nil {
+		return fmt.Errorf("failed to fetch today's messages: %w", err)
+	}
+
+	// Create context from today's messages
+	var contextBuilder strings.Builder
+	contextBuilder.WriteString("Today's conversation:\n")
+	for _, msg := range messages {
+		sender := "User"
+		if msg.IsBot {
+			sender = "Bot"
+		}
+		contextBuilder.WriteString(fmt.Sprintf("%s: %s\n", sender, msg.Content))
+	}
+	contextBuilder.WriteString("\nBased on the conversation above, please respond to the following prompt:\n")
+	contextBuilder.WriteString(prompt)
+
 	// Create OpenAI client
 	client := openai.NewClient(bot.openaiAPIKey)
 	ctx := context.Background()
@@ -859,7 +886,7 @@ func (bot *Bot) handleYoCommand(
 				},
 				{
 					Role:    openai.ChatMessageRoleUser,
-					Content: prompt,
+					Content: contextBuilder.String(),
 				},
 			},
 		},

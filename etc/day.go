@@ -15,6 +15,19 @@ func JulianDayToTime(f float64) time.Time {
 	// Create a time.Time object from the Unix timestamp
 	t := time.Unix(
 		int64(unixTime),
+		int64((unixTime-math.Floor(unixTime))*1e9),
+	)
+
+	return t
+}
+
+func TimeToJulianDay(t time.Time) float64 {
+	// Julian date starts at noon on January 1, 4713 BC
+	const julianEpoch = 2440587.5 // Julian date for Unix epoch (January 1, 1970)
+
+	// Convert Unix timestamp to Julian day
+	unixTime := float64(t.Unix()) + float64(t.Nanosecond())/1e9
+	return unixTime/86400.0 + julianEpoch
 		int64((unixTime-float64(int64(unixTime)))*1e9),
 	)
 
