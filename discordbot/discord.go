@@ -56,6 +56,8 @@ type Bot struct {
 	audioBuffers             map[string]chan []byte
 	voiceStreamCache         map[string]string
 	voiceStreamCacheMu       sync.RWMutex
+	isSpeaking               bool
+	speakingMu               sync.Mutex
 }
 
 type voicePacket struct {
@@ -165,6 +167,15 @@ func (bot *Bot) handleMessageCreate(
 	if err != nil {
 		bot.log.Error("Failed to save received message", "error", err.Error())
 	}
+
+	// Check if the bot is currently speaking
+	bot.speakingMu.Lock()
+	if bot.isSpeaking {
+		bot.speakingMu.Unlock()
+		bot.log.Debug("Ignoring command while speaking")
+		return
+	}
+	bot.speakingMu.Unlock()
 
 	// Check if the channel is in talk mode
 	if bot.talkModeChannels[m.ChannelID] {
@@ -1138,6 +1149,16 @@ func (bot *Bot) speakInChannel(
 	channelID string,
 	text string,
 ) error {
+	// Set the speaking flag
+	bot.speakingMu.Lock()
+	bot.isSpeaking = true
+	bot.speakingMu.Unlock()
+	defer func() {
+		bot.speakingMu.Lock()
+		bot.isSpeaking = false
+		bot.speakingMu.Unlock()
+	}()
+
 	// Find the voice channel associated with the text channel
 	channel, err := s.Channel(channelID)
 	if err != nil {
