@@ -130,7 +130,7 @@ func (bot *Bot) registerCommands() {
 	bot.commands["summary"] = bot.handleSummaryCommand
 	bot.commands["prompt"] = bot.handlePromptCommand
 	bot.commands["listprompts"] = bot.handleListPromptsCommand
-	bot.commands["yo"] = bot.handleYoCommand
+	bot.commands["talk"] = bot.handleTalkCommand
 }
 
 func (bot *Bot) Close() error {
@@ -184,13 +184,13 @@ func (bot *Bot) handleMessageCreate(
 
 	// Check if the channel is in talk mode
 	if bot.talkModeChannels[m.ChannelID] {
-		if strings.HasPrefix(m.Content, "!yo") {
+		if strings.HasPrefix(m.Content, "!talk") {
 			// Turn off talk mode
 			delete(bot.talkModeChannels, m.ChannelID)
 			bot.sendAndSaveMessage(s, m.ChannelID, "Talk mode deactivated.")
 		} else {
-			// Process the message as a yo command
-			bot.handleYoCommand(s, m, strings.Fields(m.Content))
+			// Process the message as a talk command
+			bot.handleTalkCommand(s, m, strings.Fields(m.Content))
 		}
 		return
 	}
@@ -207,13 +207,13 @@ func (bot *Bot) handleMessageCreate(
 	}
 
 	commandName := args[0]
-	if commandName == "yo" {
+	if commandName == "talk" {
 		// Turn on talk mode
 		bot.talkModeChannels[m.ChannelID] = true
 		bot.sendAndSaveMessage(
 			s,
 			m.ChannelID,
-			"Talk mode activated. Type !yo again to deactivate.",
+			"Talk mode activated. Type !talk again to deactivate.",
 		)
 		return
 	}
@@ -956,22 +956,22 @@ func (bot *Bot) handleListPromptsCommand(
 	return nil
 }
 
-func (bot *Bot) handleYoCommand(
+func (bot *Bot) handleTalkCommand(
 	s *discordsdk.Session,
 	m *discordsdk.MessageCreate,
 	args []string,
 ) error {
 	if len(args) == 0 {
-		return fmt.Errorf("usage: !yo <prompt>")
+		return fmt.Errorf("usage: !talk <prompt>")
 	}
 
 	prompt := strings.Join(args, " ")
 
 	// Start a goroutine to handle the command asynchronously
 	go func() {
-		response, err := bot.processYoCommand(s, m, prompt)
+		response, err := bot.processTalkCommand(s, m, prompt)
 		if err != nil {
-			bot.log.Error("Failed to process yo command", "error", err)
+			bot.log.Error("Failed to process talk command", "error", err)
 			bot.sendAndSaveMessage(
 				s,
 				m.ChannelID,
@@ -998,7 +998,7 @@ func (bot *Bot) handleYoCommand(
 	return nil
 }
 
-func (bot *Bot) processYoCommand(
+func (bot *Bot) processTalkCommand(
 	_ *discordsdk.Session,
 	m *discordsdk.MessageCreate,
 	prompt string,
