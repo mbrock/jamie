@@ -424,10 +424,14 @@ func (bot *Bot) getOrCreateVoiceStream(
 	packet *discordsdk.Packet,
 	guildID, channelID string,
 ) (string, error) {
-	discordID := fmt.Sprintf(
-		"%d",
-		packet.SSRC,
-	) // Using SSRC as a unique identifier for the Discord user
+	voiceState, err := bot.db.GetVoiceState(context.Background(), int64(packet.SSRC), "")
+	if err != nil {
+		return "", fmt.Errorf("failed to get voice state: %w", err)
+	}
+
+	discordID := voiceState.UserID
+	username := bot.getUsernameFromID(discordID)
+
 	streamID, err := bot.db.GetStreamForDiscordChannelAndSpeaker(
 		context.Background(),
 		db.GetStreamForDiscordChannelAndSpeakerParams{
@@ -440,7 +444,6 @@ func (bot *Bot) getOrCreateVoiceStream(
 	if errors.Is(err, sql.ErrNoRows) {
 		streamID = etc.Gensym()
 		speakerID := etc.Gensym()
-		emoji := txt.RandomAvatar()
 		err = bot.db.CreateStream(
 			context.Background(),
 			db.CreateStreamParams{
@@ -474,7 +477,7 @@ func (bot *Bot) getOrCreateVoiceStream(
 			db.CreateSpeakerParams{
 				ID:     speakerID,
 				Stream: streamID,
-				Emoji:  emoji,
+				Emoji:  "", // We're not using emoji anymore
 			},
 		)
 
@@ -491,6 +494,8 @@ func (bot *Bot) getOrCreateVoiceStream(
 				ID:        etc.Gensym(),
 				Speaker:   speakerID,
 				DiscordID: discordID,
+				SSRC:      int64(packet.SSRC),
+				Username:  username,
 			},
 		)
 
@@ -506,12 +511,22 @@ func (bot *Bot) getOrCreateVoiceStream(
 			"streamID", streamID,
 			"speakerID", speakerID,
 			"discordID", discordID,
+			"username", username,
 		)
 	} else if err != nil {
 		return "", fmt.Errorf("failed to query for stream: %w", err)
 	}
 
 	return streamID, nil
+}
+
+func (bot *Bot) getUsernameFromID(userID string) string {
+	user, err := bot.conn.User(userID)
+	if err != nil {
+		bot.log.Error("Failed to get username", "userID", userID, "error", err)
+		return "Unknown User"
+	}
+	return user.Username
 }
 
 func (bot *Bot) getSpeechRecognitionSession(
@@ -560,18 +575,13 @@ func (bot *Bot) processSegment(
 	}
 
 	if finalResult.Text != "" {
-		if strings.EqualFold(finalResult.Text, "Change my identity.") {
-			bot.handleAvatarChangeRequest(streamID)
-			return
-		}
-
-		row, err := bot.db.GetChannelAndEmojiForStream(
+		row, err := bot.db.GetChannelAndUsernameForStream(
 			context.Background(),
 			streamID,
 		)
 		if err != nil {
 			bot.log.Error(
-				"failed to get channel and emoji",
+				"failed to get channel and username",
 				"error",
 				err.Error(),
 			)
@@ -580,7 +590,7 @@ func (bot *Bot) processSegment(
 
 		_, err = bot.conn.ChannelMessageSend(
 			row.DiscordChannel,
-			fmt.Sprintf("%s %s", row.Emoji, finalResult.Text),
+			fmt.Sprintf("%s: %s", row.Username, finalResult.Text),
 		)
 
 		if err != nil {

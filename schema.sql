@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS discord_speakers (
     id TEXT PRIMARY KEY,
     speaker TEXT NOT NULL,
     discord_id TEXT NOT NULL,
+    ssrc INTEGER NOT NULL,
+    username TEXT NOT NULL,
     created_at REAL NOT NULL DEFAULT (julianday('now')),
     FOREIGN KEY (speaker) REFERENCES speakers(id)
 );

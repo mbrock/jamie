@@ -11,8 +11,8 @@ INSERT INTO speakers (id, stream, emoji)
 VALUES (?, ?, ?);
 
 -- name: CreateDiscordSpeaker :exec
-INSERT INTO discord_speakers (id, speaker, discord_id)
-VALUES (?, ?, ?);
+INSERT INTO discord_speakers (id, speaker, discord_id, ssrc, username)
+VALUES (?, ?, ?, ?, ?);
 
 -- name: CreateDiscordChannelStream :exec
 INSERT INTO discord_channel_streams (id, stream, discord_guild, discord_channel)
@@ -29,38 +29,39 @@ VALUES (?, ?, ?, ?, ?, ?);
 -- name: GetRecentTranscriptions :many
 WITH ranked_recognitions AS (
     SELECT 
-        s.emoji,
+        ds.username,
         r.text,
         r.created_at,
         LAG(r.created_at, 1) OVER (ORDER BY r.created_at) AS prev_created_at,
-        LAG(s.emoji, 1) OVER (ORDER BY r.created_at) AS prev_emoji,
+        LAG(ds.username, 1) OVER (ORDER BY r.created_at) AS prev_username,
         ROW_NUMBER() OVER (ORDER BY r.created_at DESC) AS row_num
     FROM recognitions r
     JOIN speakers s ON r.stream = s.stream
+    JOIN discord_speakers ds ON s.id = ds.speaker
 ),
 grouped_recognitions AS (
     SELECT 
-        emoji,
+        username,
         text,
         created_at,
         CASE 
             WHEN prev_created_at IS NULL OR 
                  (JULIANDAY(created_at) - JULIANDAY(prev_created_at)) * 24 * 60 > 3 OR
-                 emoji != prev_emoji
+                 username != prev_username
             THEN row_num 
             ELSE NULL 
         END AS group_start,
         MAX(CASE 
             WHEN prev_created_at IS NULL OR 
                  (JULIANDAY(created_at) - JULIANDAY(prev_created_at)) * 24 * 60 > 3 OR
-                 emoji != prev_emoji
+                 username != prev_username
             THEN row_num 
             ELSE NULL 
         END) OVER (ORDER BY created_at ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS group_id
     FROM ranked_recognitions
 )
 SELECT 
-    emoji,
+    username,
     GROUP_CONCAT(text, ' ') AS text,
     MIN(created_at) AS created_at
 FROM grouped_recognitions AS gr
@@ -123,11 +124,12 @@ VALUES (?, ?);
 -- name: GetSpeechRecognitionSession :one
 SELECT session_data FROM speech_recognition_sessions WHERE stream = ?;
 
--- name: GetChannelAndEmojiForStream :one
-SELECT dcs.discord_channel, s.emoji 
+-- name: GetChannelAndUsernameForStream :one
+SELECT dcs.discord_channel, ds.username
 FROM discord_channel_streams dcs
 JOIN streams st ON dcs.stream = st.id
 JOIN speakers s ON st.id = s.stream
+JOIN discord_speakers ds ON s.id = ds.speaker
 WHERE st.id = ?;
 
 -- name: UpdateSpeakerEmoji :exec
