@@ -757,7 +757,6 @@ func (bot *Bot) speechRecognitionLoop(
 	)
 }
 
-
 func (bot *Bot) handleVoiceStateUpdate(
 	_ *discordsdk.Session,
 	v *discordsdk.VoiceStateUpdate,
@@ -1194,14 +1193,7 @@ func (bot *Bot) speakInChannel(
 	bot.log.Debug("Speaking true")
 	defer vc.Speaking(false)
 
-	for i, packet := range opusPackets {
-		bot.log.Debug(
-			"Sending Opus packet",
-			"packetNumber",
-			i+1,
-			"totalPackets",
-			len(opusPackets),
-		)
+	for _, packet := range opusPackets {
 		vc.OpusSend <- packet
 	}
 
