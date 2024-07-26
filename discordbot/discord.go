@@ -239,12 +239,12 @@ func (bot *Bot) joinVoiceChannel(guildID, channelID string) error {
 
 	bot.log.Info("joined voice channel", "channel", channelID)
 
-	// Generate and say greeting
-	greeting := "Hello, I've joined the channel! I can talk now, kind of."
-	err = bot.sayInVoiceChannel(vc, greeting)
-	if err != nil {
-		bot.log.Error("failed to say greeting", "error", err.Error())
-	}
+	// // Generate and say greeting
+	// greeting := "Hello, I've joined the channel! I can talk now, kind of."
+	// err = bot.sayInVoiceChannel(vc, greeting)
+	// if err != nil {
+	// 	bot.log.Error("failed to say greeting", "error", err.Error())
+	// }
 
 	go bot.handleVoiceConnection(vc, guildID, channelID)
 	return nil
@@ -345,30 +345,57 @@ func (bot *Bot) handleVoiceConnection(
 	}
 }
 
-func (bot *Bot) waitForVoiceStateAndProcess(packet *discordsdk.Packet, guildID, channelID string) error {
+func (bot *Bot) waitForVoiceStateAndProcess(
+	packet *discordsdk.Packet,
+	guildID, channelID string,
+) error {
 	maxRetries := 10
 	retryInterval := 100 * time.Millisecond
 
+	bot.log.Info("Starting voice state check and processing",
+		"SSRC", packet.SSRC,
+		"guildID", guildID,
+		"channelID", channelID,
+		"maxRetries", maxRetries,
+		"retryInterval", retryInterval,
+	)
+
 	for i := 0; i < maxRetries; i++ {
-		_, err := bot.db.GetVoiceState(context.Background(), db.GetVoiceStateParams{
-			Ssrc:   int64(packet.SSRC),
-			UserID: "",
-		})
+		_, err := bot.db.GetVoiceState(
+			context.Background(),
+			db.GetVoiceStateParams{
+				Ssrc:   int64(packet.SSRC),
+				UserID: "",
+			},
+		)
 
 		if err == nil {
-			// Voice state found, process the packet
+			bot.log.Info("Voice state found, processing packet",
+				"SSRC", packet.SSRC,
+				"attempt", i+1,
+			)
 			return bot.processVoicePacket(packet, guildID, channelID)
 		}
 
 		if err != sql.ErrNoRows {
-			// Unexpected error
+			bot.log.Error("Unexpected error checking voice state",
+				"error", err,
+				"attempt", i+1,
+			)
 			return fmt.Errorf("error checking voice state: %w", err)
 		}
 
-		// Voice state not found, wait and retry
+		bot.log.Debug("Voice state not found, retrying",
+			"attempt", i+1,
+			"SSRC", packet.SSRC,
+		)
 		time.Sleep(retryInterval)
 	}
 
+	bot.log.Warn("Voice state not found after max retries",
+		"SSRC", packet.SSRC,
+		"maxRetries", maxRetries,
+	)
 	return fmt.Errorf("voice state not found after %d retries", maxRetries)
 }
 
@@ -407,12 +434,32 @@ func (bot *Bot) processVoicePacket(
 	packet *discordsdk.Packet,
 	guildID, channelID string,
 ) error {
+	bot.log.Debug("Processing voice packet",
+		"guildID", guildID,
+		"channelID", channelID,
+		"SSRC", packet.SSRC,
+		"Sequence", packet.Sequence,
+		"Timestamp", packet.Timestamp,
+	)
+
 	streamID, err := bot.getOrCreateVoiceStream(packet, guildID, channelID)
 	if err != nil {
+		bot.log.Error("Failed to get or create voice stream",
+			"error", err,
+			"guildID", guildID,
+			"channelID", channelID,
+			"SSRC", packet.SSRC,
+		)
 		return fmt.Errorf("failed to get or create voice stream: %w", err)
 	}
 
 	packetID := etc.Gensym()
+	bot.log.Debug("Saving packet to database",
+		"packetID", packetID,
+		"streamID", streamID,
+		"Sequence", packet.Sequence,
+		"Timestamp", packet.Timestamp,
+	)
 	err = bot.db.SavePacket(
 		context.Background(),
 		db.SavePacketParams{
@@ -424,25 +471,50 @@ func (bot *Bot) processVoicePacket(
 		},
 	)
 	if err != nil {
+		bot.log.Error("Failed to save Discord voice packet to database",
+			"error", err,
+			"packetID", packetID,
+			"streamID", streamID,
+		)
 		return fmt.Errorf(
 			"failed to save Discord voice packet to database: %w",
 			err,
 		)
 	}
 
+	bot.log.Debug("Getting speech recognition session", "streamID", streamID)
 	session, err := bot.getSpeechRecognitionSession(streamID)
 	if err != nil {
+		bot.log.Error("Failed to get speech recognition session",
+			"error", err,
+			"streamID", streamID,
+		)
 		return fmt.Errorf("failed to get speech recognition session: %w", err)
 	}
 
+	bot.log.Debug(
+		"Sending audio to speech recognition service",
+		"streamID",
+		streamID,
+	)
 	err = session.SendAudio(packet.Opus)
 	if err != nil {
+		bot.log.Error("Failed to send audio to speech recognition service",
+			"error", err,
+			"streamID", streamID,
+		)
 		return fmt.Errorf(
 			"failed to send audio to speech recognition service: %w",
 			err,
 		)
 	}
 
+	bot.log.Debug("Successfully processed voice packet",
+		"guildID", guildID,
+		"channelID", channelID,
+		"SSRC", packet.SSRC,
+		"streamID", streamID,
+	)
 	return nil
 }
 
@@ -570,20 +642,36 @@ func (bot *Bot) getUsernameFromID(userID string) string {
 func (bot *Bot) getSpeechRecognitionSession(
 	streamID string,
 ) (stt.LiveTranscriptionSession, error) {
+	bot.log.Debug("Getting speech recognition session", "streamID", streamID)
 	session, exists := bot.sessions[streamID]
 	if !exists {
+		bot.log.Info(
+			"Creating new speech recognition session",
+			"streamID",
+			streamID,
+		)
 		var err error
 		session, err = bot.speechRecognitionService.Start(
 			context.Background(),
 		)
 		if err != nil {
+			bot.log.Error(
+				"Failed to start speech recognition session",
+				"error",
+				err,
+				"streamID",
+				streamID,
+			)
 			return nil, fmt.Errorf(
 				"failed to start speech recognition session: %w",
 				err,
 			)
 		}
 		bot.sessions[streamID] = session
+		bot.log.Info("Started speech recognition loop", "streamID", streamID)
 		go bot.speechRecognitionLoop(streamID, session)
+	} else {
+		bot.log.Debug("Using existing speech recognition session", "streamID", streamID)
 	}
 	return session, nil
 }
@@ -592,9 +680,13 @@ func (bot *Bot) speechRecognitionLoop(
 	streamID string,
 	session stt.LiveTranscriptionSession,
 ) {
+	bot.log.Info("Starting speech recognition loop", "streamID", streamID)
+
 	for segmentDrafts := range session.Receive() {
+		bot.log.Debug("Received segment drafts", "streamID", streamID)
 		bot.processSegment(streamID, segmentDrafts)
 	}
+
 	bot.log.Info(
 		"Speech recognition session closed",
 		"streamID",
@@ -606,25 +698,48 @@ func (bot *Bot) processSegment(
 	streamID string,
 	segmentDrafts <-chan stt.Result,
 ) {
+	bot.log.Debug("Processing segment", "streamID", streamID)
 	var finalResult stt.Result
 
 	for draft := range segmentDrafts {
 		finalResult = draft
+		bot.log.Info(
+			"Received draft result",
+			"text",
+			draft.Text,
+			"confidence",
+			draft.Confidence,
+		)
 	}
 
 	if finalResult.Text != "" {
+		bot.log.Info(
+			"Final result received",
+			"streamID",
+			streamID,
+			"text",
+			finalResult.Text,
+		)
+
 		row, err := bot.db.GetChannelAndUsernameForStream(
 			context.Background(),
 			streamID,
 		)
 		if err != nil {
 			bot.log.Error(
-				"failed to get channel and username",
-				"error",
-				err.Error(),
+				"Failed to get channel and username",
+				"error", err.Error(),
+				"streamID", streamID,
 			)
 			return
 		}
+		bot.log.Debug(
+			"Retrieved channel and username",
+			"channel",
+			row.DiscordChannel,
+			"username",
+			row.Username,
+		)
 
 		_, err = bot.conn.ChannelMessageSend(
 			row.DiscordChannel,
@@ -633,13 +748,22 @@ func (bot *Bot) processSegment(
 
 		if err != nil {
 			bot.log.Error(
-				"failed to send transcribed message",
-				"error",
-				err.Error(),
+				"Failed to send transcribed message",
+				"error", err.Error(),
+				"channel", row.DiscordChannel,
 			)
+		} else {
+			bot.log.Info("Sent transcribed message", "channel", row.DiscordChannel)
 		}
 
 		recognitionID := etc.Gensym()
+		bot.log.Debug(
+			"Saving recognition",
+			"recognitionID",
+			recognitionID,
+			"streamID",
+			streamID,
+		)
 		err = bot.db.SaveRecognition(
 			context.Background(),
 			db.SaveRecognitionParams{
@@ -653,11 +777,15 @@ func (bot *Bot) processSegment(
 		)
 		if err != nil {
 			bot.log.Error(
-				"failed to save recognition to database",
-				"error",
-				err.Error(),
+				"Failed to save recognition to database",
+				"error", err.Error(),
+				"recognitionID", recognitionID,
 			)
+		} else {
+			bot.log.Info("Saved recognition to database", "recognitionID", recognitionID)
 		}
+	} else {
+		bot.log.Debug("Received empty final result", "streamID", streamID)
 	}
 }
 
