@@ -682,10 +682,17 @@ func (bot *Bot) handleSummaryCommand(
 	}
 
 	// Send initial message
-	message, err := bot.sendAndSaveMessage(
-		s,
+	message, err := s.ChannelMessageSend(m.ChannelID, "Generating summary...")
+	if err != nil {
+		return fmt.Errorf("failed to send initial message: %w", err)
+	}
+	
+	err = bot.saveTextMessage(
 		m.ChannelID,
+		s.State.User.ID,
+		message.ID,
 		"Generating summary...",
+		true,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to send initial message: %w", err)
@@ -738,6 +745,7 @@ DONE:
 	err = bot.saveTextMessage(
 		m.ChannelID,
 		s.State.User.ID,
+		message.ID,
 		fullSummary.String(),
 		true,
 	)
