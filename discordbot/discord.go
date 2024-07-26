@@ -95,9 +95,6 @@ func NewBot(
 		),
 		audioBuffers:     make(map[string]chan []byte),
 		voiceStreamCache: make(map[string]string),
-		lastSpeakTime: time.Now().
-			Add(-20 * time.Second),
-		// Initialize lastSpeakTime
 	}
 
 	bot.registerCommands()
@@ -286,7 +283,7 @@ func (bot *Bot) processSegment(
 				bot.isSpeaking = true
 				bot.speakingMu.Unlock()
 				// Process the speech recognition result as a yo command
-				bot.handleYoCommand(bot.conn, &discordsdk.MessageCreate{
+				bot.handleTalkCommand(bot.conn, &discordsdk.MessageCreate{
 					Message: &discordsdk.Message{
 						ChannelID: row.DiscordChannel,
 						Author: &discordsdk.User{
