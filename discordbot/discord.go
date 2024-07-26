@@ -860,21 +860,15 @@ func (bot *Bot) handleSummaryCommand(
 	)
 
 	if len(args) < 1 {
-		return fmt.Errorf("usage: !summary <duration> [prompt_name] [speak]")
-	}
-
-	timeRange := args[0]
-	duration, err := time.ParseDuration(timeRange)
-	if err != nil {
-		return fmt.Errorf("invalid time range format: %w", err)
+		return fmt.Errorf("usage: !summary [prompt_name] [speak]")
 	}
 
 	var promptName string
 	var speak bool
-	if len(args) > 1 {
-		promptName = args[1]
+	if len(args) > 0 {
+		promptName = args[0]
 	}
-	if len(args) > 2 && args[2] == "speak" {
+	if len(args) > 1 && args[1] == "speak" {
 		speak = true
 	}
 
@@ -938,10 +932,6 @@ func (bot *Bot) handleSummaryCommand(
 	for _, item := range items {
 		contextBuilder.WriteString(item.content + "\n")
 	}
-
-	contextBuilder.WriteString(
-		"\nBased on the conversation and voice transcriptions above, generate a summary for the following duration: " + timeRange + "\n",
-	)
 
 	// Generate summary
 	summaryChan, err := llm.SummarizeTranscript(
