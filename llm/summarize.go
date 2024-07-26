@@ -17,7 +17,7 @@ func SummarizeTranscript(
 	apiKey string,
 	duration time.Duration,
 	promptName string,
-	context string,
+	kontext string,
 ) (<-chan string, error) {
 	// Get transcriptions for the specified duration
 	transcriptions, err := queries.GetTranscriptionsForDuration(
@@ -76,8 +76,12 @@ func SummarizeTranscript(
 				Content: systemPrompt,
 			},
 			{
-				Role:    openai.ChatMessageRoleUser,
-				Content: fmt.Sprintf("Here's the context of recent conversations and transcriptions:\n\n%s\n\nNow, summarize the following transcript:\n\n%s", context, formattedTranscript.String()),
+				Role: openai.ChatMessageRoleUser,
+				Content: fmt.Sprintf(
+					"Here's the context of recent conversations and transcriptions:\n\n%s\n\nNow, summarize the following transcript:\n\n%s",
+					kontext,
+					formattedTranscript.String(),
+				),
 			},
 		},
 		MaxTokens: 500,

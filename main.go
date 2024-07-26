@@ -293,7 +293,9 @@ func runTextToSpeech(cmd *cobra.Command, args []string) {
 
 	elevenlabsAPIKey := viper.GetString("elevenlabs_api_key")
 	if elevenlabsAPIKey == "" {
-		mainLogger.Fatal("missing ELEVENLABS_API_KEY or --elevenlabs-api-key=")
+		mainLogger.Fatal(
+			"missing ELEVENLABS_API_KEY or --elevenlabs-api-key=",
+		)
 	}
 
 	var text string
@@ -316,7 +318,10 @@ func runTextToSpeech(cmd *cobra.Command, args []string) {
 		mainLogger.Fatal("text to speech conversion", "error", err.Error())
 	}
 
-	outputFileName := fmt.Sprintf("tts_output_%s.mp3", time.Now().Format("20060102_150405"))
+	outputFileName := fmt.Sprintf(
+		"tts_output_%s.mp3",
+		time.Now().Format("20060102_150405"),
+	)
 	err = os.WriteFile(outputFileName, audioData, 0644)
 	if err != nil {
 		mainLogger.Fatal("write audio file", "error", err.Error())
@@ -356,6 +361,7 @@ func runSummarizeTranscript(cmd *cobra.Command, args []string) {
 		queries,
 		openaiAPIKey,
 		24*time.Hour,
+		"",
 		"",
 	)
 	if err != nil {
