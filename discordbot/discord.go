@@ -877,7 +877,7 @@ func (bot *Bot) handleSummaryCommand(
 		context.Background(),
 		db.GetRecentTextMessagesParams{
 			DiscordChannel: m.ChannelID,
-			Limit:          50,
+			Limit:          100,
 		},
 	)
 	if err != nil {
@@ -886,7 +886,7 @@ func (bot *Bot) handleSummaryCommand(
 
 	recognitions, err := bot.db.GetRecentRecognitions(
 		context.Background(),
-		50,
+		2000,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to fetch recent recognitions: %w", err)
@@ -1347,7 +1347,7 @@ func (bot *Bot) TextToSpeech(text string) ([]byte, error) {
 	}
 
 	bot.log.Debug("Sending request to ElevenLabs API")
-	audio, err := elevenlabs.TextToSpeech("5Q0t7uMcjvnagumLfvZi", ttsReq)
+	audio, err := elevenlabs.TextToSpeech("zcAOhNBS3c14rBihAFp1", ttsReq)
 	if err != nil {
 		bot.log.Error(
 			"Failed to generate speech from ElevenLabs",
