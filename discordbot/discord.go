@@ -632,6 +632,7 @@ func (bot *Bot) getOrCreateVoiceStream(
 		err := bot.db.CreateDiscordChannelStream(
 			context.Background(),
 			db.CreateDiscordChannelStreamParams{
+				ID:             etc.Gensym(),
 				DiscordGuild:   guildID,
 				DiscordChannel: channelID,
 				Stream:         streamID,
