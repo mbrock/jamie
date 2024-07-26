@@ -29,12 +29,11 @@ type Bot struct {
 	log                      *log.Logger
 	conn                     *discordsdk.Session
 	speechRecognitionService stt.SpeechRecognitionService
-	db                       *db.DB
+	db                       *db.Queries
 	sessions                 map[string]stt.LiveTranscriptionSession
 	openaiAPIKey             string
 	commands                 map[string]CommandHandler
 	elevenLabsAPIKey         string
-	messageCreate            chan *discordsdk.MessageCreate
 }
 
 func NewBot(
@@ -43,18 +42,18 @@ func NewBot(
 	logger *log.Logger,
 	openaiAPIKey string,
 	elevenLabsAPIKey string,
+	db *db.Queries,
 ) (*Bot, error) {
 	bot := &Bot{
 		speechRecognitionService: speechRecognitionService,
 		log:                      logger,
-		db:                       db.GetDB(),
+		db:                       db,
 		sessions: make(
 			map[string]stt.LiveTranscriptionSession,
 		),
 		openaiAPIKey:     openaiAPIKey,
-		commands:         make(map[string]CommandHandler),
 		elevenLabsAPIKey: elevenLabsAPIKey,
-		messageCreate:    make(chan *discordsdk.MessageCreate),
+		commands:         make(map[string]CommandHandler),
 	}
 
 	bot.registerCommands()
@@ -111,14 +110,6 @@ func (bot *Bot) handleMessageCreate(
 	s *discordsdk.Session,
 	m *discordsdk.MessageCreate,
 ) {
-	// Send the message to the channel for processing by waitForResponse
-	select {
-	case bot.messageCreate <- m:
-	default:
-		// Channel is full, log a warning
-		bot.log.Warn("messageCreate channel is full, dropping message")
-	}
-
 	// Ignore messages from the bot itself
 	if m.Author.ID == s.State.User.ID {
 		return
@@ -273,11 +264,14 @@ func (bot *Bot) processVoicePacket(
 
 	packetID := etc.Gensym()
 	err = bot.db.SavePacket(
-		packetID,
-		streamID,
-		int(packet.Sequence),
-		int(packet.Timestamp),
-		packet.Opus,
+		context.Background(),
+		db.SavePacketParams{
+			ID:        packetID,
+			Stream:    streamID,
+			PacketSeq: int64(packet.Sequence),
+			SampleIdx: int64(packet.Timestamp),
+			Payload:   packet.Opus,
+		},
 	)
 	if err != nil {
 		return fmt.Errorf(
@@ -311,27 +305,76 @@ func (bot *Bot) getOrCreateVoiceStream(
 		packet.SSRC,
 	) // Using SSRC as a unique identifier for the Discord user
 	streamID, err := bot.db.GetStreamForDiscordChannelAndSpeaker(
-		guildID,
-		channelID,
-		discordID,
+		context.Background(),
+		db.GetStreamForDiscordChannelAndSpeakerParams{
+			DiscordGuild:   guildID,
+			DiscordChannel: channelID,
+			DiscordID:      discordID,
+		},
 	)
 
 	if errors.Is(err, sql.ErrNoRows) {
 		streamID = etc.Gensym()
 		speakerID := etc.Gensym()
 		emoji := txt.RandomAvatar()
-		err = bot.db.CreateStreamForDiscordChannel(
-			streamID,
-			guildID,
-			channelID,
-			packet.Sequence,
-			uint16(packet.Timestamp),
-			speakerID,
-			discordID,
-			emoji,
+		err = bot.db.CreateStream(
+			context.Background(),
+			db.CreateStreamParams{
+				ID:              streamID,
+				PacketSeqOffset: int64(packet.Sequence),
+				SampleIdxOffset: int64(packet.Timestamp),
+			},
 		)
 		if err != nil {
 			return "", fmt.Errorf("failed to create new stream: %w", err)
+		}
+
+		err := bot.db.CreateDiscordChannelStream(
+			context.Background(),
+			db.CreateDiscordChannelStreamParams{
+				DiscordGuild:   guildID,
+				DiscordChannel: channelID,
+				Stream:         streamID,
+			},
+		)
+
+		if err != nil {
+			return "", fmt.Errorf(
+				"failed to create discord channel stream: %w",
+				err,
+			)
+		}
+
+		err = bot.db.CreateSpeaker(
+			context.Background(),
+			db.CreateSpeakerParams{
+				ID:     speakerID,
+				Stream: streamID,
+				Emoji:  emoji,
+			},
+		)
+
+		if err != nil {
+			return "", fmt.Errorf(
+				"failed to create speaker: %w",
+				err,
+			)
+		}
+
+		err = bot.db.CreateDiscordSpeaker(
+			context.Background(),
+			db.CreateDiscordSpeakerParams{
+				ID:        etc.Gensym(),
+				Speaker:   speakerID,
+				DiscordID: discordID,
+			},
+		)
+
+		if err != nil {
+			return "", fmt.Errorf(
+				"failed to create discord speaker: %w",
+				err,
+			)
 		}
 
 		bot.log.Info(
@@ -382,7 +425,10 @@ func (bot *Bot) speechRecognitionLoop(
 	)
 }
 
-func (bot *Bot) processSegment(streamID string, segmentDrafts <-chan stt.Result) {
+func (bot *Bot) processSegment(
+	streamID string,
+	segmentDrafts <-chan stt.Result,
+) {
 	var finalResult stt.Result
 
 	for draft := range segmentDrafts {
@@ -395,7 +441,10 @@ func (bot *Bot) processSegment(streamID string, segmentDrafts <-chan stt.Result)
 			return
 		}
 
-		channelID, emoji, err := bot.db.GetChannelAndEmojiForStream(streamID)
+		row, err := bot.db.GetChannelAndEmojiForStream(
+			context.Background(),
+			streamID,
+		)
 		if err != nil {
 			bot.log.Error(
 				"failed to get channel and emoji",
@@ -406,8 +455,8 @@ func (bot *Bot) processSegment(streamID string, segmentDrafts <-chan stt.Result)
 		}
 
 		_, err = bot.conn.ChannelMessageSend(
-			channelID,
-			fmt.Sprintf("%s %s", emoji, finalResult.Text),
+			row.DiscordChannel,
+			fmt.Sprintf("%s %s", row.Emoji, finalResult.Text),
 		)
 
 		if err != nil {
@@ -420,12 +469,15 @@ func (bot *Bot) processSegment(streamID string, segmentDrafts <-chan stt.Result)
 
 		recognitionID := etc.Gensym()
 		err = bot.db.SaveRecognition(
-			recognitionID,
-			streamID,
-			int(finalResult.Start * 48000), // Convert seconds to samples (48kHz sample rate)
-			int(finalResult.Duration * 48000), // Convert seconds to samples
-			finalResult.Text,
-			finalResult.Confidence,
+			context.Background(),
+			db.SaveRecognitionParams{
+				ID:         recognitionID,
+				Stream:     streamID,
+				SampleIdx:  int64(finalResult.Start * 48000),
+				SampleLen:  int64(finalResult.Duration * 48000),
+				Text:       finalResult.Text,
+				Confidence: finalResult.Confidence,
+			},
 		)
 		if err != nil {
 			bot.log.Error(
@@ -440,13 +492,22 @@ func (bot *Bot) processSegment(streamID string, segmentDrafts <-chan stt.Result)
 func (bot *Bot) handleAvatarChangeRequest(streamID string) {
 	newEmoji := txt.RandomAvatar()
 
-	err := bot.db.UpdateSpeakerEmoji(streamID, newEmoji)
+	err := bot.db.UpdateSpeakerEmoji(
+		context.Background(),
+		db.UpdateSpeakerEmojiParams{
+			Stream: streamID,
+			Emoji:  newEmoji,
+		},
+	)
 	if err != nil {
 		bot.log.Error("failed to update speaker emoji", "error", err.Error())
 		return
 	}
 
-	channelID, err := bot.db.GetChannelIDForStream(streamID)
+	channelID, err := bot.db.GetChannelIDForStream(
+		context.Background(),
+		streamID,
+	)
 	if err != nil {
 		bot.log.Error("failed to get channel ID", "error", err.Error())
 		return
@@ -473,27 +534,36 @@ func (bot *Bot) handleVoiceStateUpdate(
 		return // Ignore bot's own voice state updates
 	}
 
-	if v.ChannelID == "" {
-		// User left a voice channel
-		err := bot.db.EndStreamForChannel(v.GuildID, v.ChannelID)
-		if err != nil {
-			bot.log.Error(
-				"failed to update stream end time",
-				"error",
-				err.Error(),
-			)
-		}
-	} else {
-		// User joined or moved to a voice channel
-		streamID := etc.Gensym()
-		speakerID := etc.Gensym()
-		discordID := v.UserID
-		emoji := txt.RandomAvatar()
-		err := bot.db.CreateStreamForDiscordChannel(streamID, v.GuildID, v.ChannelID, 0, uint16(0), speakerID, discordID, emoji)
-		if err != nil {
-			bot.log.Error("failed to create new stream for user join", "error", err.Error())
-		}
-	}
+	// if v.ChannelID == "" {
+	// 	// User left a voice channel
+	// 	err := bot.db.EndStreamForChannel(v.GuildID, v.ChannelID)
+	// 	if err != nil {
+	// 		bot.log.Error(
+	// 			"failed to update stream end time",
+	// 			"error",
+	// 			err.Error(),
+	// 		)
+	// 	}
+	// } else {
+	// 	// // User joined or moved to a voice channel
+	// 	// streamID := etc.Gensym()
+	// 	// speakerID := etc.Gensym()
+	// 	// discordID := v.UserID
+	// 	// emoji := txt.RandomAvatar()
+	// 	// err := bot.db.CreateStreamForDiscordChannel(
+	// 	// 	streamID,
+	// 	// 	v.GuildID,
+	// 	// 	v.ChannelID,
+	// 	// 	0,
+	// 	// 	0,
+	// 	// 	speakerID,
+	// 	// 	discordID,
+	// 	// 	emoji,
+	// 	// )
+	// 	// if err != nil {
+	// 	// 	bot.log.Error("failed to create new stream for user join", "error", err.Error())
+	// 	// }
+	// }
 }
 
 func (bot *Bot) handleSummaryCommand(
@@ -526,6 +596,7 @@ func (bot *Bot) handleSummaryCommand(
 
 	// Generate summary
 	summaryChan, err := llm.SummarizeTranscript(
+		bot.db,
 		bot.openaiAPIKey,
 		duration,
 		promptName,
@@ -598,7 +669,13 @@ func (bot *Bot) handlePromptCommand(
 	name := args[0]
 	prompt := strings.Join(args[1:], " ")
 
-	err := bot.db.SetSystemPrompt(name, prompt)
+	err := bot.db.SetSystemPrompt(
+		context.Background(),
+		db.SetSystemPromptParams{
+			Name:   name,
+			Prompt: prompt,
+		},
+	)
 	if err != nil {
 		return fmt.Errorf("failed to set system prompt: %w", err)
 	}
@@ -619,7 +696,7 @@ func (bot *Bot) handleListPromptsCommand(
 	m *discordsdk.MessageCreate,
 	args []string,
 ) error {
-	prompts, err := bot.db.ListSystemPrompts()
+	prompts, err := bot.db.ListSystemPrompts(context.Background())
 	if err != nil {
 		return fmt.Errorf("failed to list system prompts: %w", err)
 	}
@@ -637,8 +714,10 @@ func (bot *Bot) handleListPromptsCommand(
 
 	var message strings.Builder
 	message.WriteString("Available system prompts:\n")
-	for name, prompt := range prompts {
-		message.WriteString(fmt.Sprintf("- %s: %s\n", name, prompt))
+	for _, prompt := range prompts {
+		message.WriteString(
+			fmt.Sprintf("- %s: %s\n", prompt.Name, prompt.Prompt),
+		)
 	}
 
 	_, err = s.ChannelMessageSend(m.ChannelID, message.String())
@@ -653,7 +732,12 @@ func (bot *Bot) GenerateOggOpusBlob(
 	streamID string,
 	startSample, endSample int,
 ) ([]byte, error) {
-	return ogg.GenerateOggOpusBlob(streamID, startSample, endSample)
+	return ogg.GenerateOggOpusBlob(
+		bot.db,
+		streamID,
+		int64(startSample),
+		int64(endSample),
+	)
 }
 
 func (bot *Bot) textToSpeech(text string) ([]byte, error) {

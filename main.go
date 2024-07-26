@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"database/sql"
+	_ "embed"
 	"fmt"
 	"io"
-	"net/http"
+	"jamie/etc"
 	"os"
 	"os/signal"
 	"strings"
@@ -23,7 +25,6 @@ import (
 	"jamie/llm"
 	"jamie/ogg"
 	"jamie/stt"
-	"jamie/web"
 )
 
 var (
@@ -34,7 +35,6 @@ var (
 func init() {
 	cobra.OnInitialize(initConfig)
 	rootCmd.AddCommand(discordCmd)
-	rootCmd.AddCommand(webCmd)
 	rootCmd.AddCommand(openaiChatCmd)
 	rootCmd.AddCommand(summarizeTranscriptCmd)
 	rootCmd.AddCommand(generateAudioCmd)
@@ -94,12 +94,6 @@ var discordCmd = &cobra.Command{
 	Run:   runDiscord,
 }
 
-var webCmd = &cobra.Command{
-	Use:   "web",
-	Short: "Start the web server",
-	Run:   runWeb,
-}
-
 var openaiChatCmd = &cobra.Command{
 	Use:   "chat",
 	Short: "Start an OpenAI chat session",
@@ -119,18 +113,43 @@ var generateAudioCmd = &cobra.Command{
 	Run:   runGenerateAudio,
 }
 
+//go:embed schema.sql
+var ddl string
+
+func InitDB(logger *log.Logger) (*db.Queries, error) {
+	ctx := context.Background()
+	sqldb, err := sql.Open("sqlite3", "jamie.db")
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := sqldb.ExecContext(ctx, ddl); err != nil {
+		return nil, err
+	}
+
+	queries := db.New(sqldb)
+
+	return queries, nil
+}
+
 func runGenerateAudio(cmd *cobra.Command, args []string) {
 	mainLogger, _, _, sqlLogger := createLoggers()
 
-	err := db.InitDB(sqlLogger)
+	queries, err := InitDB(sqlLogger)
 	if err != nil {
 		mainLogger.Fatal("initialize database", "error", err.Error())
 	}
-	defer db.Close()
+
+	ctx := context.Background()
 
 	// Fetch recent streams
-	streams, err := db.GetDB().
-		GetRecentStreamsWithTranscriptionCount("", "", 100)
+	streams, err := queries.
+		GetRecentStreamsWithTranscriptionCount(
+			ctx,
+			db.GetRecentStreamsWithTranscriptionCountParams{
+				Limit: 100,
+			},
+		)
 	if err != nil {
 		mainLogger.Fatal("fetch recent streams", "error", err.Error())
 	}
@@ -144,11 +163,12 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	// Prepare stream options for selection
 	streamOptions := make([]huh.Option[string], len(streams))
 	for i, stream := range streams {
+		t := etc.JulianDayToTime(stream.CreatedAt)
 		streamOptions[i] = huh.NewOption(
 			fmt.Sprintf(
 				"%s (%s) - %d transcriptions",
 				stream.ID,
-				stream.CreatedAt.Format(time.RFC3339),
+				t.Format(time.RFC3339),
 				stream.TranscriptionCount,
 			),
 			stream.ID,
@@ -172,8 +192,8 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	}
 
 	// Fetch transcriptions for the selected stream
-	transcriptions, err := db.GetDB().
-		GetTranscriptionsForStream(selectedStreamID)
+	transcriptions, err := queries.
+		GetTranscriptionsForStream(ctx, selectedStreamID)
 	if err != nil {
 		mainLogger.Fatal("fetch transcriptions", "error", err.Error())
 	}
@@ -187,7 +207,7 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	for i, t := range transcriptions {
 		startOptions[i] = fmt.Sprintf(
 			"%s: %s",
-			t.Timestamp.Format(time.RFC3339),
+			etc.JulianDayToTime(t.CreatedAt).Format("15:04:05"),
 			t.Text,
 		)
 	}
@@ -237,6 +257,7 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	endSample := transcriptions[endIndex].SampleIdx
 
 	oggData, err := generateOggOpusBlob(
+		queries,
 		selectedStreamID,
 		startSample,
 		endSample,
@@ -260,20 +281,25 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 }
 
 func generateOggOpusBlob(
+	queries *db.Queries,
 	streamID string,
-	startSample, endSample int,
+	startSample, endSample int64,
 ) ([]byte, error) {
-	return ogg.GenerateOggOpusBlob(streamID, startSample, endSample)
+	return ogg.GenerateOggOpusBlob(
+		queries,
+		streamID,
+		startSample,
+		endSample,
+	)
 }
 
 func runSummarizeTranscript(cmd *cobra.Command, args []string) {
 	mainLogger, _, _, sqlLogger := createLoggers()
 
-	err := db.InitDB(sqlLogger)
+	queries, err := InitDB(sqlLogger)
 	if err != nil {
 		mainLogger.Fatal("initialize database", "error", err.Error())
 	}
-	defer db.Close()
 
 	// Get OpenAI API key
 	openaiAPIKey := viper.GetString("openai_api_key")
@@ -282,6 +308,7 @@ func runSummarizeTranscript(cmd *cobra.Command, args []string) {
 	}
 
 	summaryChan, err := llm.SummarizeTranscript(
+		queries,
 		openaiAPIKey,
 		24*time.Hour,
 		"",
@@ -402,18 +429,10 @@ func runDiscord(cmd *cobra.Command, args []string) {
 		)
 	}
 
-	err := db.InitDB(sqlLogger)
+	queries, err := InitDB(sqlLogger)
 	if err != nil {
 		mainLogger.Fatal("initialize database", "error", err.Error())
 	}
-	defer db.Close()
-
-	err = db.Migrate(db.GetDB().DB, sqlLogger)
-	if err != nil {
-		mainLogger.Fatal("migrate database", "error", err.Error())
-	}
-
-	mainLogger.Info("Database initialized and migrated successfully")
 
 	transcriptionService, err := stt.NewDeepgramClient(
 		deepgramAPIKey,
@@ -434,6 +453,7 @@ func runDiscord(cmd *cobra.Command, args []string) {
 		discordLogger,
 		openaiAPIKey,
 		elevenlabsAPIKey,
+		queries,
 	)
 	if err != nil {
 		mainLogger.Fatal("start discord bot", "error", err.Error())
@@ -443,25 +463,6 @@ func runDiscord(cmd *cobra.Command, args []string) {
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
-}
-
-func runWeb(cmd *cobra.Command, args []string) {
-	mainLogger, _, _, sqlLogger := createLoggers()
-
-	db.InitDB(sqlLogger)
-	defer db.Close()
-
-	// Database migrations are handled during InitDB, so we don't need to run them here
-
-	// Database statements are prepared during InitDB, so we don't need to prepare them here
-
-	port := viper.GetInt("web_port")
-	handler := web.NewHandler(db.GetDB(), mainLogger)
-
-	mainLogger.Info("Starting web server", "port", port)
-	if err := http.ListenAndServe(fmt.Sprintf(":%d", port), handler); err != nil {
-		mainLogger.Fatal("failed to start web server", "error", err.Error())
-	}
 }
 
 func createLoggers() (mainLogger, discordLogger, deepgramLogger, sqlLogger *log.Logger) {

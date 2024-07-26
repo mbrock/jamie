@@ -2,6 +2,7 @@ package ogg
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"jamie/db"
@@ -10,8 +11,15 @@ import (
 	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
 )
 
-func GenerateOggOpusBlob(streamID string, startSample, endSample int) ([]byte, error) {
-	packets, err := db.GetDB().GetPacketsForStreamInSampleRange(streamID, startSample, endSample)
+func GenerateOggOpusBlob(
+	db *db.Queries,
+	streamID string,
+	startSample, endSample int64,
+) ([]byte, error) {
+	packets, err := db.GetPacketsForStreamInSampleRange(
+		context.Background(),
+		streamID, // XXX: weird
+	)
 	if err != nil {
 		return nil, fmt.Errorf("fetch packets: %w", err)
 	}
@@ -23,13 +31,13 @@ func GenerateOggOpusBlob(streamID string, startSample, endSample int) ([]byte, e
 		return nil, fmt.Errorf("create OGG writer: %w", err)
 	}
 
-	var lastSampleIdx int
+	var lastSampleIdx int64
 	for _, packet := range packets {
 		if lastSampleIdx != 0 {
-			gap := packet.SampleIdx - lastSampleIdx
+			gap := packet.SampleIdx - int64(lastSampleIdx)
 			if gap > 960 { // 960 samples = 20ms at 48kHz
 				silentPacketsCount := gap / 960
-				for j := 0; j < silentPacketsCount; j++ {
+				for j := int64(0); j < silentPacketsCount; j++ {
 					silentPacket := []byte{0xf8, 0xff, 0xfe}
 					if err := oggWriter.WriteRTP(&rtp.Packet{
 						Header: rtp.Header{
@@ -37,7 +45,10 @@ func GenerateOggOpusBlob(streamID string, startSample, endSample int) ([]byte, e
 						},
 						Payload: silentPacket,
 					}); err != nil {
-						return nil, fmt.Errorf("write silent Opus packet: %w", err)
+						return nil, fmt.Errorf(
+							"write silent Opus packet: %w",
+							err,
+						)
 					}
 				}
 			}

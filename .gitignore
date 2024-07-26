@@ -4,3 +4,7 @@
 /voice
 *.db
 jamie
+/tmp
+*.sql.go
+/db/db.go
+/db/models.go

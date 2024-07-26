@@ -47,7 +47,7 @@ func (c *DeepgramClient) Start(
 	}
 
 	session := &DeepgramSession{
-		transcriptions: make(chan chan string),
+		transcriptions: make(chan chan Result),
 		logger:         c.logger,
 	}
 
@@ -118,7 +118,15 @@ func (s *DeepgramSession) Message(mr *api.MessageResponse) error {
 		Confidence: mr.Channel.Alternatives[0].Confidence,
 	}
 
-	s.logger.Info("hear", "txt", transcript, "start", mr.Start, "duration", mr.Duration)
+	s.logger.Info(
+		"hear",
+		"txt",
+		transcript,
+		"start",
+		mr.Start,
+		"duration",
+		mr.Duration,
+	)
 
 	if s.currentTranscriptCh == nil {
 		s.logger.Info("next")

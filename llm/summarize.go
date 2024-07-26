@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"jamie/db"
+	"jamie/etc"
 	"strings"
 	"time"
 
@@ -12,12 +13,16 @@ import (
 )
 
 func SummarizeTranscript(
+	queries *db.Queries,
 	apiKey string,
 	duration time.Duration,
 	promptName string,
 ) (<-chan string, error) {
 	// Get transcriptions for the specified duration
-	transcriptions, err := db.GetDB().GetTranscriptionsForDuration(duration)
+	transcriptions, err := queries.GetTranscriptionsForDuration(
+		context.Background(),
+		duration,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("get transcriptions for duration: %w", err)
 	}
@@ -35,7 +40,7 @@ func SummarizeTranscript(
 		formattedTranscript.WriteString(
 			fmt.Sprintf(
 				"%s %s: %s\n",
-				t.Timestamp.Format("15:04:05"),
+				etc.JulianDayToTime(t.CreatedAt).Format("15:04:05"),
 				t.Emoji,
 				t.Text,
 			),
@@ -49,7 +54,10 @@ func SummarizeTranscript(
 	// Get the system prompt
 	var systemPrompt string
 	if promptName != "" {
-		systemPrompt, err = db.GetDB().GetSystemPrompt(promptName)
+		systemPrompt, err = queries.GetSystemPrompt(
+			ctx,
+			promptName,
+		)
 		if err != nil {
 			return nil, fmt.Errorf("get system prompt: %w", err)
 		}

@@ -1,6 +1,6 @@
 package txt
 
-import "time"
+import "golang.org/x/exp/rand"
 
 var Avatars = []string{
 	"😀", "😎", "🤖", "👽", "🐱", "🐶", "🦄", "🐸", "🦉", "🦋",
@@ -8,5 +8,6 @@ var Avatars = []string{
 }
 
 func RandomAvatar() string {
-	return Avatars[time.Now().UnixNano()%int64(len(Avatars))]
+	rnd := rand.Intn(len(Avatars))
+	return Avatars[rnd]
 }
