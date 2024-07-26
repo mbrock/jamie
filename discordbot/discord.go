@@ -277,7 +277,10 @@ func (bot *Bot) processSegment(
 		}
 
 		// Check if the channel is in talk mode
-		if bot.talkModeChannels[row.DiscordChannel] {
+		bot.mu.Lock()
+		voiceChannel, ok := bot.voiceChannels[row.DiscordChannel]
+		bot.mu.Unlock()
+		if ok && voiceChannel.TalkModeEnabled {
 			bot.speakingMu.Lock()
 			isSpeaking := bot.isSpeaking
 			bot.speakingMu.Unlock()
@@ -1184,12 +1187,12 @@ func (bot *Bot) speakInChannel(
 
 	// Send Opus packets
 	bot.log.Debug("Starting to send Opus packets")
-	vc.Speaking(true)
+	voiceChannel.Connection.Speaking(true)
 	bot.log.Debug("Speaking true")
-	defer vc.Speaking(false)
+	defer voiceChannel.Connection.Speaking(false)
 
 	for _, packet := range opusPackets {
-		vc.OpusSend <- packet
+		voiceChannel.Connection.OpusSend <- packet
 	}
 
 	bot.log.Debug("Finished sending all Opus packets")
@@ -1255,14 +1258,24 @@ func (bot *Bot) speakSummary(
 	}
 
 	// Join the voice channel if not already connected
-	vc, ok := bot.voiceConnections[voiceChannelID]
+	bot.mu.Lock()
+	voiceChannel, ok := bot.voiceChannels[voiceChannelID]
 	if !ok {
-		vc, err = s.ChannelVoiceJoin(m.GuildID, voiceChannelID, false, true)
+		vc, err := s.ChannelVoiceJoin(m.GuildID, voiceChannelID, false, true)
 		if err != nil {
+			bot.mu.Unlock()
 			return fmt.Errorf("failed to join voice channel: %w", err)
 		}
-		bot.voiceConnections[voiceChannelID] = vc
+		voiceChannel = &VoiceChannel{
+			Connection:     vc,
+			TalkModeEnabled: false,
+			PacketChan:     make(chan *voicePacket, 3*1000/20),
+		}
+		bot.voiceChannels[voiceChannelID] = voiceChannel
+		go bot.processVoicePackets(voiceChannel.PacketChan)
+		go bot.handleVoiceConnection(voiceChannel, m.GuildID, voiceChannelID)
 	}
+	bot.mu.Unlock()
 
 	// Generate speech
 	speechData, err := bot.TextToSpeech(summary)
