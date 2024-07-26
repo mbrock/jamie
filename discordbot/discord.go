@@ -338,7 +338,11 @@ func (bot *Bot) handleVoiceConnection(
 	vc *discordsdk.VoiceConnection,
 	guildID, channelID string,
 ) {
-	vc.AddHandler(bot.handleVoiceSpeakingUpdate)
+	go func() {
+		vc.Lock()
+		vc.AddHandler(bot.handleVoiceSpeakingUpdate)
+		vc.Unlock()
+	}()
 
 	for {
 		select {
@@ -362,10 +366,17 @@ func (bot *Bot) handleVoicePacket(
 	packet *discordsdk.Packet,
 	guildID, channelID string,
 ) error {
+	start := time.Now()
 	streamID, err := bot.getOrCreateVoiceStream(
 		packet,
 		guildID,
 		channelID,
+	)
+	elapsed := time.Since(start)
+	bot.log.Debug("getOrCreateVoiceStream timing",
+		"duration", elapsed,
+		"guildID", guildID,
+		"channelID", channelID,
 	)
 	if err != nil {
 		bot.log.Error("Failed to get or create voice stream",
@@ -1220,6 +1231,7 @@ func (bot *Bot) speakSummary(
 
 func (bot *Bot) processVoicePackets() {
 	for packet := range bot.voicePacketChan {
+		fmt.Println("!")
 		err := bot.handleVoicePacket(
 			packet.packet,
 			packet.guildID,
