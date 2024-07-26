@@ -1,6 +1,7 @@
 package ogg
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 	"jamie/db"
 
+	"github.com/charmbracelet/log"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
 )
@@ -77,67 +79,143 @@ func GenerateOggOpusBlob(
 }
 
 func ConvertToOpus(mp3Data []byte) ([][]byte, error) {
+	log.Info("Starting ConvertToOpus function")
+
 	// Create a temporary file for the input MP3
-	inputFile, err := os.CreateTemp("", "input*.mp3")
+	inputFile, err := os.CreateTemp("/Users/mbrock/", "input*.mp3")
 	if err != nil {
-		return nil, fmt.Errorf("failed to create temporary input file: %w", err)
+		log.Error("Failed to create temporary input file", "error", err)
+		return nil, fmt.Errorf(
+			"failed to create temporary input file: %w",
+			err,
+		)
 	}
-	defer os.Remove(inputFile.Name())
+
 	defer inputFile.Close()
+
+	log.Info("Created temporary input file", "filename", inputFile.Name())
 
 	// Write MP3 data to the temporary file
 	if _, err := inputFile.Write(mp3Data); err != nil {
-		return nil, fmt.Errorf("failed to write MP3 data to temporary file: %w", err)
+		log.Error("Failed to write MP3 data to temporary file", "error", err)
+		return nil, fmt.Errorf(
+			"failed to write MP3 data to temporary file: %w",
+			err,
+		)
 	}
+
+	log.Info("Wrote MP3 data to temporary file", "size", len(mp3Data))
+	inputFile.Sync()
+	inputFile.Close()
 
 	// Create a temporary file for the output PCM
-	outputFile, err := os.CreateTemp("", "output*.pcm")
+	outputFile, err := os.CreateTemp("/Users/mbrock", "output*.pcm")
 	if err != nil {
-		return nil, fmt.Errorf("failed to create temporary output file: %w", err)
+		log.Error("Failed to create temporary output file", "error", err)
+		return nil, fmt.Errorf(
+			"failed to create temporary output file: %w",
+			err,
+		)
 	}
-	defer os.Remove(outputFile.Name())
+
 	defer outputFile.Close()
 
+	log.Info("Created temporary output file", "filename", outputFile.Name())
+
 	// Use ffmpeg to convert MP3 to 48kHz stereo PCM
-	cmd := exec.Command("ffmpeg", "-i", inputFile.Name(), "-ar", "48000", "-ac", "2", "-f", "s16le", outputFile.Name())
+	cmd := exec.Command(
+		"ffmpeg",
+		"-y", // Add -y flag to overwrite output files without asking
+		"-i",
+		inputFile.Name(),
+		"-ar",
+		"48000",
+		"-ac",
+		"2",
+		"-f",
+		"s16le",
+		outputFile.Name(),
+	)
+	log.Info("Executing ffmpeg command", "command", cmd.String())
+
+	// Capture both stdout and stderr
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("failed to execute ffmpeg: %w", err)
+		log.Error(
+			"Failed to execute ffmpeg",
+			"error",
+			err,
+			"stderr",
+			stderr.String(),
+		)
+		return nil, fmt.Errorf(
+			"failed to execute ffmpeg: %w\nStderr: %s",
+			err,
+			stderr.String(),
+		)
 	}
+
+	// Log the output
+	log.Info(
+		"ffmpeg output",
+		"stdout",
+		stdout.String(),
+		"stderr",
+		stderr.String(),
+	)
 
 	// Read the converted PCM data
 	pcmData, err := os.ReadFile(outputFile.Name())
 	if err != nil {
+		log.Error("Failed to read converted PCM data", "error", err)
 		return nil, fmt.Errorf("failed to read converted PCM data: %w", err)
 	}
+
+	log.Info("Read converted PCM data", "size", len(pcmData))
 
 	// Create an Opus encoder
 	encoder, err := gopus.NewEncoder(48000, 2, gopus.Audio)
 	if err != nil {
+		log.Error("Failed to create Opus encoder", "error", err)
 		return nil, fmt.Errorf("failed to create Opus encoder: %w", err)
 	}
+
+	log.Info("Created Opus encoder")
 
 	var opusPackets [][]byte
 	frameSize := 960 * 2 * 2 // 960 samples * 2 channels * 2 bytes per sample
 	for i := 0; i < len(pcmData); i += frameSize {
-		end := i + frameSize
-		if end > len(pcmData) {
-			end = len(pcmData)
+		frame := make([]byte, frameSize)
+		copied := copy(frame, pcmData[i:])
+		if copied < frameSize {
+			// Fill the rest with zeros
+			for j := copied; j < frameSize; j++ {
+				frame[j] = 0
+			}
 		}
-		frame := pcmData[i:end]
 
 		// Convert byte PCM to int16 PCM
-		pcmInt16 := make([]int16, len(frame)/2)
-		for j := 0; j < len(frame); j += 2 {
+		pcmInt16 := make([]int16, 960*2)
+		for j := 0; j < frameSize; j += 2 {
 			pcmInt16[j/2] = int16(frame[j]) | int16(frame[j+1])<<8
 		}
 
 		// Encode the frame to Opus
 		opusData, err := encoder.Encode(pcmInt16, 960, 32000)
 		if err != nil {
+			log.Error("Failed to encode Opus", "error", err)
 			return nil, fmt.Errorf("failed to encode Opus: %w", err)
 		}
 		opusPackets = append(opusPackets, opusData)
 	}
 
+	log.Info(
+		"ConvertToOpus completed successfully",
+		"packetCount",
+		len(opusPackets),
+	)
 	return opusPackets, nil
 }
