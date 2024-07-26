@@ -193,7 +193,13 @@ func (bot *Bot) sendAndSaveMessage(
 		return
 	}
 
-	err = bot.saveTextMessage(channelID, s.State.User.ID, msg.ID, content, true)
+	err = bot.saveTextMessage(
+		channelID,
+		s.State.User.ID,
+		msg.ID,
+		content,
+		true,
+	)
 	if err != nil {
 		bot.log.Error("Failed to save sent message", "error", err.Error())
 	}
@@ -686,7 +692,7 @@ func (bot *Bot) handleSummaryCommand(
 	if err != nil {
 		return fmt.Errorf("failed to send initial message: %w", err)
 	}
-	
+
 	err = bot.saveTextMessage(
 		m.ChannelID,
 		s.State.User.ID,
@@ -843,13 +849,14 @@ func (bot *Bot) handleYoCommand(
 	prompt := strings.Join(args, " ")
 
 	// Fetch today's text messages
-	today := time.Now().Format("2006-01-02")
 	messages, err := bot.db.GetTextMessagesInTimeRange(
 		context.Background(),
 		db.GetTextMessagesInTimeRangeParams{
 			DiscordChannel: m.ChannelID,
-			StartTime:      etc.TimeToJulianDay(time.Now().Truncate(24 * time.Hour)),
-			EndTime:        etc.TimeToJulianDay(time.Now()),
+			StartTime: etc.TimeToJulianDay(
+				time.Now().Truncate(24 * time.Hour),
+			),
+			EndTime: etc.TimeToJulianDay(time.Now()),
 		},
 	)
 	if err != nil {
@@ -864,9 +871,13 @@ func (bot *Bot) handleYoCommand(
 		if msg.IsBot {
 			sender = "Bot"
 		}
-		contextBuilder.WriteString(fmt.Sprintf("%s: %s\n", sender, msg.Content))
+		contextBuilder.WriteString(
+			fmt.Sprintf("%s: %s\n", sender, msg.Content),
+		)
 	}
-	contextBuilder.WriteString("\nBased on the conversation above, please respond to the following prompt:\n")
+	contextBuilder.WriteString(
+		"\nBased on the conversation above, please respond to the following prompt:\n",
+	)
 	contextBuilder.WriteString(prompt)
 
 	// Create OpenAI client
