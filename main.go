@@ -38,6 +38,7 @@ func init() {
 	rootCmd.AddCommand(openaiChatCmd)
 	rootCmd.AddCommand(summarizeTranscriptCmd)
 	rootCmd.AddCommand(generateAudioCmd)
+	rootCmd.AddCommand(textToSpeechCmd)
 
 	// Add persistent flags
 	rootCmd.PersistentFlags().String("discord-token", "", "Discord bot token")
@@ -111,6 +112,13 @@ var generateAudioCmd = &cobra.Command{
 	Short: "Generate an audio file from a stream",
 	Long:  `Generate an OGG Opus audio file from a specified stream ID, start time, and end time`,
 	Run:   runGenerateAudio,
+}
+
+var textToSpeechCmd = &cobra.Command{
+	Use:   "tts",
+	Short: "Convert text to speech using ElevenLabs",
+	Long:  `Convert text to speech using ElevenLabs API and save the result as an MP3 file`,
+	Run:   runTextToSpeech,
 }
 
 //go:embed schema.sql
@@ -278,6 +286,43 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	}
 
 	fmt.Printf("Audio file generated: %s\n", outputFileName)
+}
+
+func runTextToSpeech(cmd *cobra.Command, args []string) {
+	mainLogger, _, _, _ := createLoggers()
+
+	elevenlabsAPIKey := viper.GetString("elevenlabs_api_key")
+	if elevenlabsAPIKey == "" {
+		mainLogger.Fatal("missing ELEVENLABS_API_KEY or --elevenlabs-api-key=")
+	}
+
+	var text string
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewText().
+				Title("Enter the text to convert to speech").
+				Value(&text),
+		),
+	)
+
+	err := form.Run()
+	if err != nil {
+		mainLogger.Fatal("form input", "error", err.Error())
+	}
+
+	bot := &discordbot.Bot{} // Create a temporary Bot instance to use its TextToSpeech method
+	audioData, err := bot.TextToSpeech(text)
+	if err != nil {
+		mainLogger.Fatal("text to speech conversion", "error", err.Error())
+	}
+
+	outputFileName := fmt.Sprintf("tts_output_%s.mp3", time.Now().Format("20060102_150405"))
+	err = os.WriteFile(outputFileName, audioData, 0644)
+	if err != nil {
+		mainLogger.Fatal("write audio file", "error", err.Error())
+	}
+
+	fmt.Printf("Text-to-speech audio file generated: %s\n", outputFileName)
 }
 
 func generateOggOpusBlob(
