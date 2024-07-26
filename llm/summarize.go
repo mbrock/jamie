@@ -15,37 +15,64 @@ import (
 func SummarizeTranscript(
 	queries *db.Queries,
 	apiKey string,
-	duration time.Duration,
 	promptName string,
-	kontext string,
 ) (<-chan string, error) {
-	// Get transcriptions for the specified duration
-	transcriptions, err := queries.GetTranscriptionsForDuration(
+	// Get recent text messages
+	messages, err := queries.GetRecentTextMessages(
 		context.Background(),
-		duration,
+		db.GetRecentTextMessagesParams{
+			DiscordChannel: "", // We'll need to pass this parameter or modify the query
+			Limit:          50,
+		},
 	)
 	if err != nil {
-		return nil, fmt.Errorf("get transcriptions for duration: %w", err)
+		return nil, fmt.Errorf("get recent text messages: %w", err)
 	}
 
-	if len(transcriptions) == 0 {
-		return nil, fmt.Errorf(
-			"no transcriptions found for the last %s",
-			duration,
-		)
+	// Get recent recognitions
+	recognitions, err := queries.GetRecentRecognitions(
+		context.Background(),
+		50,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get recent recognitions: %w", err)
 	}
 
-	// Format transcriptions
-	var formattedTranscript strings.Builder
-	for _, t := range transcriptions {
-		formattedTranscript.WriteString(
-			fmt.Sprintf(
-				"%s %s: %s\n",
-				etc.JulianDayToTime(t.CreatedAt).Format("15:04:05"),
-				t.Emoji,
-				t.Text,
-			),
-		)
+	// Combine and sort messages and recognitions
+	type contextItem struct {
+		content   string
+		createdAt float64
+	}
+	var items []contextItem
+
+	for _, msg := range messages {
+		sender := "User"
+		if msg.IsBot {
+			sender = "Bot"
+		}
+		items = append(items, contextItem{
+			content:   fmt.Sprintf("%s: %s", sender, msg.Content),
+			createdAt: msg.CreatedAt,
+		})
+	}
+
+	for _, rec := range recognitions {
+		items = append(items, contextItem{
+			content:   fmt.Sprintf("%s: %s", rec.Emoji, rec.Text),
+			createdAt: rec.CreatedAt,
+		})
+	}
+
+	// Sort items by createdAt
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].createdAt < items[j].createdAt
+	})
+
+	// Format the context
+	var formattedContext strings.Builder
+	formattedContext.WriteString("Recent conversation and voice transcriptions:\n")
+	for _, item := range items {
+		formattedContext.WriteString(item.content + "\n")
 	}
 
 	// Create OpenAI client

@@ -360,8 +360,6 @@ func runSummarizeTranscript(cmd *cobra.Command, args []string) {
 	summaryChan, err := llm.SummarizeTranscript(
 		queries,
 		openaiAPIKey,
-		24*time.Hour,
-		"",
 		"",
 	)
 	if err != nil {
