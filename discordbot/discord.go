@@ -81,7 +81,11 @@ func NewBot(
 		commands:         make(map[string]CommandHandler),
 		voiceConnections: make(map[string]*discordsdk.VoiceConnection),
 		talkModeChannels: make(map[string]bool),
-		voicePacketChan:  make(chan *voicePacket, 100), // Adjust buffer size as needed
+		voicePacketChan: make(
+			chan *voicePacket,
+			// three seconds of 20ms frames
+			3*1000/20,
+		),
 	}
 
 	bot.registerCommands()
@@ -359,14 +363,6 @@ func (bot *Bot) handleVoicePacket(
 	maxRetries := 10
 	retryInterval := 100 * time.Millisecond
 
-	bot.log.Info("Starting voice state check and processing",
-		"SSRC", packet.SSRC,
-		"guildID", guildID,
-		"channelID", channelID,
-		"maxRetries", maxRetries,
-		"retryInterval", retryInterval,
-	)
-
 	for i := 0; i < maxRetries; i++ {
 		_, err := bot.db.GetVoiceState(
 			context.Background(),
@@ -377,10 +373,6 @@ func (bot *Bot) handleVoicePacket(
 		)
 
 		if err == nil {
-			bot.log.Info("Voice state found, processing packet",
-				"SSRC", packet.SSRC,
-				"attempt", i+1,
-			)
 			return bot.processVoicePacket(packet, guildID, channelID)
 		}
 
@@ -441,14 +433,6 @@ func (bot *Bot) processVoicePacket(
 	packet *discordsdk.Packet,
 	guildID, channelID string,
 ) error {
-	bot.log.Debug("Processing voice packet",
-		"guildID", guildID,
-		"channelID", channelID,
-		"SSRC", packet.SSRC,
-		"Sequence", packet.Sequence,
-		"Timestamp", packet.Timestamp,
-	)
-
 	streamID, err := bot.getOrCreateVoiceStream(packet, guildID, channelID)
 	if err != nil {
 		bot.log.Error("Failed to get or create voice stream",
@@ -461,12 +445,7 @@ func (bot *Bot) processVoicePacket(
 	}
 
 	packetID := etc.Gensym()
-	bot.log.Debug("Saving packet to database",
-		"packetID", packetID,
-		"streamID", streamID,
-		"Sequence", packet.Sequence,
-		"Timestamp", packet.Timestamp,
-	)
+
 	err = bot.db.SavePacket(
 		context.Background(),
 		db.SavePacketParams{
@@ -489,7 +468,6 @@ func (bot *Bot) processVoicePacket(
 		)
 	}
 
-	bot.log.Debug("Getting speech recognition session", "streamID", streamID)
 	session, err := bot.getSpeechRecognitionSession(streamID)
 	if err != nil {
 		bot.log.Error("Failed to get speech recognition session",
@@ -499,11 +477,6 @@ func (bot *Bot) processVoicePacket(
 		return fmt.Errorf("failed to get speech recognition session: %w", err)
 	}
 
-	bot.log.Debug(
-		"Sending audio to speech recognition service",
-		"streamID",
-		streamID,
-	)
 	err = session.SendAudio(packet.Opus)
 	if err != nil {
 		bot.log.Error("Failed to send audio to speech recognition service",
@@ -516,12 +489,6 @@ func (bot *Bot) processVoicePacket(
 		)
 	}
 
-	bot.log.Debug("Successfully processed voice packet",
-		"guildID", guildID,
-		"channelID", channelID,
-		"SSRC", packet.SSRC,
-		"streamID", streamID,
-	)
 	return nil
 }
 
@@ -652,7 +619,6 @@ func (bot *Bot) getSpeechRecognitionSession(
 	bot.mu.Lock()
 	defer bot.mu.Unlock()
 
-	bot.log.Debug("Getting speech recognition session", "streamID", streamID)
 	session, exists := bot.sessions[streamID]
 	if !exists {
 		bot.log.Info(
@@ -680,8 +646,6 @@ func (bot *Bot) getSpeechRecognitionSession(
 		bot.sessions[streamID] = session
 		bot.log.Info("Started speech recognition loop", "streamID", streamID)
 		go bot.speechRecognitionLoop(streamID, session)
-	} else {
-		bot.log.Debug("Using existing speech recognition session", "streamID", streamID)
 	}
 	return session, nil
 }
@@ -1312,7 +1276,11 @@ func (bot *Bot) speakSummary(
 }
 func (bot *Bot) processVoicePackets() {
 	for packet := range bot.voicePacketChan {
-		err := bot.handleVoicePacket(packet.packet, packet.guildID, packet.channelID)
+		err := bot.handleVoicePacket(
+			packet.packet,
+			packet.guildID,
+			packet.channelID,
+		)
 		if err != nil {
 			bot.log.Error(
 				"failed to process voice packet",
