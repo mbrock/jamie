@@ -1225,7 +1225,7 @@ func (bot *Bot) processYoCommand(
 		ctx,
 		openai.ChatCompletionRequest{
 			Model:     openai.GPT4o,
-			MaxTokens: 200,
+			MaxTokens: 120,
 			Messages: []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleSystem,
