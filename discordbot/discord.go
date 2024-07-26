@@ -54,7 +54,7 @@ type Bot struct {
 	voiceConnections         map[string]*discordsdk.VoiceConnection // channelID -> VoiceConnection
 	talkModeChannels         map[string]bool // channelID -> isTalkModeEnabled
 	mu                       sync.Mutex
-	voicePacketChan          chan *voicePacket
+	voicePacketChans         map[string]chan *voicePacket // channelID -> voice packet channel
 	audioBuffers             map[string]chan []byte // streamID -> channel of audio bytes
 	voiceStreamCache         map[string]string // cacheKey -> streamID
 	voiceStreamCacheMu       sync.RWMutex
@@ -88,11 +88,7 @@ func NewBot(
 		commands:         make(map[string]CommandHandler),
 		voiceConnections: make(map[string]*discordsdk.VoiceConnection),
 		talkModeChannels: make(map[string]bool),
-		voicePacketChan: make(
-			chan *voicePacket,
-			// three seconds of 20ms frames
-			3*1000/20,
-		),
+		voicePacketChans: make(map[string]chan *voicePacket),
 		audioBuffers:     make(map[string]chan []byte),
 		voiceStreamCache: make(map[string]string),
 	}
@@ -418,12 +414,21 @@ func (bot *Bot) handleVoiceConnection(
 		vc.AddHandler(bot.handleVoiceSpeakingUpdate)
 	}()
 
+	bot.mu.Lock()
+	packetChan, ok := bot.voicePacketChans[channelID]
+	if !ok {
+		packetChan = make(chan *voicePacket, 3*1000/20) // three seconds of 20ms frames
+		bot.voicePacketChans[channelID] = packetChan
+		go bot.processVoicePackets(channelID, packetChan)
+	}
+	bot.mu.Unlock()
+
 	for packet := range vc.OpusRecv {
 		select {
-		case bot.voicePacketChan <- &voicePacket{packet: packet, guildID: guildID, channelID: channelID}:
+		case packetChan <- &voicePacket{packet: packet, guildID: guildID, channelID: channelID}:
 			// Packet sent to channel successfully
 		default:
-			bot.log.Warn("voice packet channel full, dropping packet")
+			bot.log.Warn("voice packet channel full, dropping packet", "channelID", channelID)
 		}
 	}
 }
@@ -1265,8 +1270,8 @@ func (bot *Bot) speakSummary(
 	return nil
 }
 
-func (bot *Bot) processVoicePackets() {
-	for packet := range bot.voicePacketChan {
+func (bot *Bot) processVoicePackets(channelID string, packetChan <-chan *voicePacket) {
+	for packet := range packetChan {
 		err := bot.handleVoicePacket(
 			packet.packet,
 			packet.guildID,
