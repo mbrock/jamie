@@ -351,6 +351,22 @@ func (bot *Bot) handleVoiceSpeakingUpdate(
 		"userID", v.UserID,
 		"speaking", v.Speaking,
 	)
+
+	err := bot.db.UpsertVoiceState(context.Background(), db.UpsertVoiceStateParams{
+		ID:         etc.Gensym(),
+		Ssrc:       int64(v.SSRC),
+		UserID:     v.UserID,
+		IsSpeaking: v.Speaking,
+	})
+
+	if err != nil {
+		bot.log.Error(
+			"failed to upsert voice state",
+			"error", err.Error(),
+			"ssrc", v.SSRC,
+			"userID", v.UserID,
+		)
+	}
 }
 
 func (bot *Bot) processVoicePacket(

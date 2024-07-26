@@ -191,3 +191,15 @@ SELECT id, discord_channel, discord_user, content, is_bot, created_at
 FROM text_messages
 WHERE discord_channel = ? AND created_at BETWEEN ? AND ?
 ORDER BY created_at ASC;
+
+-- name: UpsertVoiceState :exec
+INSERT INTO voice_states (id, ssrc, user_id, is_speaking, updated_at)
+VALUES (?, ?, ?, ?, julianday('now'))
+ON CONFLICT (id) DO UPDATE SET
+    ssrc = excluded.ssrc,
+    user_id = excluded.user_id,
+    is_speaking = excluded.is_speaking,
+    updated_at = julianday('now');
+
+-- name: GetVoiceState :one
+SELECT * FROM voice_states WHERE ssrc = ? OR user_id = ?;

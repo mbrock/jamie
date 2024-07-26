@@ -84,3 +84,11 @@ CREATE TABLE IF NOT EXISTS text_messages (
     is_bot BOOLEAN NOT NULL,
     created_at REAL NOT NULL DEFAULT (julianday('now'))
 );
+
+CREATE TABLE IF NOT EXISTS voice_states (
+    id TEXT PRIMARY KEY,
+    ssrc INTEGER NOT NULL,
+    user_id TEXT NOT NULL,
+    is_speaking BOOLEAN NOT NULL,
+    updated_at REAL NOT NULL DEFAULT (julianday('now'))
+);
