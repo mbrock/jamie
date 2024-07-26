@@ -973,6 +973,37 @@ func (bot *Bot) handleYoCommand(
 
 	prompt := strings.Join(args, " ")
 
+	// Send an initial response to acknowledge the command
+	bot.sendAndSaveMessage(s, m.ChannelID, "Processing your request...")
+
+	// Start a goroutine to handle the command asynchronously
+	go func() {
+		response, err := bot.processYoCommand(s, m, prompt)
+		if err != nil {
+			bot.log.Error("Failed to process yo command", "error", err)
+			bot.sendAndSaveMessage(s, m.ChannelID, fmt.Sprintf("An error occurred: %v", err))
+			return
+		}
+
+		// Speak the response
+		err = bot.speakInChannel(s, m.ChannelID, response)
+		if err != nil {
+			bot.log.Error("Failed to speak response", "error", err)
+			bot.sendAndSaveMessage(s, m.ChannelID, fmt.Sprintf("Failed to speak the response: %v", err))
+		}
+
+		// Also send the response as a text message
+		bot.sendAndSaveMessage(s, m.ChannelID, response)
+	}()
+
+	return nil
+}
+
+func (bot *Bot) processYoCommand(
+	s *discordsdk.Session,
+	m *discordsdk.MessageCreate,
+	prompt string,
+) (string, error) {
 	// Fetch today's text messages and recognitions
 	messages, err := bot.db.GetRecentTextMessages(
 		context.Background(),
@@ -982,7 +1013,7 @@ func (bot *Bot) handleYoCommand(
 		},
 	)
 	if err != nil {
-		return fmt.Errorf("failed to fetch today's messages: %w", err)
+		return "", fmt.Errorf("failed to fetch today's messages: %w", err)
 	}
 
 	recognitions, err := bot.db.GetRecentRecognitions(
@@ -990,7 +1021,7 @@ func (bot *Bot) handleYoCommand(
 		50,
 	)
 	if err != nil {
-		return fmt.Errorf("failed to fetch recent recognitions: %w", err)
+		return "", fmt.Errorf("failed to fetch recent recognitions: %w", err)
 	}
 
 	// Create context from today's messages and recognitions
@@ -1063,21 +1094,10 @@ func (bot *Bot) handleYoCommand(
 	)
 
 	if err != nil {
-		return fmt.Errorf("failed to generate GPT-4 response: %w", err)
+		return "", fmt.Errorf("failed to generate GPT-4 response: %w", err)
 	}
 
-	response := resp.Choices[0].Message.Content
-
-	// Speak the response
-	err = bot.speakInChannel(s, m.ChannelID, response)
-	if err != nil {
-		return fmt.Errorf("failed to speak response: %w", err)
-	}
-
-	// Also send the response as a text message
-	bot.sendAndSaveMessage(s, m.ChannelID, response)
-
-	return nil
+	return resp.Choices[0].Message.Content, nil
 }
 
 func (bot *Bot) speakInChannel(
