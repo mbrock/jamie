@@ -77,7 +77,7 @@ func SummarizeTranscript(
 			},
 			{
 				Role:    openai.ChatMessageRoleUser,
-				Content: formattedTranscript.String(),
+				Content: fmt.Sprintf("Here's the context of recent conversations and transcriptions:\n\n%s\n\nNow, summarize the following transcript:\n\n%s", context, formattedTranscript.String()),
 			},
 		},
 		MaxTokens: 500,
