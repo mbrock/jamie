@@ -99,7 +99,9 @@ func NewBot(
 		),
 		audioBuffers:     make(map[string]chan []byte),
 		voiceStreamCache: make(map[string]string),
-		lastSpeakTime:    time.Now().Add(-20 * time.Second), // Initialize lastSpeakTime
+		lastSpeakTime: time.Now().
+			Add(-20 * time.Second),
+		// Initialize lastSpeakTime
 	}
 
 	bot.registerCommands()
@@ -1291,7 +1293,7 @@ func (bot *Bot) TextToSpeech(text string) ([]byte, error) {
 	}
 
 	bot.log.Debug("Sending request to ElevenLabs API")
-	audio, err := elevenlabs.TextToSpeech("D38z5RcWu1voky8WS1ja", ttsReq)
+	audio, err := elevenlabs.TextToSpeech("oWAxZDx7w5VEj9dCyTzz", ttsReq)
 	if err != nil {
 		bot.log.Error(
 			"Failed to generate speech from ElevenLabs",

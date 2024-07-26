@@ -34,7 +34,7 @@ func (c *DeepgramClient) Start(
 	}
 	tOptions := &interfaces.LiveTranscriptionOptions{
 		Model:          "nova-2",
-		Language:       "en-US",
+		Language:       "sv-SE",
 		Punctuate:      true,
 		Encoding:       "opus",
 		Channels:       2,
