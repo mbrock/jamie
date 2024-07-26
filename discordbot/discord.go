@@ -853,10 +853,8 @@ func (bot *Bot) handleYoCommand(
 		context.Background(),
 		db.GetTextMessagesInTimeRangeParams{
 			DiscordChannel: m.ChannelID,
-			StartTime: etc.TimeToJulianDay(
-				time.Now().Truncate(24 * time.Hour),
-			),
-			EndTime: etc.TimeToJulianDay(time.Now()),
+			StartTime:      etc.TimeToJulianDay(time.Now().Truncate(24 * time.Hour)),
+			EndTime:        etc.TimeToJulianDay(time.Now()),
 		},
 	)
 	if err != nil {
