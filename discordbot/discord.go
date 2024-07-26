@@ -60,10 +60,6 @@ type Bot struct {
 	voiceStreamCacheMu       sync.RWMutex
 	isSpeaking               bool
 	speakingMu               sync.Mutex
-	lastSpeechActivity       time.Time
-	lastSpeechActivityMu     sync.Mutex
-	lastSpeakTime            time.Time
-	lastSpeakTimeMu          sync.Mutex
 }
 
 type voicePacket struct {
@@ -257,11 +253,6 @@ func (bot *Bot) processSegment(
 
 	for draft := range segmentDrafts {
 		finalResult = draft
-
-		// Update last speech activity time
-		bot.lastSpeechActivityMu.Lock()
-		bot.lastSpeechActivity = time.Now()
-		bot.lastSpeechActivityMu.Unlock()
 	}
 
 	if finalResult.Text != "" {
@@ -270,10 +261,6 @@ func (bot *Bot) processSegment(
 			"text",
 			finalResult.Text,
 		)
-
-		bot.lastSpeechActivityMu.Lock()
-		elapsed := time.Since(bot.lastSpeechActivity)
-		bot.lastSpeechActivityMu.Unlock()
 
 		row, err := bot.db.GetChannelAndUsernameForStream(
 			context.Background(),
@@ -294,7 +281,7 @@ func (bot *Bot) processSegment(
 			isSpeaking := bot.isSpeaking
 			bot.speakingMu.Unlock()
 
-			if !isSpeaking && elapsed > silenceDuration {
+			if !isSpeaking {
 				bot.speakingMu.Lock()
 				bot.isSpeaking = true
 				bot.speakingMu.Unlock()
@@ -979,16 +966,6 @@ func (bot *Bot) handleYoCommand(
 	}
 
 	prompt := strings.Join(args, " ")
-
-	// Check if enough time has passed since the last speak
-	bot.lastSpeakTimeMu.Lock()
-	if time.Since(bot.lastSpeakTime) < 20*time.Second {
-		bot.lastSpeakTimeMu.Unlock()
-		bot.log.Debug("Skipping yo command due to recent speech")
-		return nil
-	}
-	bot.lastSpeakTime = time.Now()
-	bot.lastSpeakTimeMu.Unlock()
 
 	// Start a goroutine to handle the command asynchronously
 	go func() {
