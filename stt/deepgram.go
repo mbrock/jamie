@@ -69,10 +69,7 @@ func (c *DeepgramClient) Start(
 
 	session.client = client
 
-	connected := session.client.Connect()
-	if !connected {
-		return nil, fmt.Errorf("failed to connect to Deepgram")
-	}
+	go session.client.Connect()
 
 	return session, nil
 }
