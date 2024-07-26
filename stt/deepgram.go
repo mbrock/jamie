@@ -140,7 +140,6 @@ func (s *DeepgramSession) Message(mr *api.MessageResponse) error {
 	)
 
 	if s.currentTranscriptCh == nil {
-		s.logger.Info("next")
 		s.currentTranscriptCh = make(chan Result)
 		s.transcriptions <- s.currentTranscriptCh
 	}
@@ -150,8 +149,6 @@ func (s *DeepgramSession) Message(mr *api.MessageResponse) error {
 	if mr.IsFinal {
 		close(s.currentTranscriptCh)
 		s.currentTranscriptCh = nil
-	} else {
-		s.logger.Info("hear", "tmp", transcript)
 	}
 
 	return nil
@@ -178,12 +175,10 @@ func (s *DeepgramSession) Metadata(md *api.MetadataResponse) error {
 func (s *DeepgramSession) SpeechStarted(
 	ssr *api.SpeechStartedResponse,
 ) error {
-	s.logger.Debug("speech start", "timestamp", ssr.Timestamp)
 	return nil
 }
 
 func (s *DeepgramSession) UtteranceEnd(ur *api.UtteranceEndResponse) error {
-	s.logger.Debug("utterance end", "timestamp", ur.LastWordEnd)
 	return nil
 }
 

@@ -9,6 +9,7 @@ import (
 	"jamie/etc"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -521,7 +522,7 @@ func createLoggers() (mainLogger, discordLogger, deepgramLogger, sqlLogger *log.
 	logger.SetReportCaller(true)
 	logger.SetCallerFormatter(
 		func(file string, line int, funcName string) string {
-			return fmt.Sprintf("%s:%d", file, line)
+			return fmt.Sprintf("./%s:%d", filepath.Base(file), line)
 		},
 	)
 
