@@ -1,6 +1,9 @@
 # Build the main application
-build:
+build: db/query.sql.go db/db.go db/models.go
 	go build -gcflags="all=-N -l" -o jamie main.go
+
+db/query.sql.go db/db.go db/models.go: schema.sql query.sql sqlc.yaml
+	sqlc generate
 
 # Run the application with discord command
 run: build
