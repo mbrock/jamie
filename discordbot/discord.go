@@ -11,6 +11,7 @@ import (
 	"jamie/ogg"
 	"jamie/stt"
 	"jamie/txt"
+	"sort"
 	"strings"
 	"time"
 
@@ -174,7 +175,11 @@ func (bot *Bot) handleMessageCreate(
 	if commandName == "yo" {
 		// Turn on talk mode
 		bot.talkModeChannels[m.ChannelID] = true
-		bot.sendAndSaveMessage(s, m.ChannelID, "Talk mode activated. Type !yo again to deactivate.")
+		bot.sendAndSaveMessage(
+			s,
+			m.ChannelID,
+			"Talk mode activated. Type !yo again to deactivate.",
+		)
 		return
 	}
 
@@ -352,12 +357,15 @@ func (bot *Bot) handleVoiceSpeakingUpdate(
 		"speaking", v.Speaking,
 	)
 
-	err := bot.db.UpsertVoiceState(context.Background(), db.UpsertVoiceStateParams{
-		ID:         etc.Gensym(),
-		Ssrc:       int64(v.SSRC),
-		UserID:     v.UserID,
-		IsSpeaking: v.Speaking,
-	})
+	err := bot.db.UpsertVoiceState(
+		context.Background(),
+		db.UpsertVoiceStateParams{
+			ID:         etc.Gensym(),
+			Ssrc:       int64(v.SSRC),
+			UserID:     v.UserID,
+			IsSpeaking: v.Speaking,
+		},
+	)
 
 	if err != nil {
 		bot.log.Error(
@@ -908,7 +916,9 @@ func (bot *Bot) handleYoCommand(
 
 	// Create context from today's messages and recognitions
 	var contextBuilder strings.Builder
-	contextBuilder.WriteString("Today's conversation and voice transcriptions:\n")
+	contextBuilder.WriteString(
+		"Today's conversation and voice transcriptions:\n",
+	)
 
 	// Combine and sort messages and recognitions
 	type contextItem struct {
