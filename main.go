@@ -1,6 +1,7 @@
 package main
 
 import (
+	"jamie/discordbot/tts"
 	"context"
 	"database/sql"
 	_ "embed"
