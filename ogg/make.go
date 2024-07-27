@@ -79,9 +79,6 @@ func GenerateOggOpusBlob(
 }
 
 func ConvertToOpus(mp3Data []byte) ([][]byte, error) {
-	log.Info("Starting ConvertToOpus function")
-
-	// Create a temporary file for the input MP3
 	inputFile, err := os.CreateTemp("", "input*.mp3")
 	if err != nil {
 		log.Error("Failed to create temporary input file", "error", err)
@@ -93,8 +90,6 @@ func ConvertToOpus(mp3Data []byte) ([][]byte, error) {
 
 	defer inputFile.Close()
 
-	log.Info("Created temporary input file", "filename", inputFile.Name())
-
 	// Write MP3 data to the temporary file
 	if _, err := inputFile.Write(mp3Data); err != nil {
 		log.Error("Failed to write MP3 data to temporary file", "error", err)
@@ -104,7 +99,6 @@ func ConvertToOpus(mp3Data []byte) ([][]byte, error) {
 		)
 	}
 
-	log.Info("Wrote MP3 data to temporary file", "size", len(mp3Data))
 	inputFile.Sync()
 	inputFile.Close()
 
@@ -120,8 +114,6 @@ func ConvertToOpus(mp3Data []byte) ([][]byte, error) {
 
 	defer outputFile.Close()
 
-	log.Info("Created temporary output file", "filename", outputFile.Name())
-
 	// Use ffmpeg to convert MP3 to 48kHz stereo PCM
 	cmd := exec.Command(
 		"ffmpeg",
@@ -136,7 +128,6 @@ func ConvertToOpus(mp3Data []byte) ([][]byte, error) {
 		"s16le",
 		outputFile.Name(),
 	)
-	log.Info("Executing ffmpeg command", "command", cmd.String())
 
 	// Capture both stdout and stderr
 	var stdout, stderr bytes.Buffer
@@ -160,23 +151,17 @@ func ConvertToOpus(mp3Data []byte) ([][]byte, error) {
 
 	// Log the output
 	log.Info(
-		"ffmpeg output",
-		"stdout",
-		stdout.String(),
-		"stderr",
-		stderr.String(),
+		"ffmpeg",
+		"status",
+		"ok",
 	)
 
-	// Read the converted PCM data
 	pcmData, err := os.ReadFile(outputFile.Name())
 	if err != nil {
 		log.Error("Failed to read converted PCM data", "error", err)
 		return nil, fmt.Errorf("failed to read converted PCM data: %w", err)
 	}
 
-	log.Info("Read converted PCM data", "size", len(pcmData))
-
-	// Create an Opus encoder
 	encoder, err := gopus.NewEncoder(48000, 2, gopus.Audio)
 	if err != nil {
 		log.Error("Failed to create Opus encoder", "error", err)
@@ -212,10 +197,5 @@ func ConvertToOpus(mp3Data []byte) ([][]byte, error) {
 		opusPackets = append(opusPackets, opusData)
 	}
 
-	log.Info(
-		"ConvertToOpus completed successfully",
-		"packetCount",
-		len(opusPackets),
-	)
 	return opusPackets, nil
 }

@@ -416,24 +416,21 @@ func (bot *Bot) speakInChannel(
 	}
 
 	// Send Opus packets
-	bot.log.Debug("Starting to send Opus packets")
 	err = voiceChannel.Conn.Speaking(true)
 	if err != nil {
 		return err
 	}
-
-	bot.log.Debug("Speaking true")
+	bot.log.Debug("status", "speaking", "true")
 
 	for _, packet := range opusPackets {
 		voiceChannel.Conn.OpusSend <- packet
 	}
 
-	bot.log.Debug("Finished sending all Opus packets")
-
 	err = voiceChannel.Conn.Speaking(false)
 	if err != nil {
 		return err
 	}
+	bot.log.Debug("status", "speaking", "false")
 
 	return nil
 }
