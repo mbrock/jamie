@@ -56,6 +56,7 @@ func init() {
 	rootCmd.PersistentFlags().String("openai-api-key", "", "OpenAI API key")
 	rootCmd.PersistentFlags().
 		String("elevenlabs-api-key", "", "ElevenLabs API key")
+	rootCmd.PersistentFlags().Int("http-port", 8081, "HTTP server port")
 
 	// Bind flags to viper
 	viper.BindPFlag(
