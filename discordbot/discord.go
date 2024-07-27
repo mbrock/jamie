@@ -291,6 +291,11 @@ func (bot *Bot) handleTalkCommand(
 			return
 		}
 
+		if response == "" {
+			// The LLM decided to wait, so we don't send any response
+			return
+		}
+
 		err = bot.speakInChannel(m.ChannelID, response)
 		if err != nil {
 			bot.log.Error("Failed to speak response", "error", err)
@@ -387,7 +392,7 @@ func (bot *Bot) processTalkCommand(
 	response, err := bot.languageModel.ChatCompletion(
 		ctx,
 		(&llm.ChatCompletionRequest{
-			SystemPrompt: "Briefly respond, verbally, fluently, simply, without any formatting.",
+			SystemPrompt: "Briefly respond, verbally, fluently, simply, without any formatting. If you think it's more appropriate to let the user talk more before responding, start your response with <wait/>.",
 			MaxTokens:    300,
 		}).WithUserMessage(contextBuilder.String()),
 	)
@@ -410,7 +415,12 @@ func (bot *Bot) processTalkCommand(
 		fullResponse.WriteString(chunk.Content)
 	}
 
-	return fullResponse.String(), nil
+	responseStr := fullResponse.String()
+	if strings.HasPrefix(responseStr, "<wait/>") {
+		return "", nil // Return an empty string to indicate no immediate response
+	}
+
+	return responseStr, nil
 }
 
 func (bot *Bot) GenerateOggOpusBlob(
