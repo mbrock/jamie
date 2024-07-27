@@ -29,6 +29,7 @@ type ChatCompletionRequest struct {
 	SystemPrompt string
 	UserMessages []string
 	MaxTokens    int
+	Temperature  float32
 }
 
 func (r *ChatCompletionRequest) WithUserMessage(
@@ -64,10 +65,11 @@ func (o *OpenAILanguageModel) ChatCompletion(
 	resp, err := o.client.CreateChatCompletionStream(
 		ctx,
 		openai.ChatCompletionRequest{
-			Model:     openai.GPT4o,
-			Messages:  messages,
-			MaxTokens: req.MaxTokens,
-			Stream:    true,
+			Model:       openai.GPT4o,
+			Messages:    messages,
+			MaxTokens:   req.MaxTokens,
+			Temperature: req.Temperature,
+			Stream:      true,
 		},
 	)
 
