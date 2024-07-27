@@ -20,6 +20,7 @@ import (
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
+	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -42,6 +43,7 @@ func init() {
 	rootCmd.AddCommand(summarizeTranscriptCmd)
 	rootCmd.AddCommand(generateAudioCmd)
 	rootCmd.AddCommand(generateOggCmd)
+	rootCmd.AddCommand(listStreamsCmd)
 
 	// Add persistent flags
 	rootCmd.PersistentFlags().String("discord-token", "", "Discord bot token")
@@ -117,6 +119,13 @@ var generateOggCmd = &cobra.Command{
 	Long:  `Generate an OGG Opus audio file from a specified stream ID`,
 	Args:  cobra.ExactArgs(1),
 	Run:   runGenerateOgg,
+}
+
+var listStreamsCmd = &cobra.Command{
+	Use:   "ls",
+	Short: "List streams in a cool table",
+	Long:  `List all streams with their details in a formatted table`,
+	Run:   runListStreams,
 }
 
 //go:embed schema.sql
@@ -319,6 +328,50 @@ func runGenerateOgg(cmd *cobra.Command, args []string) {
 	}
 
 	fmt.Printf("OGG file generated: %s\n", outputFileName)
+}
+
+func runListStreams(cmd *cobra.Command, args []string) {
+	mainLogger, _, _, sqlLogger := createLoggers()
+
+	queries, err := InitDB(sqlLogger)
+	if err != nil {
+		mainLogger.Fatal("initialize database", "error", err.Error())
+	}
+
+	streams, err := queries.GetAllStreamsWithDetails(context.Background())
+	if err != nil {
+		mainLogger.Fatal("fetch streams", "error", err.Error())
+	}
+
+	if len(streams) == 0 {
+		fmt.Println("No streams found.")
+		return
+	}
+
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetHeader([]string{"ID", "Created At", "Channel", "Speaker", "Duration", "Transcriptions"})
+	table.SetBorder(false)
+	table.SetCenterSeparator("|")
+	table.SetColumnSeparator("|")
+	table.SetRowSeparator("-")
+	table.SetAutoWrapText(false)
+	table.SetAutoFormatHeaders(true)
+
+	for _, stream := range streams {
+		createdAt := etc.JulianDayToTime(stream.CreatedAt).Format("2006-01-02 15:04:05")
+		duration := fmt.Sprintf("%.2f s", stream.Duration)
+		
+		table.Append([]string{
+			stream.ID,
+			createdAt,
+			stream.DiscordChannel,
+			stream.Username,
+			duration,
+			fmt.Sprintf("%d", stream.TranscriptionCount),
+		})
+	}
+
+	table.Render()
 }
 
 func generateOggOpusBlob(
