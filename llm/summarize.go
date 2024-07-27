@@ -115,36 +115,38 @@ func SummarizeTranscript(
 		Stream:    true,
 	}
 
-	stream, err := client.CreateChatCompletionStream(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf(
-			"error creating chat completion stream: %w",
-			err,
-		)
-	}
-
 	summaryChannel := make(chan string, 50)
 
 	go func() {
 		defer close(summaryChannel)
-		defer stream.Close()
 
-		for {
-			response, err := stream.Recv()
-			if err != nil {
-				if err == io.EOF {
-					return
-				}
-				summaryChannel <- fmt.Sprintf("Stream error: %v", err)
-				return
-			}
+		response, err := languageModel.GenerateResponse(formattedContext.String())
+		if err != nil {
+			summaryChannel <- fmt.Sprintf("Error generating response: %v", err)
+			return
+		}
 
-			if len(response.Choices) > 0 &&
-				response.Choices[0].Delta.Content != "" {
-				summaryChannel <- response.Choices[0].Delta.Content
-			}
+		// Split the response into smaller chunks
+		chunks := splitIntoChunks(response, 100) // Split into chunks of 100 characters
+
+		for _, chunk := range chunks {
+			summaryChannel <- chunk
 		}
 	}()
 
 	return summaryChannel, nil
+}
+func splitIntoChunks(s string, chunkSize int) []string {
+	var chunks []string
+	runes := []rune(s)
+
+	for i := 0; i < len(runes); i += chunkSize {
+		end := i + chunkSize
+		if end > len(runes) {
+			end = len(runes)
+		}
+		chunks = append(chunks, string(runes[i:end]))
+	}
+
+	return chunks
 }
