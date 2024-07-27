@@ -5,15 +5,22 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
+	"html/template"
+	"jamie/db"
 	"jamie/etc"
 	"jamie/llm"
+	"jamie/ogg"
 	"jamie/tts"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/gorilla/mux"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/glamour"
@@ -137,6 +144,110 @@ var httpServerCmd = &cobra.Command{
 	Use:   "http",
 	Short: "Start the HTTP server",
 	Run:   runHTTPServer,
+}
+
+func runHTTPServer(cmd *cobra.Command, args []string) {
+	mainLogger, _, _, sqlLogger := createLoggers()
+
+	queries, err := InitDB(sqlLogger)
+	if err != nil {
+		mainLogger.Fatal("initialize database", "error", err.Error())
+	}
+
+	r := mux.NewRouter()
+
+	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		streams, err := queries.GetAllStreamsWithDetails(r.Context())
+		if err != nil {
+			http.Error(w, "Failed to fetch streams", http.StatusInternalServerError)
+			return
+		}
+
+		tmpl := template.Must(template.New("streams").Parse(`
+		<html>
+			<head>
+				<title>Streams</title>
+				<style>
+					table {
+						border-collapse: collapse;
+						width: 100%;
+					}
+					th, td {
+						border: 1px solid black;
+						padding: 8px;
+						text-align: left;
+					}
+					th {
+						background-color: #f2f2f2;
+					}
+				</style>
+			</head>
+			<body>
+				<h1>Streams</h1>
+				<table>
+					<tr>
+						<th>ID</th>
+						<th>Created At</th>
+						<th>Channel</th>
+						<th>Speaker</th>
+						<th>Duration</th>
+						<th>Transcriptions</th>
+						<th>Action</th>
+					</tr>
+					{{range .}}
+					<tr>
+						<td>{{.ID}}</td>
+						<td>{{.CreatedAt}}</td>
+						<td>{{.DiscordChannel}}</td>
+						<td>{{.Username}}</td>
+						<td>{{.Duration}} samples</td>
+						<td>{{.TranscriptionCount}}</td>
+						<td><a href="/stream/{{.ID}}">Generate OGG</a></td>
+					</tr>
+					{{end}}
+				</table>
+			</body>
+		</html>
+		`))
+
+		err = tmpl.Execute(w, streams)
+		if err != nil {
+			http.Error(w, "Failed to render template", http.StatusInternalServerError)
+			return
+		}
+	})
+
+	r.HandleFunc("/stream/{id}", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		streamID := vars["id"]
+
+		stream, err := queries.GetStream(r.Context(), streamID)
+		if err != nil {
+			http.Error(w, "Stream not found", http.StatusNotFound)
+			return
+		}
+
+		oggData, err := ogg.GenerateOggOpusBlob(
+			mainLogger,
+			queries,
+			streamID,
+			stream.SampleIdxOffset,
+			stream.SampleIdxOffset+10000*48000, // 10000 seconds of audio
+		)
+		if err != nil {
+			http.Error(w, "Failed to generate OGG file", http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.ogg\"", streamID))
+		w.Header().Set("Content-Type", "audio/ogg")
+		w.Header().Set("Content-Length", strconv.Itoa(len(oggData)))
+		w.Write(oggData)
+	})
+
+	port := viper.GetInt("http_port")
+	mainLogger.Info(fmt.Sprintf("Starting HTTP server on port %d", port))
+	http.ListenAndServe(fmt.Sprintf(":%d", port), r)
 }
 
 //go:embed schema.sql
