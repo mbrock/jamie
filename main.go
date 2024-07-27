@@ -2,6 +2,7 @@ package main
 
 import (
 	"jamie/discordbot/tts"
+	"jamie/discordbot/llm"
 	"context"
 	"database/sql"
 	_ "embed"
@@ -22,7 +23,6 @@ import (
 
 	"jamie/db"
 	"jamie/discordbot"
-	"jamie/llm"
 	"jamie/ogg"
 	"jamie/stt"
 )
@@ -451,12 +451,13 @@ func runDiscord(cmd *cobra.Command, args []string) {
 	}
 
 	speechGenerator := tts.NewElevenLabsSpeechGenerator(elevenlabsAPIKey)
+	languageModel := llm.NewOpenAILanguageModel(openaiAPIKey)
 	bot, err = discordbot.NewBot(
 		discordToken,
 		transcriptionService,
 		speechGenerator,
+		languageModel,
 		discordLogger,
-		openaiAPIKey,
 		queries,
 		guildID,
 	)

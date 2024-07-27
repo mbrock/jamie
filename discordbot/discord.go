@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"jamie/db"
 	"jamie/discordbot/tts"
+	"jamie/discordbot/llm"
 	"jamie/etc"
-	"jamie/llm"
 	"jamie/ogg"
 	"jamie/stt"
 	"sort"
@@ -16,7 +16,6 @@ import (
 
 	dis "github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
-	"github.com/sashabaranov/go-openai"
 )
 
 type CommandHandler func(*dis.Session, *dis.MessageCreate, []string) error
@@ -27,7 +26,7 @@ type Bot struct {
 	log  *log.Logger
 	conn *dis.Session
 
-	openaiAPIKey string
+	languageModel llm.LanguageModel
 
 	speechRecognition stt.SpeechRecognition
 	speechRecognizers map[string]stt.SpeechRecognizer // streamID
@@ -47,15 +46,15 @@ func NewBot(
 	discordToken string,
 	speechRecognitionService stt.SpeechRecognition,
 	speechGenerationService tts.SpeechGenerator,
+	languageModelService llm.LanguageModel,
 	logger *log.Logger,
-	openaiAPIKey string,
 	db *db.Queries,
 	guildID string,
 ) (*Bot, error) {
 	bot := &Bot{
 		db:                db,
 		log:               logger,
-		openaiAPIKey:      openaiAPIKey,
+		languageModel:     languageModelService,
 		commands:          make(map[string]CommandHandler),
 		speechRecognition: speechRecognitionService,
 		speechRecognizers: make(
