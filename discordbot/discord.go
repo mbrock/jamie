@@ -41,7 +41,7 @@ type Bot struct {
 	isSpeaking bool
 	speakingMu sync.Mutex
 
-	guildID string
+	guildID         string
 	defaultTalkMode bool
 
 	cancelSpeech chan struct{}
@@ -69,10 +69,10 @@ func NewBot(
 		speechRecognizers: make(
 			map[string]stt.SpeechRecognizer,
 		),
-		speechGenerator:   speechGenerationService,
-		guildID:           guildID,
-		defaultTalkMode:   talkMode,
-		cancelSpeech:      make(chan struct{}, 1),
+		speechGenerator: speechGenerationService,
+		guildID:         guildID,
+		defaultTalkMode: talkMode,
+		cancelSpeech:    make(chan struct{}, 1),
 	}
 
 	bot.registerCommands()
@@ -368,9 +368,7 @@ func (bot *Bot) processTalkCommand(
 	for _, rec := range recognitions {
 		items = append(items, contextItem{
 			content: fmt.Sprintf(
-				"[%s UTC] %s: %s",
-				etc.JulianDayToTime(rec.CreatedAt).UTC().
-					Format("2006-01-02 15:04:05"),
+				"%s: %s",
 				rec.DiscordUsername,
 				rec.Text,
 			),
@@ -428,17 +426,6 @@ func (bot *Bot) processTalkCommand(
 
 	responseStr := fullResponse.String()
 	responseStr = strings.TrimSpace(responseStr)
-
-	// Check if the response is a short listening indicator
-	words := strings.Fields(responseStr)
-	if len(words) <= 3 {
-		bot.log.Info(
-			"LLM provided a listening indicator",
-			"response",
-			responseStr,
-		)
-		return responseStr, nil
-	}
 
 	bot.log.Info("Final LLM response", "response", responseStr)
 	return responseStr, nil

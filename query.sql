@@ -224,7 +224,7 @@ SELECT
     s.ended_at,
     dcs.discord_channel,
     ds.username,
-    COALESCE(r.duration, 0) as duration,
+    COALESCE(r.duration, 0.0) as duration,
     COALESCE(r.transcription_count, 0) as transcription_count
 FROM 
     streams s

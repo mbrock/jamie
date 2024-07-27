@@ -55,11 +55,14 @@ func (o *OpenAILanguageModel) ChatCompletion(
 		},
 	}
 
+	fmt.Printf("System message: %s\n", req.SystemPrompt)
+
 	for _, userMessage := range req.UserMessages {
 		messages = append(messages, openai.ChatCompletionMessage{
 			Role:    openai.ChatMessageRoleUser,
 			Content: userMessage,
 		})
+		fmt.Printf("User message: %s\n", userMessage)
 	}
 
 	resp, err := o.client.CreateChatCompletionStream(

@@ -384,10 +384,10 @@ func (bot *Bot) speakInChannel(
 		bot.speakingMu.Unlock()
 	}()
 
-	// Check if enough time has passed since the last valid transcription
-	if time.Since(bot.lastValidTranscription) < 3*time.Second {
-		time.Sleep(3*time.Second - time.Since(bot.lastValidTranscription))
-	}
+	// // Check if enough time has passed since the last valid transcription
+	// if time.Since(bot.lastValidTranscription) < 3*time.Second {
+	// 	time.Sleep(3*time.Second - time.Since(bot.lastValidTranscription))
+	// }
 
 	// Find the voice channel associated with the text channel
 	channel, err := bot.discord.Channel(channelID)
