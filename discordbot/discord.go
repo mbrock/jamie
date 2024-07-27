@@ -43,6 +43,8 @@ type Bot struct {
 
 	guildID string
 	defaultTalkMode bool
+
+	cancelSpeech chan struct{}
 }
 
 func NewBot(
@@ -68,6 +70,7 @@ func NewBot(
 		speechGenerator:   speechGenerationService,
 		guildID:           guildID,
 		defaultTalkMode:   talkMode,
+		cancelSpeech:      make(chan struct{}, 1),
 	}
 
 	bot.registerCommands()

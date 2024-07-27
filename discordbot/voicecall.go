@@ -482,62 +482,68 @@ func (bot *Bot) speakInChannel(
 			960*2*2,
 		) // 20ms of audio at 48kHz, 2 channels, 2 bytes per sample
 		for {
-			n, err := io.ReadFull(ffmpegOutReader, buffer)
-			if err == io.EOF && n == 0 {
-				break
-			}
-			if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-				bot.log.Error("Failed to read audio data", "error", err)
+			select {
+			case <-bot.cancelSpeech:
+				bot.log.Info("Speech cancelled due to new transcription")
 				return
-			}
-
-			// Add the read data to the audioBuffer
-			copy(audioBuffer[bufferIndex:], buffer[:n])
-			bufferIndex += n
-
-			// If we have at least 1 second of audio, start processing
-			if bufferIndex >= len(audioBuffer) {
-				// Process the entire audioBuffer
-				for i := 0; i < len(audioBuffer); i += 960 * 2 * 2 {
-					end := i + 960*2*2
-					if end > len(audioBuffer) {
-						end = len(audioBuffer)
-					}
-					chunk := audioBuffer[i:end]
-
-					// Convert byte buffer to int16 slice
-					pcmBuffer := make([]int16, len(chunk)/2)
-					for j := 0; j < len(chunk); j += 2 {
-						pcmBuffer[j/2] = int16(
-							chunk[j],
-						) | int16(
-							chunk[j+1],
-						)<<8
-					}
-
-					// If we got a partial read, pad with silence
-					if len(pcmBuffer) < 960*2 {
-						pcmBuffer = append(
-							pcmBuffer,
-							make([]int16, 960*2-len(pcmBuffer))...)
-					}
-
-					// Encode the frame to Opus
-					opusData, err := encoder.Encode(pcmBuffer, 960, 32000)
-					if err != nil {
-						bot.log.Error("Failed to encode Opus", "error", err)
-						return
-					}
-
-					voiceChannel.Conn.OpusSend <- opusData
+			default:
+				n, err := io.ReadFull(ffmpegOutReader, buffer)
+				if err == io.EOF && n == 0 {
+					break
+				}
+				if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+					bot.log.Error("Failed to read audio data", "error", err)
+					return
 				}
 
-				// Reset the buffer index
-				bufferIndex = 0
-			}
+				// Add the read data to the audioBuffer
+				copy(audioBuffer[bufferIndex:], buffer[:n])
+				bufferIndex += n
 
-			if err == io.EOF || err == io.ErrUnexpectedEOF {
-				break
+				// If we have at least 1 second of audio, start processing
+				if bufferIndex >= len(audioBuffer) {
+					// Process the entire audioBuffer
+					for i := 0; i < len(audioBuffer); i += 960 * 2 * 2 {
+						end := i + 960*2*2
+						if end > len(audioBuffer) {
+							end = len(audioBuffer)
+						}
+						chunk := audioBuffer[i:end]
+
+						// Convert byte buffer to int16 slice
+						pcmBuffer := make([]int16, len(chunk)/2)
+						for j := 0; j < len(chunk); j += 2 {
+							pcmBuffer[j/2] = int16(
+								chunk[j],
+							) | int16(
+								chunk[j+1],
+							)<<8
+						}
+
+						// If we got a partial read, pad with silence
+						if len(pcmBuffer) < 960*2 {
+							pcmBuffer = append(
+								pcmBuffer,
+								make([]int16, 960*2-len(pcmBuffer))...)
+						}
+
+						// Encode the frame to Opus
+						opusData, err := encoder.Encode(pcmBuffer, 960, 32000)
+						if err != nil {
+							bot.log.Error("Failed to encode Opus", "error", err)
+							return
+						}
+
+						voiceChannel.Conn.OpusSend <- opusData
+					}
+
+					// Reset the buffer index
+					bufferIndex = 0
+				}
+
+				if err == io.EOF || err == io.ErrUnexpectedEOF {
+					break
+				}
 			}
 		}
 
@@ -577,10 +583,17 @@ func (bot *Bot) speakInChannel(
 		speakingDone <- struct{}{}
 	}()
 
-	// Wait for FFmpeg to finish
-	err = ffmpegCmd.Wait()
-	if err != nil {
-		return fmt.Errorf("FFmpeg error: %w", err)
+	// Wait for FFmpeg to finish or for cancellation
+	select {
+	case <-bot.cancelSpeech:
+		bot.log.Info("Speech cancelled due to new transcription")
+		ffmpegCmd.Process.Kill()
+	case <-speakingDone:
+		// Wait for FFmpeg to finish
+		err = ffmpegCmd.Wait()
+		if err != nil {
+			return fmt.Errorf("FFmpeg error: %w", err)
+		}
 	}
 
 	bot.log.Debug("ffmpeg", "status", "finished")
@@ -588,8 +601,6 @@ func (bot *Bot) speakInChannel(
 	if err := ffmpegOut.Close(); err != nil {
 		bot.log.Error("failed to close ffmpeg stdout", "error", err)
 	}
-
-	<-speakingDone
 
 	return nil
 }
