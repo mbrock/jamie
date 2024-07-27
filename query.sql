@@ -174,7 +174,7 @@ SELECT name, prompt FROM system_prompts;
 -- name: GetPacketsForStreamInSampleRange :many
 SELECT payload, sample_idx
 FROM packets
-WHERE stream = @Stream AND sample_idx BETWEEN @SampleIdx AND @SampleIdx_2
+WHERE stream = ? AND sample_idx >= ? AND sample_idx <= ?
 ORDER BY sample_idx ASC;
 
 -- name: SaveTextMessage :exec
