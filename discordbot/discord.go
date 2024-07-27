@@ -133,7 +133,13 @@ func (bot *Bot) saveTextMessage(message *dis.Message) error {
 }
 
 func (bot *Bot) handleGuildCreate(_ *dis.Session, event *dis.GuildCreate) {
-	bot.log.Info("joined guild", "name", event.Guild.Name, "id", event.Guild.ID)
+	bot.log.Info(
+		"joined guild",
+		"name",
+		event.Guild.Name,
+		"id",
+		event.Guild.ID,
+	)
 	if bot.guildID == "" || bot.guildID == event.Guild.ID {
 		bot.joinAllVoiceChannels(event.Guild.ID)
 	}
