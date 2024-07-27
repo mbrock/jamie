@@ -451,11 +451,12 @@ func (bot *Bot) speakInChannel(
 			return
 		}
 
+		// Buffer to store 1 second of audio (48000 samples * 2 channels * 2 bytes per sample)
+		audioBuffer := make([]byte, 48000*2*2)
+		bufferIndex := 0
+
 		// Read and encode audio data in chunks
-		buffer := make(
-			[]byte,
-			960*2*2,
-		) // 20ms of audio at 48kHz, 2 channels, 2 bytes per sample
+		buffer := make([]byte, 960*2*2) // 20ms of audio at 48kHz, 2 channels, 2 bytes per sample
 		for {
 			n, err := io.ReadFull(ffmpegOutReader, buffer)
 			if err == io.EOF && n == 0 {
@@ -466,31 +467,80 @@ func (bot *Bot) speakInChannel(
 				return
 			}
 
-			// Convert byte buffer to int16 slice
-			pcmBuffer := make([]int16, n/2)
-			for i := 0; i < n; i += 2 {
-				pcmBuffer[i/2] = int16(buffer[i]) | int16(buffer[i+1])<<8
-			}
+			// Add the read data to the audioBuffer
+			copy(audioBuffer[bufferIndex:], buffer[:n])
+			bufferIndex += n
 
-			// If we got a partial read, pad with silence
-			if n < len(buffer) {
-				for i := n / 2; i < len(pcmBuffer); i++ {
-					pcmBuffer[i] = 0
+			// If we have at least 1 second of audio, start processing
+			if bufferIndex >= len(audioBuffer) {
+				// Process the entire audioBuffer
+				for i := 0; i < len(audioBuffer); i += 960*2*2 {
+					end := i + 960*2*2
+					if end > len(audioBuffer) {
+						end = len(audioBuffer)
+					}
+					chunk := audioBuffer[i:end]
+
+					// Convert byte buffer to int16 slice
+					pcmBuffer := make([]int16, len(chunk)/2)
+					for j := 0; j < len(chunk); j += 2 {
+						pcmBuffer[j/2] = int16(chunk[j]) | int16(chunk[j+1])<<8
+					}
+
+					// If we got a partial read, pad with silence
+					if len(pcmBuffer) < 960*2 {
+						pcmBuffer = append(pcmBuffer, make([]int16, 960*2-len(pcmBuffer))...)
+					}
+
+					// Encode the frame to Opus
+					opusData, err := encoder.Encode(pcmBuffer, 960, 32000)
+					if err != nil {
+						bot.log.Error("failed to encode Opus", "error", err)
+						return
+					}
+
+					// Send the Opus packet
+					voiceChannel.Conn.OpusSend <- opusData
 				}
-			}
 
-			// Encode the frame to Opus
-			opusData, err := encoder.Encode(pcmBuffer, 960, 32000)
-			if err != nil {
-				bot.log.Error("failed to encode Opus", "error", err)
-				return
+				// Reset the buffer index
+				bufferIndex = 0
 			}
-
-			// Send the Opus packet
-			voiceChannel.Conn.OpusSend <- opusData
 
 			if err == io.EOF || err == io.ErrUnexpectedEOF {
 				break
+			}
+		}
+
+		// Process any remaining audio in the buffer
+		if bufferIndex > 0 {
+			for i := 0; i < bufferIndex; i += 960*2*2 {
+				end := i + 960*2*2
+				if end > bufferIndex {
+					end = bufferIndex
+				}
+				chunk := audioBuffer[i:end]
+
+				// Convert byte buffer to int16 slice
+				pcmBuffer := make([]int16, len(chunk)/2)
+				for j := 0; j < len(chunk); j += 2 {
+					pcmBuffer[j/2] = int16(chunk[j]) | int16(chunk[j+1])<<8
+				}
+
+				// If we got a partial read, pad with silence
+				if len(pcmBuffer) < 960*2 {
+					pcmBuffer = append(pcmBuffer, make([]int16, 960*2-len(pcmBuffer))...)
+				}
+
+				// Encode the frame to Opus
+				opusData, err := encoder.Encode(pcmBuffer, 960, 32000)
+				if err != nil {
+					bot.log.Error("failed to encode Opus", "error", err)
+					return
+				}
+
+				// Send the Opus packet
+				voiceChannel.Conn.OpusSend <- opusData
 			}
 		}
 	}()
