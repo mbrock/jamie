@@ -44,7 +44,7 @@ type Bot struct {
 
 	commands map[string]CommandHandler // command name
 
-	voiceChannels map[string]*VoiceChannel // channelID
+	voiceChannel *VoiceChannel // current voice channel
 
 	streamIdCache   map[string]string // cacheKey -> streamID
 	streamIdCacheMu sync.RWMutex
@@ -353,6 +353,13 @@ func (bot *Bot) joinVoiceChannel(guildID, channelID string) error {
 	bot.mu.Lock()
 	defer bot.mu.Unlock()
 
+	if bot.voiceChannel != nil {
+		// If already in a voice channel, leave it first
+		if err := bot.voiceChannel.Conn.Disconnect(); err != nil {
+			bot.log.Error("failed to disconnect from previous voice channel", "error", err)
+		}
+	}
+
 	vc, err := bot.conn.ChannelVoiceJoin(guildID, channelID, false, false)
 	if err != nil {
 		return fmt.Errorf("failed to join voice channel: %w", err)
@@ -364,15 +371,14 @@ func (bot *Bot) joinVoiceChannel(guildID, channelID string) error {
 		chan *voicePacket,
 		3*1000/20,
 	) // three seconds of 20ms frames
-	voiceChannel := &VoiceChannel{
+	bot.voiceChannel = &VoiceChannel{
 		Conn:                vc,
 		TalkMode:            false,
 		InboundAudioPackets: packetChan,
 	}
-	bot.voiceChannels[channelID] = voiceChannel
 
 	go bot.processVoicePackets(packetChan)
-	go bot.handleVoiceConnection(voiceChannel, guildID, channelID)
+	go bot.handleVoiceConnection(bot.voiceChannel, guildID, channelID)
 	return nil
 }
 
@@ -1083,28 +1089,14 @@ func (bot *Bot) speakInChannel(
 
 	bot.mu.Lock()
 	// Join the voice channel if not already connected
-	voiceChannel, ok := bot.voiceChannels[voiceChannelID]
-	if !ok {
-		vc, err := bot.conn.ChannelVoiceJoin(
-			guild.ID,
-			voiceChannelID,
-			false,
-			true,
-		)
+	if bot.voiceChannel == nil || bot.voiceChannel.Conn.ChannelID != voiceChannelID {
+		err := bot.joinVoiceChannel(guild.ID, voiceChannelID)
 		if err != nil {
 			bot.mu.Unlock()
 			return fmt.Errorf("failed to join voice channel: %w", err)
 		}
-		packetChan := make(chan *voicePacket, 3*1000/20)
-		voiceChannel = &VoiceChannel{
-			Conn:                vc,
-			TalkMode:            false,
-			InboundAudioPackets: packetChan,
-		}
-		bot.voiceChannels[voiceChannelID] = voiceChannel
-		go bot.processVoicePackets(packetChan)
-		go bot.handleVoiceConnection(voiceChannel, guild.ID, voiceChannelID)
 	}
+	voiceChannel := bot.voiceChannel
 	bot.mu.Unlock()
 
 	// Generate speech
@@ -1193,22 +1185,14 @@ func (bot *Bot) speakSummary(
 
 	// Join the voice channel if not already connected
 	bot.mu.Lock()
-	voiceChannel, ok := bot.voiceChannels[voiceChannelID]
-	if !ok {
-		vc, err := s.ChannelVoiceJoin(m.GuildID, voiceChannelID, false, true)
+	if bot.voiceChannel == nil || bot.voiceChannel.Conn.ChannelID != voiceChannelID {
+		err := bot.joinVoiceChannel(m.GuildID, voiceChannelID)
 		if err != nil {
 			bot.mu.Unlock()
 			return fmt.Errorf("failed to join voice channel: %w", err)
 		}
-		voiceChannel = &VoiceChannel{
-			Conn:                vc,
-			TalkMode:            false,
-			InboundAudioPackets: make(chan *voicePacket, 3*1000/20),
-		}
-		bot.voiceChannels[voiceChannelID] = voiceChannel
-		go bot.processVoicePackets(voiceChannel.InboundAudioPackets)
-		go bot.handleVoiceConnection(voiceChannel, m.GuildID, voiceChannelID)
 	}
+	voiceChannel := bot.voiceChannel
 	bot.mu.Unlock()
 
 	// Generate speech
