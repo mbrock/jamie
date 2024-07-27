@@ -130,28 +130,26 @@ func (bot *Bot) acceptInboundAudioPacket(
 		)
 	}
 
-	bot.mu.Lock()
-	audioBuffer, ok := bot.audioBuffers[streamID]
-	if !ok {
-		audioBuffer = make(
-			chan []byte,
-			100,
-		) // Adjust buffer size as needed
-		bot.audioBuffers[streamID] = audioBuffer
-		go bot.processAudioBuffer(streamID, audioBuffer)
-	}
-	bot.mu.Unlock()
-
-	select {
-	case audioBuffer <- packet.Opus:
-		return nil
-	default:
-		bot.log.Warn("Audio buffer full, dropping packet",
+	session, err := bot.getSpeechRecognitionSession(streamID)
+	if err != nil {
+		bot.log.Error("Failed to get speech recognition session",
+			"error", err,
 			"streamID", streamID,
-			"SSRC", packet.SSRC,
 		)
-		return nil
+		return err
 	}
+
+	err = session.SendAudio(packet.Opus)
+	if err != nil {
+		bot.log.Error(
+			"Failed to send audio to speech recognition service",
+			"error", err,
+			"streamID", streamID,
+		)
+		return err
+	}
+
+	return nil
 }
 
 func (bot *Bot) handleVoiceSpeakingUpdate(
@@ -464,29 +462,3 @@ func (bot *Bot) processVoicePackets(packetChan <-chan *voicePacket) {
 	}
 }
 
-func (bot *Bot) processAudioBuffer(
-	streamID string,
-	audioBuffer <-chan []byte,
-) {
-	session, err := bot.getSpeechRecognitionSession(streamID)
-	if err != nil {
-		bot.log.Error("Failed to get speech recognition session",
-			"error", err,
-			"streamID", streamID,
-		)
-		return
-	}
-
-	for audioData := range audioBuffer {
-		err := session.SendAudio(audioData)
-		if err != nil {
-			bot.log.Error(
-				"Failed to send audio to speech recognition service",
-				"error",
-				err,
-				"streamID",
-				streamID,
-			)
-		}
-	}
-}
