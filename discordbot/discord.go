@@ -393,8 +393,8 @@ func (bot *Bot) processTalkCommand(
 	response, err := bot.languageModel.ChatCompletion(
 		ctx,
 		(&llm.ChatCompletionRequest{
-			SystemPrompt: "Look, just talk like a normal person, if I'm in the middle of a sentence don't say 'Hello! How can I help?' or 'I'm sorry, I didn't catch that.' Just say 'Right on.' or 'Whoa!' or something, if you're prompted to reply in the middle of a sentence, but more importantly, when we are actually waiting and explicitly asking your something, you need to actually say something interesting.",
-			MaxTokens:    500,
+			SystemPrompt: "What is going on? Answer with ONE sentence, or ask ONE question, or just emote in some way.",
+			MaxTokens:    100,
 			Temperature:  0.73,
 		}).WithUserMessage(contextBuilder.String()),
 	)
