@@ -2,6 +2,7 @@ package discordbot
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"jamie/db"
@@ -10,6 +11,7 @@ import (
 	"jamie/llm"
 	"jamie/ogg"
 	"jamie/stt"
+	"os/exec"
 	"sort"
 	"strings"
 	"sync"
