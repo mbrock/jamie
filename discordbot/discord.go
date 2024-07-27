@@ -15,7 +15,7 @@ import (
 	"sync"
 	"time"
 
-	discordsdk "github.com/bwmarrin/discordgo"
+	dis "github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
 	"github.com/haguro/elevenlabs-go"
 	"github.com/sashabaranov/go-openai"
@@ -38,64 +38,70 @@ func (bot *Bot) saveTextMessage(
 	)
 }
 
-type CommandHandler func(*discordsdk.Session, *discordsdk.MessageCreate, []string) error
+type CommandHandler func(*dis.Session, *dis.MessageCreate, []string) error
 
 type VoiceChannel struct {
-	Connection      *discordsdk.VoiceConnection
-	TalkModeEnabled bool
-	PacketChan      chan *voicePacket
+	Conn                *dis.VoiceConnection
+	TalkMode            bool
+	InboundAudioPackets chan *voicePacket
 }
 
 type Bot struct {
-	log                      *log.Logger
-	conn                     *discordsdk.Session
-	speechRecognitionService stt.SpeechRecognitionService
-	db                       *db.Queries
-	sessions                 map[string]stt.LiveTranscriptionSession // streamID -> LiveTranscriptionSession
-	openaiAPIKey             string
-	commands                 map[string]CommandHandler // command name -> CommandHandler function
-	elevenLabsAPIKey         string
-	voiceChannels            map[string]*VoiceChannel // channelID -> VoiceChannel
-	mu                       sync.Mutex
-	audioBuffers             map[string]chan []byte // streamID -> channel of audio bytes
-	voiceStreamCache         map[string]string      // cacheKey -> streamID
-	voiceStreamCacheMu       sync.RWMutex
-	isSpeaking               bool
-	speakingMu               sync.Mutex
+	mu   sync.Mutex
+	db   *db.Queries
+	log  *log.Logger
+	conn *dis.Session
+
+	openaiAPIKey     string
+	elevenLabsAPIKey string
+
+	speechRecognition stt.SpeechRecognition
+	speechRecognizers map[string]stt.SpeechRecognizer // streamID
+	audioBuffers      map[string]chan []byte          // streamID
+
+	commands map[string]CommandHandler // command name
+
+	voiceChannels map[string]*VoiceChannel // channelID
+
+	streamIdCache   map[string]string // cacheKey -> streamID
+	streamIdCacheMu sync.RWMutex
+
+	isSpeaking bool
+	speakingMu sync.Mutex
 }
 
 type voicePacket struct {
-	packet    *discordsdk.Packet
+	packet    *dis.Packet
 	guildID   string
 	channelID string
 }
 
 func NewBot(
 	discordToken string,
-	speechRecognitionService stt.SpeechRecognitionService,
+	speechRecognitionService stt.SpeechRecognition,
 	logger *log.Logger,
 	openaiAPIKey string,
 	elevenLabsAPIKey string,
 	db *db.Queries,
 ) (*Bot, error) {
 	bot := &Bot{
-		speechRecognitionService: speechRecognitionService,
-		log:                      logger,
-		db:                       db,
-		sessions: make(
-			map[string]stt.LiveTranscriptionSession,
+		db:                db,
+		log:               logger,
+		openaiAPIKey:      openaiAPIKey,
+		elevenLabsAPIKey:  elevenLabsAPIKey,
+		commands:          make(map[string]CommandHandler),
+		voiceChannels:     make(map[string]*VoiceChannel),
+		audioBuffers:      make(map[string]chan []byte),
+		speechRecognition: speechRecognitionService,
+		speechRecognizers: make(
+			map[string]stt.SpeechRecognizer,
 		),
-		openaiAPIKey:     openaiAPIKey,
-		elevenLabsAPIKey: elevenLabsAPIKey,
-		commands:         make(map[string]CommandHandler),
-		voiceChannels:    make(map[string]*VoiceChannel),
-		audioBuffers:     make(map[string]chan []byte),
-		voiceStreamCache: make(map[string]string),
+		streamIdCache: make(map[string]string),
 	}
 
 	bot.registerCommands()
 
-	dg, err := discordsdk.New("Bot " + discordToken)
+	dg, err := dis.New("Bot " + discordToken)
 	if err != nil {
 		return nil, fmt.Errorf("error creating Discord session: %w", err)
 	}
@@ -110,11 +116,7 @@ func NewBot(
 	}
 
 	bot.conn = dg
-	bot.log.Info(
-		"bot started",
-		"username",
-		bot.conn.State.User.Username,
-	)
+	bot.log.Info("bot", "username", bot.conn.State.User.Username)
 	return bot, nil
 }
 
@@ -129,10 +131,7 @@ func (bot *Bot) Close() error {
 	return bot.conn.Close()
 }
 
-func (bot *Bot) handleGuildCreate(
-	_ *discordsdk.Session,
-	event *discordsdk.GuildCreate,
-) {
+func (bot *Bot) handleGuildCreate(_ *dis.Session, event *dis.GuildCreate) {
 	bot.log.Info("joined guild", "guild", event.Guild.Name)
 	err := bot.joinAllVoiceChannels(event.Guild.ID)
 	if err != nil {
@@ -145,15 +144,13 @@ func (bot *Bot) handleGuildCreate(
 }
 
 func (bot *Bot) handleMessageCreate(
-	s *discordsdk.Session,
-	m *discordsdk.MessageCreate,
+	s *dis.Session,
+	m *dis.MessageCreate,
 ) {
-	// Ignore messages from the bot itself
 	if m.Author.ID == s.State.User.ID {
 		return
 	}
 
-	// Save the received message
 	err := bot.saveTextMessage(
 		m.ChannelID,
 		m.Author.ID,
@@ -178,10 +175,10 @@ func (bot *Bot) handleMessageCreate(
 	voiceChannel, ok := bot.voiceChannels[m.ChannelID]
 	bot.mu.Unlock()
 
-	if ok && voiceChannel.TalkModeEnabled {
+	if ok && voiceChannel.TalkMode {
 		if strings.HasPrefix(m.Content, "!talk") {
 			// Turn off talk mode
-			voiceChannel.TalkModeEnabled = false
+			voiceChannel.TalkMode = false
 			bot.sendAndSaveMessage(s, m.ChannelID, "Talk mode deactivated.")
 		} else {
 			// Process the message as a talk command
@@ -205,7 +202,7 @@ func (bot *Bot) handleMessageCreate(
 	if commandName == "talk" {
 		// Turn on talk mode
 		if ok {
-			voiceChannel.TalkModeEnabled = true
+			voiceChannel.TalkMode = true
 			bot.sendAndSaveMessage(
 				s,
 				m.ChannelID,
@@ -282,7 +279,7 @@ func (bot *Bot) processSegment(
 		bot.mu.Lock()
 		voiceChannel, ok := bot.voiceChannels[row.DiscordChannel]
 		bot.mu.Unlock()
-		if ok && voiceChannel.TalkModeEnabled {
+		if ok && voiceChannel.TalkMode {
 			bot.speakingMu.Lock()
 			isSpeaking := bot.isSpeaking
 			bot.speakingMu.Unlock()
@@ -292,10 +289,10 @@ func (bot *Bot) processSegment(
 				bot.isSpeaking = true
 				bot.speakingMu.Unlock()
 				// Process the speech recognition result as a yo command
-				bot.handleTalkCommand(bot.conn, &discordsdk.MessageCreate{
-					Message: &discordsdk.Message{
+				bot.handleTalkCommand(bot.conn, &dis.MessageCreate{
+					Message: &dis.Message{
 						ChannelID: row.DiscordChannel,
-						Author: &discordsdk.User{
+						Author: &dis.User{
 							Username: row.Username,
 						},
 						Content: finalResult.Text,
@@ -357,7 +354,7 @@ func (bot *Bot) processSegment(
 }
 
 func (bot *Bot) sendAndSaveMessage(
-	s *discordsdk.Session,
+	s *dis.Session,
 	channelID, content string,
 ) {
 	msg, err := s.ChannelMessageSend(channelID, content)
@@ -394,9 +391,9 @@ func (bot *Bot) joinVoiceChannel(guildID, channelID string) error {
 		3*1000/20,
 	) // three seconds of 20ms frames
 	voiceChannel := &VoiceChannel{
-		Connection:      vc,
-		TalkModeEnabled: false,
-		PacketChan:      packetChan,
+		Conn:                vc,
+		TalkMode:            false,
+		InboundAudioPackets: packetChan,
 	}
 	bot.voiceChannels[channelID] = voiceChannel
 
@@ -412,7 +409,7 @@ func (bot *Bot) joinAllVoiceChannels(guildID string) error {
 	}
 
 	for _, channel := range channels {
-		if channel.Type == discordsdk.ChannelTypeGuildVoice {
+		if channel.Type == dis.ChannelTypeGuildVoice {
 			err := bot.joinVoiceChannel(guildID, channel.ID)
 			if err != nil {
 				bot.log.Error(
@@ -434,12 +431,12 @@ func (bot *Bot) handleVoiceConnection(
 	guildID, channelID string,
 ) {
 	go func() {
-		voiceChannel.Connection.AddHandler(bot.handleVoiceSpeakingUpdate)
+		voiceChannel.Conn.AddHandler(bot.handleVoiceSpeakingUpdate)
 	}()
 
-	for packet := range voiceChannel.Connection.OpusRecv {
+	for packet := range voiceChannel.Conn.OpusRecv {
 		select {
-		case voiceChannel.PacketChan <- &voicePacket{packet: packet, guildID: guildID, channelID: channelID}:
+		case voiceChannel.InboundAudioPackets <- &voicePacket{packet: packet, guildID: guildID, channelID: channelID}:
 			// Packet sent to channel successfully
 		default:
 			bot.log.Warn(
@@ -452,7 +449,7 @@ func (bot *Bot) handleVoiceConnection(
 }
 
 func (bot *Bot) handleVoicePacket(
-	packet *discordsdk.Packet,
+	packet *dis.Packet,
 	guildID, channelID string,
 ) error {
 	streamID, err := bot.ensureVoiceStream(
@@ -499,8 +496,8 @@ func (bot *Bot) handleVoicePacket(
 }
 
 func (bot *Bot) handleVoiceSpeakingUpdate(
-	_ *discordsdk.VoiceConnection,
-	v *discordsdk.VoiceSpeakingUpdate,
+	_ *dis.VoiceConnection,
+	v *dis.VoiceSpeakingUpdate,
 ) {
 	bot.log.Info(
 		"speaking update",
@@ -530,7 +527,7 @@ func (bot *Bot) handleVoiceSpeakingUpdate(
 }
 
 func (bot *Bot) ensureVoiceStream(
-	packet *discordsdk.Packet,
+	packet *dis.Packet,
 	guildID, channelID string,
 ) (string, error) {
 	cacheKey := fmt.Sprintf("%d:%s:%s", packet.SSRC, guildID, channelID)
@@ -544,22 +541,22 @@ func (bot *Bot) ensureVoiceStream(
 		return "", err
 	}
 
-	bot.voiceStreamCacheMu.Lock()
-	bot.voiceStreamCache[cacheKey] = streamID
-	bot.voiceStreamCacheMu.Unlock()
+	bot.streamIdCacheMu.Lock()
+	bot.streamIdCache[cacheKey] = streamID
+	bot.streamIdCacheMu.Unlock()
 
 	return streamID, nil
 }
 
 func (bot *Bot) getCachedVoiceStream(cacheKey string) (string, bool) {
-	bot.voiceStreamCacheMu.RLock()
-	streamID, ok := bot.voiceStreamCache[cacheKey]
-	bot.voiceStreamCacheMu.RUnlock()
+	bot.streamIdCacheMu.RLock()
+	streamID, ok := bot.streamIdCache[cacheKey]
+	bot.streamIdCacheMu.RUnlock()
 	return streamID, ok
 }
 
 func (bot *Bot) findOrSaveVoiceStream(
-	packet *discordsdk.Packet,
+	packet *dis.Packet,
 	guildID, channelID string,
 ) (string, error) {
 	discordID, username, streamID, err := bot.findVoiceStream(
@@ -591,7 +588,7 @@ func (bot *Bot) findOrSaveVoiceStream(
 }
 
 func (bot *Bot) findVoiceStream(
-	packet *discordsdk.Packet,
+	packet *dis.Packet,
 	guildID string,
 	channelID string,
 ) (string, string, string, error) {
@@ -625,7 +622,7 @@ func (bot *Bot) findVoiceStream(
 }
 
 func (bot *Bot) createNewVoiceStream(
-	packet *discordsdk.Packet,
+	packet *dis.Packet,
 	guildID, channelID, discordID, username string,
 ) (string, error) {
 	streamID := etc.Gensym()
@@ -713,14 +710,14 @@ func (bot *Bot) getUsernameFromID(userID string) string {
 
 func (bot *Bot) getSpeechRecognitionSession(
 	streamID string,
-) (stt.LiveTranscriptionSession, error) {
+) (stt.SpeechRecognizer, error) {
 	bot.mu.Lock()
 	defer bot.mu.Unlock()
 
-	session, exists := bot.sessions[streamID]
+	session, exists := bot.speechRecognizers[streamID]
 	if !exists {
 		var err error
-		session, err = bot.speechRecognitionService.Start(
+		session, err = bot.speechRecognition.Start(
 			context.Background(),
 		)
 		if err != nil {
@@ -736,7 +733,7 @@ func (bot *Bot) getSpeechRecognitionSession(
 				err,
 			)
 		}
-		bot.sessions[streamID] = session
+		bot.speechRecognizers[streamID] = session
 		go bot.speechRecognitionLoop(streamID, session)
 	}
 	return session, nil
@@ -744,7 +741,7 @@ func (bot *Bot) getSpeechRecognitionSession(
 
 func (bot *Bot) speechRecognitionLoop(
 	streamID string,
-	session stt.LiveTranscriptionSession,
+	session stt.SpeechRecognizer,
 ) {
 	for segmentDrafts := range session.Receive() {
 		bot.processSegment(streamID, segmentDrafts)
@@ -758,8 +755,8 @@ func (bot *Bot) speechRecognitionLoop(
 }
 
 func (bot *Bot) handleVoiceStateUpdate(
-	_ *discordsdk.Session,
-	v *discordsdk.VoiceStateUpdate,
+	_ *dis.Session,
+	v *dis.VoiceStateUpdate,
 ) {
 	if v.UserID == bot.conn.State.User.ID {
 		return
@@ -767,8 +764,8 @@ func (bot *Bot) handleVoiceStateUpdate(
 }
 
 func (bot *Bot) handleSummaryCommand(
-	s *discordsdk.Session,
-	m *discordsdk.MessageCreate,
+	s *dis.Session,
+	m *dis.MessageCreate,
 	args []string,
 ) error {
 	bot.log.Info(
@@ -790,11 +787,6 @@ func (bot *Bot) handleSummaryCommand(
 	}
 	if len(args) > 1 && args[1] == "speak" {
 		speak = true
-	}
-
-	context, err := bot.getRecentConversationContext(m.ChannelID)
-	if err != nil {
-		return fmt.Errorf("failed to get recent conversation context: %w", err)
 	}
 
 	// Generate summary
@@ -847,73 +839,8 @@ func (bot *Bot) handleSummaryCommand(
 	return nil
 }
 
-func (bot *Bot) getRecentConversationContext(channelID string) (string, error) {
-	// Fetch recent text messages and recognitions
-	messages, err := bot.db.GetRecentTextMessages(
-		context.Background(),
-		db.GetRecentTextMessagesParams{
-			DiscordChannel: channelID,
-			Limit:          100,
-		},
-	)
-	if err != nil {
-		return "", fmt.Errorf("failed to fetch recent messages: %w", err)
-	}
-
-	recognitions, err := bot.db.GetRecentRecognitions(
-		context.Background(),
-		2000,
-	)
-	if err != nil {
-		return "", fmt.Errorf("failed to fetch recent recognitions: %w", err)
-	}
-
-	// Create context from recent messages and recognitions
-	var contextBuilder strings.Builder
-	contextBuilder.WriteString(
-		"Recent conversation and voice transcriptions:\n",
-	)
-
-	// Combine and sort messages and recognitions
-	type contextItem struct {
-		content   string
-		createdAt float64
-	}
-	var items []contextItem
-
-	for _, msg := range messages {
-		sender := "User"
-		if msg.IsBot {
-			sender = "Bot"
-		}
-		items = append(items, contextItem{
-			content:   fmt.Sprintf("%s: %s", sender, msg.Content),
-			createdAt: msg.CreatedAt,
-		})
-	}
-
-	for _, rec := range recognitions {
-		items = append(items, contextItem{
-			content:   fmt.Sprintf("%s: %s", rec.Emoji, rec.Text),
-			createdAt: rec.CreatedAt,
-		})
-	}
-
-	// Sort items by createdAt
-	sort.Slice(items, func(i, j int) bool {
-		return items[i].createdAt < items[j].createdAt
-	})
-
-	// Add sorted items to context
-	for _, item := range items {
-		contextBuilder.WriteString(item.content + "\n")
-	}
-
-	return contextBuilder.String(), nil
-}
-
 func (bot *Bot) updateMessageWithSummary(
-	s *discordsdk.Session,
+	s *dis.Session,
 	channelID string,
 	messageID string,
 	summaryChan <-chan string,
@@ -950,8 +877,8 @@ func (bot *Bot) updateMessageWithSummary(
 }
 
 func (bot *Bot) handlePromptCommand(
-	s *discordsdk.Session,
-	m *discordsdk.MessageCreate,
+	s *dis.Session,
+	m *dis.MessageCreate,
 	args []string,
 ) error {
 	if len(args) < 2 {
@@ -982,8 +909,8 @@ func (bot *Bot) handlePromptCommand(
 }
 
 func (bot *Bot) handleListPromptsCommand(
-	s *discordsdk.Session,
-	m *discordsdk.MessageCreate,
+	s *dis.Session,
+	m *dis.MessageCreate,
 	args []string,
 ) error {
 	prompts, err := bot.db.ListSystemPrompts(context.Background())
@@ -1014,8 +941,8 @@ func (bot *Bot) handleListPromptsCommand(
 }
 
 func (bot *Bot) handleTalkCommand(
-	s *discordsdk.Session,
-	m *discordsdk.MessageCreate,
+	s *dis.Session,
+	m *dis.MessageCreate,
 	args []string,
 ) error {
 	if len(args) == 0 {
@@ -1056,8 +983,8 @@ func (bot *Bot) handleTalkCommand(
 }
 
 func (bot *Bot) processTalkCommand(
-	_ *discordsdk.Session,
-	m *discordsdk.MessageCreate,
+	_ *dis.Session,
+	m *dis.MessageCreate,
 	prompt string,
 ) (string, error) {
 	// Fetch today's text messages and recognitions
@@ -1157,7 +1084,7 @@ func (bot *Bot) processTalkCommand(
 }
 
 func (bot *Bot) speakInChannel(
-	s *discordsdk.Session,
+	s *dis.Session,
 	channelID string,
 	text string,
 ) error {
@@ -1205,9 +1132,9 @@ func (bot *Bot) speakInChannel(
 		}
 		packetChan := make(chan *voicePacket, 3*1000/20)
 		voiceChannel = &VoiceChannel{
-			Connection:      vc,
-			TalkModeEnabled: false,
-			PacketChan:      packetChan,
+			Conn:                vc,
+			TalkMode:            false,
+			InboundAudioPackets: packetChan,
 		}
 		bot.voiceChannels[voiceChannelID] = voiceChannel
 		go bot.processVoicePackets(packetChan)
@@ -1229,12 +1156,12 @@ func (bot *Bot) speakInChannel(
 
 	// Send Opus packets
 	bot.log.Debug("Starting to send Opus packets")
-	voiceChannel.Connection.Speaking(true)
+	voiceChannel.Conn.Speaking(true)
 	bot.log.Debug("Speaking true")
-	defer voiceChannel.Connection.Speaking(false)
+	defer voiceChannel.Conn.Speaking(false)
 
 	for _, packet := range opusPackets {
-		voiceChannel.Connection.OpusSend <- packet
+		voiceChannel.Conn.OpusSend <- packet
 	}
 
 	bot.log.Debug("Finished sending all Opus packets")
@@ -1277,8 +1204,8 @@ func (bot *Bot) TextToSpeech(text string) ([]byte, error) {
 }
 
 func (bot *Bot) speakSummary(
-	s *discordsdk.Session,
-	m *discordsdk.MessageCreate,
+	s *dis.Session,
+	m *dis.MessageCreate,
 	summary string,
 ) error {
 	// Find the voice channel the user is in
@@ -1309,12 +1236,12 @@ func (bot *Bot) speakSummary(
 			return fmt.Errorf("failed to join voice channel: %w", err)
 		}
 		voiceChannel = &VoiceChannel{
-			Connection:      vc,
-			TalkModeEnabled: false,
-			PacketChan:      make(chan *voicePacket, 3*1000/20),
+			Conn:                vc,
+			TalkMode:            false,
+			InboundAudioPackets: make(chan *voicePacket, 3*1000/20),
 		}
 		bot.voiceChannels[voiceChannelID] = voiceChannel
-		go bot.processVoicePackets(voiceChannel.PacketChan)
+		go bot.processVoicePackets(voiceChannel.InboundAudioPackets)
 		go bot.handleVoiceConnection(voiceChannel, m.GuildID, voiceChannelID)
 	}
 	bot.mu.Unlock()
@@ -1332,11 +1259,11 @@ func (bot *Bot) speakSummary(
 	}
 
 	// Send Opus packets
-	voiceChannel.Connection.Speaking(true)
-	defer voiceChannel.Connection.Speaking(false)
+	voiceChannel.Conn.Speaking(true)
+	defer voiceChannel.Conn.Speaking(false)
 
 	for _, packet := range opusPackets {
-		voiceChannel.Connection.OpusSend <- packet
+		voiceChannel.Conn.OpusSend <- packet
 	}
 
 	return nil

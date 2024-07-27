@@ -28,7 +28,7 @@ func NewDeepgramClient(
 
 func (c *DeepgramClient) Start(
 	ctx context.Context,
-) (LiveTranscriptionSession, error) {
+) (SpeechRecognizer, error) {
 	cOptions := &interfaces.ClientOptions{
 		EnableKeepAlive: true,
 	}

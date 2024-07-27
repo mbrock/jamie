@@ -11,12 +11,12 @@ type Result struct {
 	Confidence float64
 }
 
-type LiveTranscriptionSession interface {
+type SpeechRecognizer interface {
 	Stop() error
 	SendAudio(data []byte) error
 	Receive() <-chan chan Result
 }
 
-type SpeechRecognitionService interface {
-	Start(ctx context.Context) (LiveTranscriptionSession, error)
+type SpeechRecognition interface {
+	Start(ctx context.Context) (SpeechRecognizer, error)
 }
