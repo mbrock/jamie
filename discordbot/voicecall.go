@@ -458,8 +458,14 @@ func (bot *Bot) speakInChannel(
 			return fmt.Errorf("failed to read audio data: %w", err)
 		}
 
+		// Convert byte buffer to int16 slice
+		pcmBuffer := make([]int16, 960*2)
+		for i := 0; i < len(buffer); i += 2 {
+			pcmBuffer[i/2] = int16(buffer[i]) | int16(buffer[i+1])<<8
+		}
+
 		// Encode the frame to Opus
-		opusData, err := encoder.Encode(buffer, 960, 32000)
+		opusData, err := encoder.Encode(pcmBuffer, 960, 32000)
 		if err != nil {
 			return fmt.Errorf("failed to encode Opus: %w", err)
 		}
