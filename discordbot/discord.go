@@ -2,8 +2,6 @@ package discordbot
 
 import (
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"jamie/db"
 	"jamie/etc"
@@ -23,12 +21,6 @@ import (
 
 type CommandHandler func(*dis.Session, *dis.MessageCreate, []string) error
 
-type VoiceChannel struct {
-	Conn                *dis.VoiceConnection
-	TalkMode            bool
-	InboundAudioPackets chan *voicePacket
-}
-
 type Bot struct {
 	mu   sync.Mutex
 	db   *db.Queries
@@ -44,7 +36,7 @@ type Bot struct {
 
 	commands map[string]CommandHandler // command name
 
-	voiceChannel *VoiceChannel // current voice channel
+	voiceCall *VoiceCall
 
 	streamIdCache   map[string]string // cacheKey -> streamID
 	streamIdCacheMu sync.RWMutex
@@ -53,12 +45,6 @@ type Bot struct {
 	speakingMu sync.Mutex
 
 	guildID string
-}
-
-type voicePacket struct {
-	packet    *dis.Packet
-	guildID   string
-	channelID string
 }
 
 func NewBot(
@@ -76,7 +62,6 @@ func NewBot(
 		openaiAPIKey:      openaiAPIKey,
 		elevenLabsAPIKey:  elevenLabsAPIKey,
 		commands:          make(map[string]CommandHandler),
-		voiceChannels:     make(map[string]*VoiceChannel),
 		audioBuffers:      make(map[string]chan []byte),
 		speechRecognition: speechRecognitionService,
 		speechRecognizers: make(
@@ -166,20 +151,6 @@ func (bot *Bot) handleMessageCreate(
 	}
 	bot.speakingMu.Unlock()
 
-	bot.mu.Lock()
-	voiceChannel, ok := bot.voiceChannels[m.ChannelID]
-	bot.mu.Unlock()
-
-	if ok && voiceChannel.TalkMode {
-		if strings.HasPrefix(m.Content, "!talk") {
-			voiceChannel.TalkMode = false
-			bot.sendAndSaveMessage(m.ChannelID, "Talk mode deactivated.")
-		} else {
-			bot.handleTalkCommand(s, m, strings.Fields(m.Content))
-		}
-		return
-	}
-
 	if !strings.HasPrefix(m.Content, "!") {
 		return
 	}
@@ -191,12 +162,20 @@ func (bot *Bot) handleMessageCreate(
 
 	commandName := args[0]
 	if commandName == "talk" {
-		if ok {
-			voiceChannel.TalkMode = true
-			bot.sendAndSaveMessage(
-				m.ChannelID,
-				"Talk mode activated. Type !talk again to deactivate.",
-			)
+		if bot.voiceCall != nil {
+			if bot.voiceCall.TalkMode {
+				bot.voiceCall.TalkMode = false
+				bot.sendAndSaveMessage(
+					m.ChannelID,
+					"Talk mode deactivated.",
+				)
+			} else {
+				bot.voiceCall.TalkMode = true
+				bot.sendAndSaveMessage(
+					m.ChannelID,
+					"Talk mode activated. Type !talk again to deactivate.",
+				)
+			}
 		} else {
 			bot.sendAndSaveMessage(
 				m.ChannelID,
@@ -231,109 +210,6 @@ func (bot *Bot) handleMessageCreate(
 	}
 }
 
-func (bot *Bot) processPendingRecognitionResult(
-	streamID string,
-	drafts <-chan stt.Result,
-) {
-	var result stt.Result
-	for draft := range drafts {
-		result = draft
-	}
-
-	if result.Text != "" {
-		bot.log.Info("recognized", "text", result.Text)
-
-		row, err := bot.db.GetChannelAndUsernameForStream(
-			context.Background(),
-			streamID,
-		)
-		if err != nil {
-			bot.log.Error(
-				"Failed to get channel and username",
-				"error", err.Error(),
-				"streamID", streamID,
-			)
-			return
-		}
-
-		bot.mu.Lock()
-		voiceChannel, ok := bot.voiceChannels[row.DiscordChannel]
-		bot.mu.Unlock()
-
-		if ok && voiceChannel.TalkMode {
-			bot.speakingMu.Lock()
-			isSpeaking := bot.isSpeaking
-			bot.speakingMu.Unlock()
-
-			if !isSpeaking {
-				bot.speakingMu.Lock()
-				bot.isSpeaking = true
-				bot.speakingMu.Unlock()
-
-				bot.handleTalkCommand(bot.conn, &dis.MessageCreate{
-					Message: &dis.Message{
-						ChannelID: row.DiscordChannel,
-						Author: &dis.User{
-							Username: row.Username,
-						},
-						Content: result.Text,
-					},
-				},
-					strings.Fields(result.Text),
-				)
-
-				// Send the transcription to the Discord channel
-				_, err = bot.conn.ChannelMessageSend(
-					row.DiscordChannel,
-					fmt.Sprintf("> %s: %s", row.Username, result.Text),
-				)
-				if err != nil {
-					bot.log.Error(
-						"Failed to send transcribed message in talk mode",
-						"error", err.Error(),
-						"channel", row.DiscordChannel,
-					)
-				}
-			}
-		} else {
-			// Send the transcribed message as usual
-			_, err = bot.conn.ChannelMessageSend(
-				row.DiscordChannel,
-				fmt.Sprintf("> %s: %s", row.Username, result.Text),
-			)
-
-			if err != nil {
-				bot.log.Error(
-					"Failed to send transcribed message",
-					"error", err.Error(),
-					"channel", row.DiscordChannel,
-				)
-			}
-		}
-
-		recognitionID := etc.Gensym()
-
-		err = bot.db.SaveRecognition(
-			context.Background(),
-			db.SaveRecognitionParams{
-				ID:         recognitionID,
-				Stream:     streamID,
-				SampleIdx:  int64(result.Start * 48000),
-				SampleLen:  int64(result.Duration * 48000),
-				Text:       result.Text,
-				Confidence: result.Confidence,
-			},
-		)
-		if err != nil {
-			bot.log.Error(
-				"Failed to save recognition to database",
-				"error", err.Error(),
-				"recognitionID", recognitionID,
-			)
-		}
-	}
-}
-
 func (bot *Bot) sendAndSaveMessage(
 	channelID, content string,
 ) {
@@ -349,330 +225,6 @@ func (bot *Bot) sendAndSaveMessage(
 	}
 }
 
-func (bot *Bot) joinVoiceChannel(guildID, channelID string) error {
-	bot.mu.Lock()
-	defer bot.mu.Unlock()
-
-	if bot.voiceChannel != nil {
-		// If already in a voice channel, leave it first
-		if err := bot.voiceChannel.Conn.Disconnect(); err != nil {
-			bot.log.Error("failed to disconnect from previous voice channel", "error", err)
-		}
-	}
-
-	vc, err := bot.conn.ChannelVoiceJoin(guildID, channelID, false, false)
-	if err != nil {
-		return fmt.Errorf("failed to join voice channel: %w", err)
-	}
-
-	bot.log.Info("joined voice channel", "channel", channelID)
-
-	packetChan := make(
-		chan *voicePacket,
-		3*1000/20,
-	) // three seconds of 20ms frames
-	bot.voiceChannel = &VoiceChannel{
-		Conn:                vc,
-		TalkMode:            false,
-		InboundAudioPackets: packetChan,
-	}
-
-	go bot.processVoicePackets(packetChan)
-	go bot.handleVoiceConnection(bot.voiceChannel, guildID, channelID)
-	return nil
-}
-
-func (bot *Bot) joinAllVoiceChannels(guildID string) error {
-	channels, err := bot.conn.GuildChannels(guildID)
-	if err != nil {
-		return fmt.Errorf("error getting guild channels: %w", err)
-	}
-
-	for _, channel := range channels {
-		if channel.Type == dis.ChannelTypeGuildVoice {
-			err := bot.joinVoiceChannel(guildID, channel.ID)
-			if err != nil {
-				bot.log.Error(
-					"failed to join voice channel",
-					"channel",
-					channel.Name,
-					"error",
-					err.Error(),
-				)
-			}
-		}
-	}
-
-	return nil
-}
-
-func (bot *Bot) handleVoiceConnection(
-	voiceChannel *VoiceChannel,
-	guildID, channelID string,
-) {
-	go func() {
-		voiceChannel.Conn.AddHandler(bot.handleVoiceSpeakingUpdate)
-	}()
-
-	for packet := range voiceChannel.Conn.OpusRecv {
-		select {
-		case voiceChannel.InboundAudioPackets <- &voicePacket{packet: packet, guildID: guildID, channelID: channelID}:
-			// Packet sent to channel successfully
-		default:
-			bot.log.Warn(
-				"voice packet channel full, dropping packet",
-				"channelID",
-				channelID,
-			)
-		}
-	}
-}
-
-func (bot *Bot) handleVoicePacket(
-	packet *dis.Packet,
-	guildID, channelID string,
-) error {
-	streamID, err := bot.ensureVoiceStream(
-		packet,
-		guildID,
-		channelID,
-	)
-
-	if err != nil {
-		bot.log.Error("Failed to get or create voice stream",
-			"error", err,
-			"guildID", guildID,
-			"channelID", channelID,
-			"SSRC", packet.SSRC,
-		)
-		return fmt.Errorf(
-			"failed to get or create voice stream: %w",
-			err,
-		)
-	}
-
-	bot.mu.Lock()
-	audioBuffer, ok := bot.audioBuffers[streamID]
-	if !ok {
-		audioBuffer = make(
-			chan []byte,
-			100,
-		) // Adjust buffer size as needed
-		bot.audioBuffers[streamID] = audioBuffer
-		go bot.processAudioBuffer(streamID, audioBuffer)
-	}
-	bot.mu.Unlock()
-
-	select {
-	case audioBuffer <- packet.Opus:
-		return nil
-	default:
-		bot.log.Warn("Audio buffer full, dropping packet",
-			"streamID", streamID,
-			"SSRC", packet.SSRC,
-		)
-		return nil
-	}
-}
-
-func (bot *Bot) handleVoiceSpeakingUpdate(
-	_ *dis.VoiceConnection,
-	v *dis.VoiceSpeakingUpdate,
-) {
-	bot.log.Info(
-		"speaking update",
-		"ssrc", v.SSRC,
-		"userID", v.UserID,
-		"speaking", v.Speaking,
-	)
-
-	err := bot.db.UpsertVoiceState(
-		context.Background(),
-		db.UpsertVoiceStateParams{
-			ID:         etc.Gensym(),
-			Ssrc:       int64(v.SSRC),
-			UserID:     v.UserID,
-			IsSpeaking: v.Speaking,
-		},
-	)
-
-	if err != nil {
-		bot.log.Error(
-			"failed to upsert voice state",
-			"error", err.Error(),
-			"ssrc", v.SSRC,
-			"userID", v.UserID,
-		)
-	}
-}
-
-func (bot *Bot) ensureVoiceStream(
-	packet *dis.Packet,
-	guildID, channelID string,
-) (string, error) {
-	cacheKey := fmt.Sprintf("%d:%s:%s", packet.SSRC, guildID, channelID)
-
-	if streamID, ok := bot.getCachedVoiceStream(cacheKey); ok {
-		return streamID, nil
-	}
-
-	streamID, err := bot.findOrSaveVoiceStream(packet, guildID, channelID)
-	if err != nil {
-		return "", err
-	}
-
-	bot.streamIdCacheMu.Lock()
-	bot.streamIdCache[cacheKey] = streamID
-	bot.streamIdCacheMu.Unlock()
-
-	return streamID, nil
-}
-
-func (bot *Bot) getCachedVoiceStream(cacheKey string) (string, bool) {
-	bot.streamIdCacheMu.RLock()
-	streamID, ok := bot.streamIdCache[cacheKey]
-	bot.streamIdCacheMu.RUnlock()
-	return streamID, ok
-}
-
-func (bot *Bot) findOrSaveVoiceStream(
-	packet *dis.Packet,
-	guildID, channelID string,
-) (string, error) {
-	discordID, username, streamID, err := bot.findVoiceStream(
-		packet,
-		guildID,
-		channelID,
-	)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			streamID, err = bot.createNewVoiceStream(
-				packet,
-				guildID,
-				channelID,
-				discordID,
-				username,
-			)
-			if err != nil {
-				return "", fmt.Errorf(
-					"failed to create new voice stream: %w",
-					err,
-				)
-			}
-		} else {
-			return "", fmt.Errorf("failed to find voice stream: %w", err)
-		}
-	}
-
-	return streamID, nil
-}
-
-func (bot *Bot) findVoiceStream(
-	packet *dis.Packet,
-	guildID string,
-	channelID string,
-) (string, string, string, error) {
-	voiceState, err := bot.db.GetVoiceState(
-		context.Background(),
-		db.GetVoiceStateParams{
-			Ssrc:   int64(packet.SSRC),
-			UserID: "",
-		},
-	)
-	if err != nil {
-		return "", "", "", fmt.Errorf("failed to get voice state: %w", err)
-	}
-
-	discordID := voiceState.UserID
-	username := bot.getUsernameFromID(discordID)
-
-	streamID, err := bot.db.GetStreamForDiscordChannelAndSpeaker(
-		context.Background(),
-		db.GetStreamForDiscordChannelAndSpeakerParams{
-			DiscordGuild:   guildID,
-			DiscordChannel: channelID,
-			DiscordID:      discordID,
-		},
-	)
-	if err != nil {
-		return discordID, username, "", err
-	}
-
-	return discordID, username, streamID, nil
-}
-
-func (bot *Bot) createNewVoiceStream(
-	packet *dis.Packet,
-	guildID, channelID, discordID, username string,
-) (string, error) {
-	streamID := etc.Gensym()
-	speakerID := etc.Gensym()
-
-	err := bot.db.CreateStream(
-		context.Background(),
-		db.CreateStreamParams{
-			ID:              streamID,
-			PacketSeqOffset: int64(packet.Sequence),
-			SampleIdxOffset: int64(packet.Timestamp),
-		},
-	)
-	if err != nil {
-		return "", fmt.Errorf("failed to create new stream: %w", err)
-	}
-
-	err = bot.db.CreateDiscordChannelStream(
-		context.Background(),
-		db.CreateDiscordChannelStreamParams{
-			ID:             etc.Gensym(),
-			DiscordGuild:   guildID,
-			DiscordChannel: channelID,
-			Stream:         streamID,
-		},
-	)
-	if err != nil {
-		return "", fmt.Errorf(
-			"failed to create discord channel stream: %w",
-			err,
-		)
-	}
-
-	err = bot.db.CreateSpeaker(
-		context.Background(),
-		db.CreateSpeakerParams{
-			ID:     speakerID,
-			Stream: streamID,
-			Emoji:  "", // We're not using emoji anymore
-		},
-	)
-	if err != nil {
-		return "", fmt.Errorf("failed to create speaker: %w", err)
-	}
-
-	err = bot.db.CreateDiscordSpeaker(
-		context.Background(),
-		db.CreateDiscordSpeakerParams{
-			ID:        etc.Gensym(),
-			Speaker:   speakerID,
-			DiscordID: discordID,
-			Ssrc:      int64(packet.SSRC),
-			Username:  username,
-		},
-	)
-	if err != nil {
-		return "", fmt.Errorf("failed to create discord speaker: %w", err)
-	}
-
-	bot.log.Info(
-		"created new voice stream",
-		"streamID", streamID,
-		"speakerID", speakerID,
-		"discordID", discordID,
-		"username", username,
-	)
-
-	return streamID, nil
-}
-
 func (bot *Bot) getUsernameFromID(userID string) string {
 	user, err := bot.conn.User(userID)
 	if err != nil {
@@ -686,61 +238,6 @@ func (bot *Bot) getUsernameFromID(userID string) string {
 		return "Unknown User"
 	}
 	return user.Username
-}
-
-func (bot *Bot) getSpeechRecognitionSession(
-	streamID string,
-) (stt.SpeechRecognizer, error) {
-	bot.mu.Lock()
-	defer bot.mu.Unlock()
-
-	session, exists := bot.speechRecognizers[streamID]
-	if !exists {
-		var err error
-		session, err = bot.speechRecognition.Start(
-			context.Background(),
-		)
-		if err != nil {
-			bot.log.Error(
-				"Failed to start speech recognition session",
-				"error",
-				err,
-				"streamID",
-				streamID,
-			)
-			return nil, fmt.Errorf(
-				"failed to start speech recognition session: %w",
-				err,
-			)
-		}
-		bot.speechRecognizers[streamID] = session
-		go bot.speechRecognitionLoop(streamID, session)
-	}
-	return session, nil
-}
-
-func (bot *Bot) speechRecognitionLoop(
-	streamID string,
-	session stt.SpeechRecognizer,
-) {
-	for segmentDrafts := range session.Receive() {
-		bot.processPendingRecognitionResult(streamID, segmentDrafts)
-	}
-
-	bot.log.Info(
-		"Speech recognition session closed",
-		"streamID",
-		streamID,
-	)
-}
-
-func (bot *Bot) handleVoiceStateUpdate(
-	_ *dis.Session,
-	v *dis.VoiceStateUpdate,
-) {
-	if v.UserID == bot.conn.State.User.ID {
-		return
-	}
 }
 
 func (bot *Bot) handleSummaryCommand(
@@ -1050,82 +547,6 @@ func (bot *Bot) processTalkCommand(
 	return resp.Choices[0].Message.Content, nil
 }
 
-func (bot *Bot) speakInChannel(
-	channelID string,
-	text string,
-) error {
-	// Set the speaking flag
-	bot.speakingMu.Lock()
-	bot.isSpeaking = true
-	bot.speakingMu.Unlock()
-	defer func() {
-		bot.speakingMu.Lock()
-		bot.isSpeaking = false
-		bot.speakingMu.Unlock()
-	}()
-
-	// Find the voice channel associated with the text channel
-	channel, err := bot.conn.Channel(channelID)
-	if err != nil {
-		return fmt.Errorf("failed to get channel: %w", err)
-	}
-
-	guild, err := bot.conn.State.Guild(channel.GuildID)
-	if err != nil {
-		return fmt.Errorf("failed to get guild: %w", err)
-	}
-
-	var voiceChannelID string
-	for _, vs := range guild.VoiceStates {
-		if vs.ChannelID != "" {
-			voiceChannelID = vs.ChannelID
-			break
-		}
-	}
-
-	if voiceChannelID == "" {
-		return fmt.Errorf("no active voice channel found")
-	}
-
-	bot.mu.Lock()
-	// Join the voice channel if not already connected
-	if bot.voiceChannel == nil || bot.voiceChannel.Conn.ChannelID != voiceChannelID {
-		err := bot.joinVoiceChannel(guild.ID, voiceChannelID)
-		if err != nil {
-			bot.mu.Unlock()
-			return fmt.Errorf("failed to join voice channel: %w", err)
-		}
-	}
-	voiceChannel := bot.voiceChannel
-	bot.mu.Unlock()
-
-	// Generate speech
-	speechData, err := bot.TextToSpeech(text)
-	if err != nil {
-		return fmt.Errorf("failed to generate speech: %w", err)
-	}
-
-	// Convert to Opus packets
-	opusPackets, err := ogg.ConvertToOpus(speechData)
-	if err != nil {
-		return fmt.Errorf("failed to convert to Opus: %w", err)
-	}
-
-	// Send Opus packets
-	bot.log.Debug("Starting to send Opus packets")
-	voiceChannel.Conn.Speaking(true)
-	bot.log.Debug("Speaking true")
-	defer voiceChannel.Conn.Speaking(false)
-
-	for _, packet := range opusPackets {
-		voiceChannel.Conn.OpusSend <- packet
-	}
-
-	bot.log.Debug("Finished sending all Opus packets")
-
-	return nil
-}
-
 func (bot *Bot) GenerateOggOpusBlob(
 	streamID string,
 	startSample, endSample int,
@@ -1185,14 +606,15 @@ func (bot *Bot) speakSummary(
 
 	// Join the voice channel if not already connected
 	bot.mu.Lock()
-	if bot.voiceChannel == nil || bot.voiceChannel.Conn.ChannelID != voiceChannelID {
+	if bot.voiceCall == nil ||
+		bot.voiceCall.Conn.ChannelID != voiceChannelID {
 		err := bot.joinVoiceChannel(m.GuildID, voiceChannelID)
 		if err != nil {
 			bot.mu.Unlock()
 			return fmt.Errorf("failed to join voice channel: %w", err)
 		}
 	}
-	voiceChannel := bot.voiceChannel
+	voiceChannel := bot.voiceCall
 	bot.mu.Unlock()
 
 	// Generate speech
@@ -1216,49 +638,4 @@ func (bot *Bot) speakSummary(
 	}
 
 	return nil
-}
-
-func (bot *Bot) processVoicePackets(packetChan <-chan *voicePacket) {
-	for packet := range packetChan {
-		err := bot.handleVoicePacket(
-			packet.packet,
-			packet.guildID,
-			packet.channelID,
-		)
-		if err != nil {
-			bot.log.Error(
-				"failed to process voice packet",
-				"error", err.Error(),
-				"guildID", packet.guildID,
-				"channelID", packet.channelID,
-			)
-		}
-	}
-}
-
-func (bot *Bot) processAudioBuffer(
-	streamID string,
-	audioBuffer <-chan []byte,
-) {
-	session, err := bot.getSpeechRecognitionSession(streamID)
-	if err != nil {
-		bot.log.Error("Failed to get speech recognition session",
-			"error", err,
-			"streamID", streamID,
-		)
-		return
-	}
-
-	for audioData := range audioBuffer {
-		err := session.SendAudio(audioData)
-		if err != nil {
-			bot.log.Error(
-				"Failed to send audio to speech recognition service",
-				"error",
-				err,
-				"streamID",
-				streamID,
-			)
-		}
-	}
 }
