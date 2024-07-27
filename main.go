@@ -274,6 +274,7 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	endSample := transcriptions[endIndex].SampleIdx
 
 	oggData, err := generateOggOpusBlob(
+		mainLogger,
 		queries,
 		selectedStreamID,
 		startSample,
@@ -314,10 +315,11 @@ func runGenerateOgg(cmd *cobra.Command, args []string) {
 	}
 
 	oggData, err := generateOggOpusBlob(
+		mainLogger,
 		queries,
 		streamID,
 		stream.SampleIdxOffset,
-		-1, // Use -1 to indicate we want all samples until the end
+		stream.SampleIdxOffset+10000*48000,
 	)
 	if err != nil {
 		mainLogger.Fatal("generate OGG Opus blob", "error", err.Error())
@@ -377,11 +379,13 @@ func runListStreams(cmd *cobra.Command, args []string) {
 }
 
 func generateOggOpusBlob(
+	logger *log.Logger,
 	queries *db.Queries,
 	streamID string,
 	startSample, endSample int64,
 ) ([]byte, error) {
 	return ogg.GenerateOggOpusBlob(
+		logger,
 		queries,
 		streamID,
 		startSample,
