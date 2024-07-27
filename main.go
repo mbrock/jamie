@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
-	"io"
 	"jamie/etc"
 	"os"
 	"os/signal"
@@ -17,7 +16,6 @@ import (
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/log"
-	"github.com/sashabaranov/go-openai"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -35,9 +33,9 @@ var (
 
 func init() {
 	cobra.OnInitialize(initConfig)
-	discordCmd.Flags().String("guild", "", "Specify a guild ID to join voice channels in")
+	discordCmd.Flags().
+		String("guild", "", "Specify a guild ID to join voice channels in")
 	rootCmd.AddCommand(discordCmd)
-	rootCmd.AddCommand(openaiChatCmd)
 	rootCmd.AddCommand(summarizeTranscriptCmd)
 	rootCmd.AddCommand(generateAudioCmd)
 	rootCmd.AddCommand(textToSpeechCmd)
@@ -95,12 +93,6 @@ var discordCmd = &cobra.Command{
 	Use:   "discord",
 	Short: "Start the Discord bot",
 	Run:   runDiscord,
-}
-
-var openaiChatCmd = &cobra.Command{
-	Use:   "chat",
-	Short: "Start an OpenAI chat session",
-	Run:   runOpenAIChat,
 }
 
 var summarizeTranscriptCmd = &cobra.Command{
@@ -414,48 +406,6 @@ func main() {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Println(err)
 		os.Exit(1)
-	}
-}
-
-func runOpenAIChat(cmd *cobra.Command, args []string) {
-	openaiAPIKey := viper.GetString("openai_api_key")
-	if openaiAPIKey == "" {
-		logger.Fatal("missing OPENAI_API_KEY or --openai-api-key=")
-	}
-
-	client := openai.NewClient(openaiAPIKey)
-	ctx := context.Background()
-
-	req := openai.ChatCompletionRequest{
-		Model: openai.GPT3Dot5Turbo,
-		Messages: []openai.ChatCompletionMessage{
-			{
-				Role:    openai.ChatMessageRoleUser,
-				Content: "Tell me a short joke about programming.",
-			},
-		},
-		Stream: true,
-	}
-
-	stream, err := client.CreateChatCompletionStream(ctx, req)
-	if err != nil {
-		logger.Fatal("ChatCompletionStream error", "error", err)
-	}
-	defer stream.Close()
-
-	fmt.Printf("AI: ")
-	for {
-		response, err := stream.Recv()
-		if err == io.EOF {
-			fmt.Println("\nStream finished")
-			return
-		}
-
-		if err != nil {
-			logger.Fatal("Stream error", "error", err)
-		}
-
-		fmt.Printf("%s", response.Choices[0].Delta.Content)
 	}
 }
 
