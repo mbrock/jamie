@@ -46,6 +46,7 @@ func init() {
 	rootCmd.AddCommand(generateAudioCmd)
 	rootCmd.AddCommand(generateOggCmd)
 	rootCmd.AddCommand(listStreamsCmd)
+	rootCmd.AddCommand(httpServerCmd)
 
 	// Add persistent flags
 	rootCmd.PersistentFlags().String("discord-token", "", "Discord bot token")
@@ -74,6 +75,7 @@ func init() {
 		"elevenlabs_api_key",
 		rootCmd.PersistentFlags().Lookup("elevenlabs-api-key"),
 	)
+	viper.BindPFlag("http_port", rootCmd.PersistentFlags().Lookup("http-port"))
 }
 
 func initConfig() {
@@ -128,6 +130,12 @@ var listStreamsCmd = &cobra.Command{
 	Short: "List streams in a cool table",
 	Long:  `List all streams with their details in a formatted table`,
 	Run:   runListStreams,
+}
+
+var httpServerCmd = &cobra.Command{
+	Use:   "http",
+	Short: "Start the HTTP server",
+	Run:   runHTTPServer,
 }
 
 //go:embed schema.sql
