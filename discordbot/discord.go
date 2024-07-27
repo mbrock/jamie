@@ -5,35 +5,36 @@ import (
 	"fmt"
 	"io"
 	"jamie/db"
-	"jamie/discordbot/tts"
 	"jamie/etc"
 	"jamie/llm"
 	"jamie/ogg"
 	"jamie/stt"
+	"jamie/tts"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
-	dis "github.com/bwmarrin/discordgo"
+	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
 )
 
-type CommandHandler func(*dis.MessageCreate, []string) error
+type CommandHandler func(*discordgo.MessageCreate, []string) error
 
 type Bot struct {
-	mu   sync.Mutex
-	db   *db.Queries
-	log  *log.Logger
-	conn SocialNetwork
+	mu  sync.Mutex
+	db  *db.Queries
+	log *log.Logger
+
+	discord Discord
 
 	languageModel llm.LanguageModel
 
 	speechRecognition stt.SpeechRecognition
-	speechRecognizers map[string]stt.SpeechRecognizer // streamID
+	speechRecognizers map[string]stt.SpeechRecognizer
 	speechGenerator   tts.SpeechGenerator
 
-	commands map[string]CommandHandler // command name
+	commands map[string]CommandHandler
 
 	voiceCall *VoiceCall
 
@@ -44,7 +45,7 @@ type Bot struct {
 }
 
 func NewBot(
-	chat SocialNetwork,
+	chat Discord,
 	speechRecognitionService stt.SpeechRecognition,
 	speechGenerationService tts.SpeechGenerator,
 	languageModelService llm.LanguageModel,
@@ -55,7 +56,7 @@ func NewBot(
 	bot := &Bot{
 		db:                db,
 		log:               logger,
-		conn:              chat,
+		discord:           chat,
 		languageModel:     languageModelService,
 		commands:          make(map[string]CommandHandler),
 		speechRecognition: speechRecognitionService,
@@ -68,11 +69,11 @@ func NewBot(
 
 	bot.registerCommands()
 
-	bot.conn.AddHandler(bot.handleGuildCreate)
-	bot.conn.AddHandler(bot.handleVoiceStateUpdate)
-	bot.conn.AddHandler(bot.handleMessageCreate)
+	bot.discord.AddHandler(bot.handleGuildCreate)
+	bot.discord.AddHandler(bot.handleVoiceStateUpdate)
+	bot.discord.AddHandler(bot.handleMessageCreate)
 
-	err := bot.conn.Open()
+	err := bot.discord.Open()
 	if err != nil {
 		return nil, fmt.Errorf("error opening connection: %w", err)
 	}
@@ -86,10 +87,10 @@ func (bot *Bot) registerCommands() {
 }
 
 func (bot *Bot) Close() error {
-	return bot.conn.Close()
+	return bot.discord.Close()
 }
 
-func (bot *Bot) saveTextMessage(message *dis.Message) error {
+func (bot *Bot) saveTextMessage(message *discordgo.Message) error {
 	return bot.db.SaveTextMessage(
 		context.Background(),
 		db.SaveTextMessageParams{
@@ -103,7 +104,10 @@ func (bot *Bot) saveTextMessage(message *dis.Message) error {
 	)
 }
 
-func (bot *Bot) handleGuildCreate(_ *dis.Session, event *dis.GuildCreate) {
+func (bot *Bot) handleGuildCreate(
+	_ *discordgo.Session,
+	event *discordgo.GuildCreate,
+) {
 	bot.log.Info(
 		"joined",
 		"guild",
@@ -117,8 +121,8 @@ func (bot *Bot) handleGuildCreate(_ *dis.Session, event *dis.GuildCreate) {
 }
 
 func (bot *Bot) handleMessageCreate(
-	s *dis.Session,
-	m *dis.MessageCreate,
+	s *discordgo.Session,
+	m *discordgo.MessageCreate,
 ) {
 	if m.Author.ID == s.State.User.ID {
 		return
@@ -199,7 +203,7 @@ func (bot *Bot) handleMessageCreate(
 func (bot *Bot) sendAndSaveMessage(
 	channelID, content string,
 ) {
-	msg, err := bot.conn.ChannelMessageSend(channelID, content)
+	msg, err := bot.discord.ChannelMessageSend(channelID, content)
 	if err != nil {
 		bot.log.Error("Failed to send message", "error", err.Error())
 		return
@@ -212,7 +216,7 @@ func (bot *Bot) sendAndSaveMessage(
 }
 
 func (bot *Bot) getUsernameFromID(userID string) string {
-	user, err := bot.conn.User(userID)
+	user, err := bot.discord.User(userID)
 	if err != nil {
 		bot.log.Error(
 			"Failed to get username",
@@ -227,7 +231,7 @@ func (bot *Bot) getUsernameFromID(userID string) string {
 }
 
 func (bot *Bot) UpdateMessageWithSummary(
-	s *dis.Session,
+	s *discordgo.Session,
 	channelID string,
 	messageID string,
 	summaryChan <-chan string,
@@ -264,7 +268,7 @@ func (bot *Bot) UpdateMessageWithSummary(
 }
 
 func (bot *Bot) handleTalkCommand(
-	m *dis.MessageCreate,
+	m *discordgo.MessageCreate,
 	args []string,
 ) error {
 	if len(args) == 0 {
@@ -309,7 +313,7 @@ func (bot *Bot) handleTalkCommand(
 }
 
 func (bot *Bot) processTalkCommand(
-	m *dis.MessageCreate,
+	m *discordgo.MessageCreate,
 	prompt string,
 ) (string, error) {
 	messages, err := bot.db.GetRecentTextMessages(
@@ -451,11 +455,6 @@ func (bot *Bot) TextToSpeech(text string, writer io.Writer) error {
 
 	return nil
 }
-package discordbot
-
-import (
-	"github.com/bwmarrin/discordgo"
-)
 
 // DiscordSession wraps discordgo.Session to implement the SocialNetwork interface
 type DiscordSession struct {
@@ -468,7 +467,9 @@ func (d *DiscordSession) MyUserID() (string, error) {
 }
 
 // GuildVoiceStates returns all voice states for a given guild
-func (d *DiscordSession) GuildVoiceStates(guildID string) ([]*discordgo.VoiceState, error) {
+func (d *DiscordSession) GuildVoiceStates(
+	guildID string,
+) ([]*discordgo.VoiceState, error) {
 	guild, err := d.State.Guild(guildID)
 	if err != nil {
 		return nil, err
