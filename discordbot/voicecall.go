@@ -371,7 +371,7 @@ func (bot *Bot) createStreamForPacket(
 }
 
 func (bot *Bot) handleVoiceStateUpdate(
-	_ *discordgo.Session,
+	s *discordgo.Session,
 	v *discordgo.VoiceStateUpdate,
 ) {
 	me, err := bot.discord.MyUserID()
@@ -383,6 +383,24 @@ func (bot *Bot) handleVoiceStateUpdate(
 
 	if v.UserID == me {
 		return
+	}
+
+	// Fetch the user information
+	user, err := bot.discord.User(v.UserID)
+	if err != nil {
+		bot.log.Error("Failed to fetch user information", "error", err, "userID", v.UserID)
+		return
+	}
+
+	// Update the username in the database
+	err = bot.db.UpdateDiscordSpeakerUsername(context.Background(), db.UpdateDiscordSpeakerUsernameParams{
+		DiscordID: v.UserID,
+		Username:  user.Username,
+	})
+	if err != nil {
+		bot.log.Error("Failed to update username", "error", err, "userID", v.UserID, "username", user.Username)
+	} else {
+		bot.log.Info("Updated username", "userID", v.UserID, "username", user.Username)
 	}
 }
 

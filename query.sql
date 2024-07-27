@@ -206,6 +206,11 @@ ON CONFLICT (id) DO UPDATE SET
 -- name: GetVoiceState :one
 SELECT * FROM voice_states WHERE ssrc = ? OR user_id = ?;
 
+-- name: UpdateDiscordSpeakerUsername :exec
+UPDATE discord_speakers
+SET username = ?
+WHERE discord_id = ?;
+
 -- name: GetRecentRecognitions :many
 SELECT s.emoji, r.text, r.created_at, ds.username as discord_username
 FROM recognitions r
