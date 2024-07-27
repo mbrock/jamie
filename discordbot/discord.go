@@ -392,7 +392,7 @@ func (bot *Bot) processTalkCommand(
 	response, err := bot.languageModel.ChatCompletion(
 		ctx,
 		(&llm.ChatCompletionRequest{
-			SystemPrompt: "Briefly respond, verbally, fluently, simply, without any formatting. If you think it's more appropriate to let the user talk more before responding, start your response with <wait/>.",
+			SystemPrompt: "Briefly respond, verbally, fluently, simply, without any formatting. If you think it's more appropriate to let the user talk more before responding, include <wait/> anywhere in your response.",
 			MaxTokens:    300,
 		}).WithUserMessage(contextBuilder.String()),
 	)
@@ -416,11 +416,11 @@ func (bot *Bot) processTalkCommand(
 	}
 
 	responseStr := fullResponse.String()
-	if strings.HasPrefix(responseStr, "<wait/>") {
+	if strings.Contains(responseStr, "<wait/>") {
 		return "", nil // Return an empty string to indicate no immediate response
 	}
 
-	return responseStr, nil
+	return strings.ReplaceAll(responseStr, "<wait/>", ""), nil
 }
 
 func (bot *Bot) GenerateOggOpusBlob(
