@@ -476,6 +476,10 @@ func (bot *Bot) speakInChannel(
 		audioBuffer := make([]byte, 48000*2*2)
 		bufferIndex := 0
 
+		defer func() {
+			speakingDone <- struct{}{}
+		}()
+
 		// Read and encode audio data in chunks
 		buffer := make(
 			[]byte,
@@ -542,45 +546,11 @@ func (bot *Bot) speakInChannel(
 				}
 
 				if err == io.EOF || err == io.ErrUnexpectedEOF {
-					break
-				}
-			}
-		}
-
-		// Process any remaining audio in the buffer
-		if bufferIndex > 0 {
-			for i := 0; i < bufferIndex; i += 960 * 2 * 2 {
-				end := i + 960*2*2
-				if end > bufferIndex {
-					end = bufferIndex
-				}
-				chunk := audioBuffer[i:end]
-
-				// Convert byte buffer to int16 slice
-				pcmBuffer := make([]int16, len(chunk)/2)
-				for j := 0; j < len(chunk); j += 2 {
-					pcmBuffer[j/2] = int16(chunk[j]) | int16(chunk[j+1])<<8
-				}
-
-				// If we got a partial read, pad with silence
-				if len(pcmBuffer) < 960*2 {
-					pcmBuffer = append(
-						pcmBuffer,
-						make([]int16, 960*2-len(pcmBuffer))...)
-				}
-
-				// Encode the frame to Opus
-				opusData, err := encoder.Encode(pcmBuffer, 960, 32000)
-				if err != nil {
-					bot.log.Error("Failed to encode Opus", "error", err)
 					return
 				}
-
-				voiceChannel.Conn.OpusSend <- opusData
 			}
 		}
 
-		speakingDone <- struct{}{}
 	}()
 
 	// Wait for FFmpeg to finish or for cancellation
