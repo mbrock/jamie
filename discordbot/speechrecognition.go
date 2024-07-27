@@ -134,16 +134,17 @@ func (bot *Bot) processPendingRecognitionResult(
 					"channel", row.DiscordChannel,
 				)
 			}
-		} else if result.Confidence < confidenceThreshold {
-			bot.log.Info(
-				"Rejected transcription due to low confidence",
-				"text", result.Text,
-				"confidence", result.Confidence,
-			)
 		}
+	}
 
-		if result.Confidence >= confidenceThreshold {
-			recognitionID := etc.Gensym()
+	if result.Confidence < confidenceThreshold {
+		bot.log.Info(
+			"Rejected transcription due to low confidence",
+			"text", result.Text,
+			"confidence", result.Confidence,
+		)
+	} else {
+		recognitionID := etc.Gensym()
 
 		err = bot.db.SaveRecognition(
 			context.Background(),
