@@ -357,7 +357,7 @@ func (bot *Bot) processTalkCommand(
 	for _, msg := range messages {
 		sender := "User"
 		if msg.IsBot {
-			sender = "Bot"
+			sender = "Jamie"
 		}
 		items = append(items, contextItem{
 			content:   fmt.Sprintf("%s: %s", sender, msg.Content),
