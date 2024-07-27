@@ -293,6 +293,9 @@ func (bot *Bot) handleTalkCommand(
 
 		if response == "" {
 			// The LLM decided to wait, so we don't send any response
+			bot.speakingMu.Lock()
+			bot.isSpeaking = false
+			bot.speakingMu.Unlock()
 			return
 		}
 
@@ -380,19 +383,21 @@ func (bot *Bot) processTalkCommand(
 	contextBuilder.WriteString("\n")
 	contextBuilder.WriteString(
 		fmt.Sprintf(
-			"[%s UTC] %s: %s",
+			"[%s UTC] %s: %s\n\n",
 			m.Timestamp.Format("2006-01-02 15:04:05"),
 			m.Author.Username,
 			prompt,
 		),
 	)
 
+	contextBuilder.WriteString("Respond or <pass/>.\n\n")
+
 	ctx := context.Background()
 
 	response, err := bot.languageModel.ChatCompletion(
 		ctx,
 		(&llm.ChatCompletionRequest{
-			SystemPrompt: "Briefly respond, verbally, fluently, simply, without any formatting. If you think it's more appropriate to let the user talk more before responding, include <wait/> anywhere in your response.",
+			SystemPrompt: "You write verbally, fluently, without any formatting. If the user does not seem to have finished their thought, please respond with <pass/> instead of jumping to respond.",
 			MaxTokens:    300,
 		}).WithUserMessage(contextBuilder.String()),
 	)
@@ -416,12 +421,12 @@ func (bot *Bot) processTalkCommand(
 	}
 
 	responseStr := fullResponse.String()
-	if strings.Contains(responseStr, "<wait/>") {
-		bot.log.Info("LLM decided to wait", "response", responseStr)
+	if strings.Contains(responseStr, "<pass/>") {
+		bot.log.Info("LLM decided to pass", "response", responseStr)
 		return "", nil // Return an empty string to indicate no immediate response
 	}
 
-	finalResponse := strings.ReplaceAll(responseStr, "<wait/>", "")
+	finalResponse := strings.ReplaceAll(responseStr, "<pass/>", "")
 	bot.log.Info("Final LLM response", "response", finalResponse)
 	return finalResponse, nil
 }
