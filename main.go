@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
@@ -402,10 +403,16 @@ func runDiscord(cmd *cobra.Command, args []string) {
 		mainLogger.Fatal("missing OPENAI_API_KEY or --openai-api-key=")
 	}
 
+	// Create Discord session
+	discord, err := discordgo.New("Bot " + discordToken)
+	if err != nil {
+		mainLogger.Fatal("error creating Discord session", "error", err.Error())
+	}
+
 	speechGenerator := tts.NewElevenLabsSpeechGenerator(elevenlabsAPIKey)
 	languageModel := llm.NewOpenAILanguageModel(openaiAPIKey)
 	bot, err = discordbot.NewBot(
-		discordToken,
+		discord,
 		transcriptionService,
 		speechGenerator,
 		languageModel,
