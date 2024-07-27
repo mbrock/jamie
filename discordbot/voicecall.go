@@ -23,6 +23,7 @@ type VoiceCall struct {
 	streamIdCache       map[string]string // cacheKey -> streamID
 	GuildID             string
 	ChannelID           string
+	Recognizers         map[string][]stt.SpeechRecognizer // streamID -> []SpeechRecognizer
 }
 
 func (bot *Bot) joinVoiceCall(guildID, channelID string) error {
@@ -58,6 +59,7 @@ func (bot *Bot) joinVoiceCall(guildID, channelID string) error {
 		), // 3 second audio buffer
 
 		streamIdCache: make(map[string]string),
+		Recognizers:   make(map[string][]stt.SpeechRecognizer),
 	}
 
 	bot.voiceCall.Conn.AddHandler(bot.handleVoiceSpeakingUpdate)
@@ -139,17 +141,22 @@ func (bot *Bot) processInboundAudioPacket(
 		)
 	}
 
-	recognizer, err := bot.getRecognizerForStream(streamID)
+	recognizers, err := bot.getRecognizersForStream(streamID)
 	if err != nil {
-		return fmt.Errorf("failed to get recognizer for stream: %w", err)
+		return fmt.Errorf("failed to get recognizers for stream: %w", err)
 	}
 
-	err = recognizer.SendAudio(packet.Opus)
-	if err != nil {
-		return fmt.Errorf(
-			"failed to send audio to speech recognition service: %w",
-			err,
-		)
+	for _, recognizer := range recognizers {
+		err = recognizer.SendAudio(packet.Opus)
+		if err != nil {
+			bot.log.Error(
+				"Failed to send audio to speech recognition service",
+				"error", err,
+				"streamID", streamID,
+			)
+			// Continue with other recognizers even if one fails
+			continue
+		}
 	}
 
 	return nil

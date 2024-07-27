@@ -11,18 +11,18 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-func (bot *Bot) getRecognizerForStream(
+func (bot *Bot) getRecognizersForStream(
 	streamID string,
-) (stt.SpeechRecognizer, error) {
+) ([]stt.SpeechRecognizer, error) {
 	bot.mu.Lock()
 	defer bot.mu.Unlock()
 
-	session, exists := bot.speechRecognizers[streamID]
+	recognizers, exists := bot.voiceCall.Recognizers[streamID]
 	if !exists {
-		var err error
-		session, err = bot.speechRecognition.Start(
-			context.Background(),
-		)
+		recognizers = make([]stt.SpeechRecognizer, 0)
+		
+		// Start a default recognizer
+		session, err := bot.speechRecognition.Start(context.Background())
 		if err != nil {
 			bot.log.Error(
 				"Failed to start speech recognition session",
@@ -36,10 +36,20 @@ func (bot *Bot) getRecognizerForStream(
 				err,
 			)
 		}
-		bot.speechRecognizers[streamID] = session
+		recognizers = append(recognizers, session)
 		go bot.speechRecognitionLoop(streamID, session)
+
+		// You can add more recognizers here for different languages or configurations
+		// For example:
+		// spanishSession, err := bot.speechRecognition.StartWithLanguage(context.Background(), "es")
+		// if err == nil {
+		//     recognizers = append(recognizers, spanishSession)
+		//     go bot.speechRecognitionLoop(streamID, spanishSession)
+		// }
+
+		bot.voiceCall.Recognizers[streamID] = recognizers
 	}
-	return session, nil
+	return recognizers, nil
 }
 
 func (bot *Bot) speechRecognitionLoop(
