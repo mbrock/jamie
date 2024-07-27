@@ -44,21 +44,24 @@ func (bot *Bot) joinVoiceCall(guildID, channelID string) error {
 	bot.log.Info("joined voice channel", "channel", channelID)
 
 	bot.voiceCall = &VoiceCall{
-		Conn:     vc,
+		Conn:      vc,
+		GuildID:   guildID,
+		ChannelID: channelID,
+
 		TalkMode: false,
+
 		InboundAudioPackets: make(
 			chan *discordgo.Packet,
 			3*1000/20,
 		), // 3 second audio buffer
+
 		streamIdCache: make(map[string]string),
-		GuildID:       guildID,
-		ChannelID:     channelID,
 	}
 
 	bot.voiceCall.Conn.AddHandler(bot.handleVoiceSpeakingUpdate)
 
 	go bot.acceptInboundAudioPackets()
-	go bot.processVoicePackets()
+	go bot.processInboundAudioPackets()
 
 	return nil
 }
@@ -102,21 +105,30 @@ func (bot *Bot) acceptInboundAudioPackets() {
 	}
 }
 
-func (bot *Bot) acceptInboundAudioPacket(
+func (bot *Bot) processInboundAudioPackets() {
+	for packet := range bot.voiceCall.InboundAudioPackets {
+		err := bot.processInboundAudioPacket(packet)
+		if err != nil {
+			bot.log.Error(
+				"failed to process voice packet",
+				"error", err.Error(),
+				"guildID", bot.voiceCall.GuildID,
+				"channelID", bot.voiceCall.ChannelID,
+			)
+		}
+	}
+}
+
+func (bot *Bot) processInboundAudioPacket(
 	packet *discordgo.Packet,
-	guildID, channelID string,
 ) error {
-	streamID, err := bot.ensureVoiceStream(
-		packet,
-		guildID,
-		channelID,
-	)
+	streamID, err := bot.ensureVoiceStream(packet)
 
 	if err != nil {
 		bot.log.Error("Failed to get or create voice stream",
 			"error", err,
-			"guildID", guildID,
-			"channelID", channelID,
+			"guildID", bot.voiceCall.GuildID,
+			"channelID", bot.voiceCall.ChannelID,
 			"SSRC", packet.SSRC,
 		)
 		return fmt.Errorf(
@@ -172,17 +184,19 @@ func (bot *Bot) handleVoiceSpeakingUpdate(
 	}
 }
 
-func (bot *Bot) ensureVoiceStream(
-	packet *discordgo.Packet,
-	guildID, channelID string,
-) (string, error) {
-	cacheKey := fmt.Sprintf("%d:%s:%s", packet.SSRC, guildID, channelID)
+func (bot *Bot) ensureVoiceStream(packet *discordgo.Packet) (string, error) {
+	cacheKey := fmt.Sprintf(
+		"%d:%s:%s",
+		packet.SSRC,
+		bot.voiceCall.GuildID,
+		bot.voiceCall.ChannelID,
+	)
 
 	if streamID, ok := bot.getCachedVoiceStream(cacheKey); ok {
 		return streamID, nil
 	}
 
-	streamID, err := bot.findOrSaveVoiceStream(packet, guildID, channelID)
+	streamID, err := bot.findOrSaveVoiceStream(packet)
 	if err != nil {
 		return "", err
 	}
@@ -203,19 +217,12 @@ func (bot *Bot) getCachedVoiceStream(cacheKey string) (string, bool) {
 
 func (bot *Bot) findOrSaveVoiceStream(
 	packet *discordgo.Packet,
-	guildID, channelID string,
 ) (string, error) {
-	discordID, username, streamID, err := bot.resolveStreamForPacket(
-		packet,
-		guildID,
-		channelID,
-	)
+	discordID, username, streamID, err := bot.resolveStreamForPacket(packet)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			streamID, err = bot.createStreamForPacket(
 				packet,
-				guildID,
-				channelID,
 				discordID,
 				username,
 			)
@@ -235,8 +242,6 @@ func (bot *Bot) findOrSaveVoiceStream(
 
 func (bot *Bot) resolveStreamForPacket(
 	packet *discordgo.Packet,
-	guildID string,
-	channelID string,
 ) (string, string, string, error) {
 	voiceState, err := bot.db.GetVoiceState(
 		context.Background(),
@@ -255,8 +260,8 @@ func (bot *Bot) resolveStreamForPacket(
 	streamID, err := bot.db.GetStreamForDiscordChannelAndSpeaker(
 		context.Background(),
 		db.GetStreamForDiscordChannelAndSpeakerParams{
-			DiscordGuild:   guildID,
-			DiscordChannel: channelID,
+			DiscordGuild:   bot.voiceCall.GuildID,
+			DiscordChannel: bot.voiceCall.ChannelID,
 			DiscordID:      discordID,
 		},
 	)
@@ -269,7 +274,7 @@ func (bot *Bot) resolveStreamForPacket(
 
 func (bot *Bot) createStreamForPacket(
 	packet *discordgo.Packet,
-	guildID, channelID, discordID, username string,
+	discordID, username string,
 ) (string, error) {
 	streamID := etc.Gensym()
 	speakerID := etc.Gensym()
@@ -290,8 +295,8 @@ func (bot *Bot) createStreamForPacket(
 		context.Background(),
 		db.CreateDiscordChannelStreamParams{
 			ID:             etc.Gensym(),
-			DiscordGuild:   guildID,
-			DiscordChannel: channelID,
+			DiscordGuild:   bot.voiceCall.GuildID,
+			DiscordChannel: bot.voiceCall.ChannelID,
 			Stream:         streamID,
 		},
 	)
@@ -431,22 +436,4 @@ func (bot *Bot) speakInChannel(
 	}
 
 	return nil
-}
-
-func (bot *Bot) processVoicePackets() {
-	for packet := range bot.voiceCall.InboundAudioPackets {
-		err := bot.acceptInboundAudioPacket(
-			packet,
-			bot.voiceCall.GuildID,
-			bot.voiceCall.ChannelID,
-		)
-		if err != nil {
-			bot.log.Error(
-				"failed to process voice packet",
-				"error", err.Error(),
-				"guildID", bot.voiceCall.GuildID,
-				"channelID", bot.voiceCall.ChannelID,
-			)
-		}
-	}
 }
