@@ -388,14 +388,14 @@ func (bot *Bot) processTalkCommand(
 		),
 	)
 
-	contextBuilder.WriteString("Respond or <pass/>.\n\n")
+	contextBuilder.WriteString("Respond with a full answer or a short listening indicator (1-3 words).\n\n")
 
 	ctx := context.Background()
 
 	response, err := bot.languageModel.ChatCompletion(
 		ctx,
 		(&llm.ChatCompletionRequest{
-			SystemPrompt: "You write verbally, fluently, without any formatting. If the user does not seem to have finished their thought, please respond with <pass/> instead of jumping to respond.",
+			SystemPrompt: "You write verbally, fluently, without any formatting. If the user does not seem to have finished their thought, respond with a very short listening indicator (1-3 words) instead of a full response.",
 			MaxTokens:    300,
 		}).WithUserMessage(contextBuilder.String()),
 	)
@@ -419,14 +419,17 @@ func (bot *Bot) processTalkCommand(
 	}
 
 	responseStr := fullResponse.String()
-	if strings.Contains(responseStr, "<pass/>") {
-		bot.log.Info("LLM decided to pass", "response", responseStr)
-		return "", nil // Return an empty string to indicate no immediate response
+	responseStr = strings.TrimSpace(responseStr)
+
+	// Check if the response is a short listening indicator
+	words := strings.Fields(responseStr)
+	if len(words) <= 3 {
+		bot.log.Info("LLM provided a listening indicator", "response", responseStr)
+		return responseStr, nil
 	}
 
-	finalResponse := strings.ReplaceAll(responseStr, "<pass/>", "")
-	bot.log.Info("Final LLM response", "response", finalResponse)
-	return finalResponse, nil
+	bot.log.Info("Final LLM response", "response", responseStr)
+	return responseStr, nil
 }
 
 func (bot *Bot) GenerateOggOpusBlob(
