@@ -552,6 +552,9 @@ func (bot *Bot) speakInChannel(
 		return fmt.Errorf("FFmpeg error: %w", err)
 	}
 
+	// Add a small delay to ensure all audio is sent
+	time.Sleep(1 * time.Second)
+
 	bot.log.Debug("status", "speaking", "false")
 
 	return nil
