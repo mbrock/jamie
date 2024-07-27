@@ -3,11 +3,13 @@ package discordbot
 import (
 	"context"
 	"database/sql"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"jamie/db"
 	"jamie/etc"
+	"os/exec"
 	"sync"
 
 	"github.com/bwmarrin/discordgo"
@@ -412,14 +414,30 @@ func (bot *Bot) speakInChannel(
 
 	bot.log.Debug("status", "speaking", "true")
 
-	// Create a pipe to connect the text-to-speech output with the Opus encoder
-	pr, pw := io.Pipe()
-	defer pr.Close()
+	// Create pipes for FFmpeg input and output
+	ffmpegIn, ffmpegInWriter := io.Pipe()
+	ffmpegOut, ffmpegOutReader := io.Pipe()
+
+	// Start FFmpeg command
+	ffmpegCmd := exec.Command("ffmpeg",
+		"-i", "pipe:0",
+		"-f", "s16le",
+		"-acodec", "pcm_s16le",
+		"-ar", "48000",
+		"-ac", "2",
+		"-")
+	ffmpegCmd.Stdin = ffmpegIn
+	ffmpegCmd.Stdout = ffmpegOut
+
+	err = ffmpegCmd.Start()
+	if err != nil {
+		return fmt.Errorf("failed to start FFmpeg: %w", err)
+	}
 
 	// Start the text-to-speech generation in a goroutine
 	go func() {
-		defer pw.Close()
-		if err := bot.TextToSpeech(text, pw); err != nil {
+		defer ffmpegInWriter.Close()
+		if err := bot.TextToSpeech(text, ffmpegInWriter); err != nil {
 			bot.log.Error("failed to generate speech", "error", err)
 		}
 	}()
@@ -431,9 +449,9 @@ func (bot *Bot) speakInChannel(
 	}
 
 	// Read and encode audio data in chunks
-	buffer := make([]byte, 960*2*2) // 20ms of audio at 48kHz, 2 bytes per sample
+	buffer := make([]int16, 960*2) // 20ms of audio at 48kHz, 2 channels
 	for {
-		_, err := io.ReadFull(pr, buffer)
+		err := binary.Read(ffmpegOutReader, binary.LittleEndian, buffer)
 		if err == io.EOF {
 			break
 		}
@@ -441,20 +459,20 @@ func (bot *Bot) speakInChannel(
 			return fmt.Errorf("failed to read audio data: %w", err)
 		}
 
-		// Convert []byte to []int16
-		pcmBuffer := make([]int16, 960*2)
-		for i := 0; i < len(buffer); i += 2 {
-			pcmBuffer[i/2] = int16(buffer[i]) | int16(buffer[i+1])<<8
-		}
-
 		// Encode the frame to Opus
-		opusData, err := encoder.Encode(pcmBuffer, 960, 32000)
+		opusData, err := encoder.Encode(buffer, 960, 32000)
 		if err != nil {
 			return fmt.Errorf("failed to encode Opus: %w", err)
 		}
 
 		// Send the Opus packet
 		voiceChannel.Conn.OpusSend <- opusData
+	}
+
+	// Wait for FFmpeg to finish
+	err = ffmpegCmd.Wait()
+	if err != nil {
+		return fmt.Errorf("FFmpeg error: %w", err)
 	}
 
 	bot.log.Debug("status", "speaking", "false")
