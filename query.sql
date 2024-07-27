@@ -207,8 +207,9 @@ ON CONFLICT (id) DO UPDATE SET
 SELECT * FROM voice_states WHERE ssrc = ? OR user_id = ?;
 
 -- name: GetRecentRecognitions :many
-SELECT s.emoji, r.text, r.created_at
+SELECT s.emoji, r.text, r.created_at, ds.username as discord_username
 FROM recognitions r
 JOIN speakers s ON r.stream = s.stream
+JOIN discord_speakers ds ON s.id = ds.speaker
 ORDER BY r.created_at DESC
 LIMIT ?;
