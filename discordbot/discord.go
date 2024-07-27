@@ -3,6 +3,7 @@ package discordbot
 import (
 	"context"
 	"fmt"
+	"io"
 	"jamie/db"
 	"jamie/discordbot/tts"
 	"jamie/etc"
