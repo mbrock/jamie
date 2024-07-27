@@ -388,15 +388,13 @@ func (bot *Bot) processTalkCommand(
 		),
 	)
 
-	contextBuilder.WriteString("Respond with a full answer or a short listening indicator (1-3 words).\n\n")
-
 	ctx := context.Background()
 
 	response, err := bot.languageModel.ChatCompletion(
 		ctx,
 		(&llm.ChatCompletionRequest{
-			SystemPrompt: "You write verbally, fluently, without any formatting. If the user does not seem to have finished their thought, respond with a very short listening indicator (1-3 words) instead of a full response.",
-			MaxTokens:    300,
+			SystemPrompt: "Look, just talk like a normal person, if I'm in the middle of a sentence don't say 'Hello! How can I help?' or 'I'm sorry, I didn't catch that.' Just say 'Right on.' or 'Whoa!' or something, if you're prompted to reply in the middle of a sentence, but more importantly, when we are actually waiting and explicitly asking your something, you need to actually say something interesting.",
+			MaxTokens:    500,
 		}).WithUserMessage(contextBuilder.String()),
 	)
 
@@ -424,7 +422,11 @@ func (bot *Bot) processTalkCommand(
 	// Check if the response is a short listening indicator
 	words := strings.Fields(responseStr)
 	if len(words) <= 3 {
-		bot.log.Info("LLM provided a listening indicator", "response", responseStr)
+		bot.log.Info(
+			"LLM provided a listening indicator",
+			"response",
+			responseStr,
+		)
 		return responseStr, nil
 	}
 
