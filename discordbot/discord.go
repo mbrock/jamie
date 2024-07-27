@@ -511,34 +511,30 @@ func (bot *Bot) processTalkCommand(
 	)
 	contextBuilder.WriteString(prompt)
 
-	// Create OpenAI client
-	client := openai.NewClient("") // We don't need this anymore, but let's keep the client creation for now
 	ctx := context.Background()
 
-	// Generate response using GPT-4
-	resp, err := client.CreateChatCompletion(
+	// Generate response using LanguageModel
+	response, err := bot.languageModel.ChatCompletion(
 		ctx,
-		openai.ChatCompletionRequest{
-			Model:     openai.GPT4o,
-			MaxTokens: 300,
-			Messages: []openai.ChatCompletionMessage{
-				{
-					Role:    openai.ChatMessageRoleSystem,
-					Content: "You never offer to help. You hang back. Write terse, weird analyses without formatting. Do not react, just write.",
-				},
-				{
-					Role:    openai.ChatMessageRoleUser,
-					Content: contextBuilder.String(),
-				},
-			},
-		},
+		(&ChatCompletionRequest{
+			SystemPrompt: "You never offer to help. You hang back. Write terse, weird analyses without formatting. Do not react, just write.",
+			MaxTokens:    300,
+		}).WithUserMessage(contextBuilder.String()),
 	)
 
 	if err != nil {
-		return "", fmt.Errorf("failed to generate GPT-4 response: %w", err)
+		return "", fmt.Errorf("failed to generate language model response: %w", err)
 	}
 
-	return resp.Choices[0].Message.Content, nil
+	var fullResponse strings.Builder
+	for chunk := range response {
+		if chunk.Err != nil {
+			return "", fmt.Errorf("error during response generation: %w", chunk.Err)
+		}
+		fullResponse.WriteString(chunk.Content)
+	}
+
+	return fullResponse.String(), nil
 }
 
 func (bot *Bot) GenerateOggOpusBlob(
