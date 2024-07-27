@@ -117,10 +117,10 @@ func SummarizeTranscript(
 
 		response, err := languageModel.ChatCompletion(
 			ctx,
-			&ChatCompletionRequest{
+			(&ChatCompletionRequest{
 				SystemPrompt: systemPrompt,
 				MaxTokens:    400,
-			}.WithUserMessage(formattedContext.String()).Stream(),
+			}).WithUserMessage(formattedContext.String()),
 		)
 
 		if err != nil {
@@ -128,9 +128,7 @@ func SummarizeTranscript(
 			return
 		}
 
-		for chunk := range response {
-			summaryChannel <- chunk.Content
-		}
+		summaryChannel <- response.Content
 	}()
 
 	return summaryChannel, nil
