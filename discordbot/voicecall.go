@@ -142,6 +142,22 @@ func (bot *Bot) processInboundAudioPacket(
 		)
 	}
 
+	// Save the audio packet
+	err = bot.db.SavePacket(context.Background(), db.SavePacketParams{
+		ID:        etc.Gensym(),
+		Stream:    streamID,
+		PacketSeq: int64(packet.Sequence),
+		SampleIdx: int64(packet.Timestamp),
+		Payload:   packet.Opus,
+	})
+	if err != nil {
+		bot.log.Error("Failed to save audio packet",
+			"error", err,
+			"streamID", streamID,
+		)
+		// Continue processing even if saving fails
+	}
+
 	recognizers, err := bot.getRecognizersForStream(streamID)
 	if err != nil {
 		return fmt.Errorf("failed to get recognizers for stream: %w", err)
