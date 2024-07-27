@@ -361,8 +361,8 @@ func runListStreams(cmd *cobra.Command, args []string) {
 
 	for _, stream := range streams {
 		createdAt := etc.JulianDayToTime(stream.CreatedAt).Format("2006-01-02 15:04:05")
-		duration := fmt.Sprintf("%.2f s", stream.Duration)
-		
+		duration := fmt.Sprintf("%.2f s", float64(stream.Duration)/1000000) // Convert microseconds to seconds
+
 		table.Append([]string{
 			stream.ID,
 			createdAt,

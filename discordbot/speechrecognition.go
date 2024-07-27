@@ -11,42 +11,37 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-func (bot *Bot) getRecognizersForStream(
-	streamID string,
-) ([]stt.SpeechRecognizer, error) {
+func (bot *Bot) getRecognizersForStream(streamID string) ([]stt.SpeechRecognizer, error) {
 	bot.mu.Lock()
 	defer bot.mu.Unlock()
 
 	recognizers, exists := bot.voiceCall.Recognizers[streamID]
-	if !exists {
-		recognizers = make([]stt.SpeechRecognizer, 0)
-
-		// Start a default recognizer
-		session, err := bot.speechRecognition.Start(
-			context.Background(),
-			"en-US",
-		)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"failed to start speech recognition session: %w",
-				err,
-			)
-		}
-		recognizers = append(recognizers, session)
-		go bot.speechRecognitionLoop(streamID, session)
-
-		swedishSession, err := bot.speechRecognition.Start(
-			context.Background(),
-			"sv-SE",
-		)
-		if err == nil {
-			recognizers = append(recognizers, swedishSession)
-			go bot.speechRecognitionLoop(streamID, swedishSession)
-		}
-
-		bot.voiceCall.Recognizers[streamID] = recognizers
+	if exists {
+		return recognizers, nil
 	}
+
+	recognizers = make([]stt.SpeechRecognizer, 0)
+
+	if err := bot.addRecognizer(streamID, &recognizers, "en-US"); err != nil {
+		return nil, err
+	}
+
+	// Attempt to add Swedish recognizer, but continue if it fails
+	_ = bot.addRecognizer(streamID, &recognizers, "sv-SE")
+
+	bot.voiceCall.Recognizers[streamID] = recognizers
 	return recognizers, nil
+}
+
+func (bot *Bot) addRecognizer(streamID string, recognizers *[]stt.SpeechRecognizer, language string) error {
+	session, err := bot.speechRecognition.Start(context.Background(), language)
+	if err != nil {
+		return fmt.Errorf("failed to start %s speech recognition session: %w", language, err)
+	}
+
+	*recognizers = append(*recognizers, session)
+	go bot.speechRecognitionLoop(streamID, session)
+	return nil
 }
 
 func (bot *Bot) speechRecognitionLoop(
