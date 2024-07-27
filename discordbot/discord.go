@@ -559,19 +559,19 @@ func (bot *Bot) GenerateOggOpusBlob(
 	)
 }
 
-func (bot *Bot) TextToSpeech(text string) ([]byte, error) {
+func (bot *Bot) TextToSpeech(text string, writer io.Writer) error {
 	bot.log.Info("speaking", "text", text)
-	audio, err := bot.speechGenerator.TextToSpeech(text)
+	err := bot.speechGenerator.TextToSpeechStreaming(text, writer)
 	if err != nil {
 		bot.log.Error(
 			"Failed to generate speech",
 			"error",
 			err,
 		)
-		return nil, fmt.Errorf("failed to generate speech: %w", err)
+		return fmt.Errorf("failed to generate speech: %w", err)
 	}
 
-	return audio, nil
+	return nil
 }
 
 func (bot *Bot) speakSummary(

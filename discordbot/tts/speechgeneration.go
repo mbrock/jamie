@@ -6,8 +6,15 @@ import (
 	"github.com/haguro/elevenlabs-go"
 )
 
+import (
+	"fmt"
+	"io"
+
+	"github.com/haguro/elevenlabs-go"
+)
+
 type SpeechGenerator interface {
-	TextToSpeech(text string) ([]byte, error)
+	TextToSpeechStreaming(text string, writer io.Writer) error
 }
 
 type ElevenLabsSpeechGenerator struct {
@@ -18,7 +25,7 @@ func NewElevenLabsSpeechGenerator(apiKey string) *ElevenLabsSpeechGenerator {
 	return &ElevenLabsSpeechGenerator{apiKey: apiKey}
 }
 
-func (e *ElevenLabsSpeechGenerator) TextToSpeech(text string) ([]byte, error) {
+func (e *ElevenLabsSpeechGenerator) TextToSpeechStreaming(text string, writer io.Writer) error {
 	elevenlabs.SetAPIKey(e.apiKey)
 
 	ttsReq := elevenlabs.TextToSpeechRequest{
@@ -26,10 +33,10 @@ func (e *ElevenLabsSpeechGenerator) TextToSpeech(text string) ([]byte, error) {
 		ModelID: "eleven_turbo_v2_5",
 	}
 
-	audio, err := elevenlabs.TextToSpeech("XB0fDUnXU5powFXDhCwa", ttsReq)
+	err := elevenlabs.TextToSpeechStreaming("XB0fDUnXU5powFXDhCwa", ttsReq, writer)
 	if err != nil {
-		return nil, fmt.Errorf("failed to generate speech: %w", err)
+		return fmt.Errorf("failed to generate speech: %w", err)
 	}
 
-	return audio, nil
+	return nil
 }
