@@ -3,12 +3,9 @@ package llm
 import (
 	"context"
 	"fmt"
-	"io"
 	"jamie/db"
 	"sort"
 	"strings"
-
-	"github.com/sashabaranov/go-openai"
 )
 
 func SummarizeTranscript(
@@ -76,8 +73,6 @@ func SummarizeTranscript(
 		formattedContext.WriteString(item.content + "\n")
 	}
 
-	// Create OpenAI client
-	// We don't need to create an OpenAI client here anymore
 	ctx := context.Background()
 
 	// Get the system prompt
@@ -96,57 +91,47 @@ func SummarizeTranscript(
 			"Emphasize key words and salient concepts with CAPS."
 	}
 
-	req := openai.ChatCompletionRequest{
-		Model: openai.GPT4o,
-		Messages: []openai.ChatCompletionMessage{
-			{
-				Role:    openai.ChatMessageRoleSystem,
-				Content: systemPrompt,
-			},
-			{
-				Role: openai.ChatMessageRoleUser,
-				Content: fmt.Sprintf(
-					"CONTEXT: %s",
-					formattedContext.String(),
-				),
-			},
-		},
-		MaxTokens: 400,
-		Stream:    true,
-	}
+	// req := openai.ChatCompletionRequest{
+	// 	Model: openai.GPT4o,
+	// 	Messages: []openai.ChatCompletionMessage{
+	// 		{
+	// 			Role:    openai.ChatMessageRoleSystem,
+	// 			Content: systemPrompt,
+	// 		},
+	// 		{
+	// 			Role: openai.ChatMessageRoleUser,
+	// 			Content: fmt.Sprintf(
+	// 				"CONTEXT: %s",
+	// 				formattedContext.String(),
+	// 			),
+	// 		},
+	// 	},
+	// 	MaxTokens: 400,
+	// 	Stream:    true,
+	// }
 
 	summaryChannel := make(chan string, 50)
 
 	go func() {
 		defer close(summaryChannel)
 
-		response, err := languageModel.GenerateResponse(formattedContext.String())
+		response, err := languageModel.ChatCompletion(
+			ctx,
+			&ChatCompletionRequest{
+				SystemPrompt: systemPrompt,
+				MaxTokens:    400,
+			}.WithUserMessage(formattedContext.String()).Stream(),
+		)
+
 		if err != nil {
 			summaryChannel <- fmt.Sprintf("Error generating response: %v", err)
 			return
 		}
 
-		// Split the response into smaller chunks
-		chunks := splitIntoChunks(response, 100) // Split into chunks of 100 characters
-
-		for _, chunk := range chunks {
-			summaryChannel <- chunk
+		for chunk := range response {
+			summaryChannel <- chunk.Content
 		}
 	}()
 
 	return summaryChannel, nil
-}
-func splitIntoChunks(s string, chunkSize int) []string {
-	var chunks []string
-	runes := []rune(s)
-
-	for i := 0; i < len(runes); i += chunkSize {
-		end := i + chunkSize
-		if end > len(runes) {
-			end = len(runes)
-		}
-		chunks = append(chunks, string(runes[i:end]))
-	}
-
-	return chunks
 }
