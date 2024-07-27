@@ -23,7 +23,11 @@ func GenerateOggOpusBlob(
 ) ([]byte, error) {
 	packets, err := db.GetPacketsForStreamInSampleRange(
 		context.Background(),
-		streamID, // XXX: weird
+		db.GetPacketsForStreamInSampleRangeParams{
+			Stream:     streamID,
+			SampleIdx:  startSample,
+			SampleIdx_2: endSample,
+		},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("fetch packets: %w", err)
@@ -76,6 +80,108 @@ func GenerateOggOpusBlob(
 	}
 
 	return oggBuffer.Bytes(), nil
+}
+
+func ConvertToOpus(mp3Data []byte) ([][]byte, error) {
+	inputFile, err := os.CreateTemp("", "input*.mp3")
+	if err != nil {
+		log.Error("Failed to create temporary input file", "error", err)
+		return nil, fmt.Errorf(
+			"failed to create temporary input file: %w",
+			err,
+		)
+	}
+	defer os.Remove(inputFile.Name())
+	defer inputFile.Close()
+
+	if _, err := inputFile.Write(mp3Data); err != nil {
+		log.Error("Failed to write MP3 data to temporary file", "error", err)
+		return nil, fmt.Errorf(
+			"failed to write MP3 data to temporary file: %w",
+			err,
+		)
+	}
+
+	outputFile, err := os.CreateTemp("", "output*.pcm")
+	if err != nil {
+		log.Error("Failed to create temporary output file", "error", err)
+		return nil, fmt.Errorf(
+			"failed to create temporary output file: %w",
+			err,
+		)
+	}
+	defer os.Remove(outputFile.Name())
+	defer outputFile.Close()
+
+	cmd := exec.Command(
+		"ffmpeg",
+		"-y",
+		"-i", inputFile.Name(),
+		"-ar", "48000",
+		"-ac", "2",
+		"-f", "s16le",
+		outputFile.Name(),
+	)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		log.Error(
+			"Failed to execute ffmpeg",
+			"error", err,
+			"stderr", stderr.String(),
+		)
+		return nil, fmt.Errorf(
+			"failed to execute ffmpeg: %w\nStderr: %s",
+			err,
+			stderr.String(),
+		)
+	}
+
+	log.Info("ffmpeg", "status", "ok")
+
+	pcmData, err := os.ReadFile(outputFile.Name())
+	if err != nil {
+		log.Error("Failed to read converted PCM data", "error", err)
+		return nil, fmt.Errorf("failed to read converted PCM data: %w", err)
+	}
+
+	encoder, err := gopus.NewEncoder(48000, 2, gopus.Audio)
+	if err != nil {
+		log.Error("Failed to create Opus encoder", "error", err)
+		return nil, fmt.Errorf("failed to create Opus encoder: %w", err)
+	}
+
+	log.Info("Created Opus encoder")
+
+	var opusPackets [][]byte
+	frameSize := 960 * 2 * 2 // 960 samples * 2 channels * 2 bytes per sample
+	for i := 0; i < len(pcmData); i += frameSize {
+		end := i + frameSize
+		if end > len(pcmData) {
+			end = len(pcmData)
+		}
+		frame := pcmData[i:end]
+
+		if len(frame) < frameSize {
+			frame = append(frame, make([]byte, frameSize-len(frame))...)
+		}
+
+		pcmInt16 := make([]int16, 960*2)
+		for j := 0; j < len(frame); j += 2 {
+			pcmInt16[j/2] = int16(frame[j]) | int16(frame[j+1])<<8
+		}
+
+		opusData, err := encoder.Encode(pcmInt16, 960, 32000)
+		if err != nil {
+			log.Error("Failed to encode Opus", "error", err)
+			return nil, fmt.Errorf("failed to encode Opus: %w", err)
+		}
+		opusPackets = append(opusPackets, opusData)
+	}
+
+	return opusPackets, nil
 }
 
 func ConvertToOpus(mp3Data []byte) ([][]byte, error) {
