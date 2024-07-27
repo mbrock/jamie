@@ -27,11 +27,11 @@ type Bot struct {
 	log  *log.Logger
 	conn *dis.Session
 
-	openaiAPIKey     string
-	elevenLabsAPIKey string
+	openaiAPIKey string
 
 	speechRecognition stt.SpeechRecognition
 	speechRecognizers map[string]stt.SpeechRecognizer // streamID
+	speechGenerator   tts.SpeechGenerator
 
 	commands map[string]CommandHandler // command name
 
@@ -46,9 +46,9 @@ type Bot struct {
 func NewBot(
 	discordToken string,
 	speechRecognitionService stt.SpeechRecognition,
+	speechGenerationService tts.SpeechGenerator,
 	logger *log.Logger,
 	openaiAPIKey string,
-	elevenLabsAPIKey string,
 	db *db.Queries,
 	guildID string,
 ) (*Bot, error) {
@@ -56,13 +56,13 @@ func NewBot(
 		db:                db,
 		log:               logger,
 		openaiAPIKey:      openaiAPIKey,
-		elevenLabsAPIKey:  elevenLabsAPIKey,
 		commands:          make(map[string]CommandHandler),
 		speechRecognition: speechRecognitionService,
 		speechRecognizers: make(
 			map[string]stt.SpeechRecognizer,
 		),
-		guildID: guildID,
+		speechGenerator: speechGenerationService,
+		guildID:         guildID,
 	}
 
 	bot.registerCommands()
@@ -555,17 +555,10 @@ func (bot *Bot) GenerateOggOpusBlob(
 
 func (bot *Bot) TextToSpeech(text string) ([]byte, error) {
 	bot.log.Info("speaking", "text", text)
-	elevenlabs.SetAPIKey(bot.elevenLabsAPIKey)
-
-	ttsReq := elevenlabs.TextToSpeechRequest{
-		Text:    text,
-		ModelID: "eleven_turbo_v2_5",
-	}
-
-	audio, err := elevenlabs.TextToSpeech("XB0fDUnXU5powFXDhCwa", ttsReq)
+	audio, err := bot.speechGenerator.TextToSpeech(text)
 	if err != nil {
 		bot.log.Error(
-			"Failed to generate speech from ElevenLabs",
+			"Failed to generate speech",
 			"error",
 			err,
 		)
