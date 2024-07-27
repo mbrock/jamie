@@ -85,6 +85,9 @@ func (bot *Bot) processPendingRecognitionResult(
 			return
 		}
 
+		// Update the last valid transcription time
+		bot.lastValidTranscription = time.Now()
+
 		// Signal to cancel any ongoing speech
 		select {
 		case bot.cancelSpeech <- struct{}{}:

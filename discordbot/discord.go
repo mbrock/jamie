@@ -45,6 +45,8 @@ type Bot struct {
 	defaultTalkMode bool
 
 	cancelSpeech chan struct{}
+
+	lastValidTranscription time.Time
 }
 
 func NewBot(
