@@ -416,7 +416,7 @@ func (bot *Bot) speakInChannel(
 
 	// Create pipes for FFmpeg input and output
 	ffmpegIn, ffmpegInWriter := io.Pipe()
-	ffmpegOut, ffmpegOutReader := io.Pipe()
+	ffmpegOutReader, ffmpegOut := io.Pipe()
 
 	// Start FFmpeg command
 	ffmpegCmd := exec.Command("ffmpeg",
@@ -451,7 +451,7 @@ func (bot *Bot) speakInChannel(
 	// Read and encode audio data in chunks
 	buffer := make([]int16, 960*2) // 20ms of audio at 48kHz, 2 channels
 	for {
-		err := binary.Read(ffmpegOutReader, binary.LittleEndian, buffer)
+		_, err := io.ReadFull(ffmpegOutReader, buffer)
 		if err == io.EOF {
 			break
 		}
