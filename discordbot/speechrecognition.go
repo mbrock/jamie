@@ -3,14 +3,15 @@ package discordbot
 import (
 	"context"
 	"fmt"
-	"github.com/bwmarrin/discordgo"
 	"jamie/db"
 	"jamie/etc"
 	"jamie/stt"
 	"strings"
+
+	"github.com/bwmarrin/discordgo"
 )
 
-func (bot *Bot) getSpeechRecognitionSession(
+func (bot *Bot) getRecognizerForStream(
 	streamID string,
 ) (stt.SpeechRecognizer, error) {
 	bot.mu.Lock()

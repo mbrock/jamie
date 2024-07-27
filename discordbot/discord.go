@@ -32,7 +32,6 @@ type Bot struct {
 
 	speechRecognition stt.SpeechRecognition
 	speechRecognizers map[string]stt.SpeechRecognizer // streamID
-	audioBuffers      map[string]chan []byte          // streamID
 
 	commands map[string]CommandHandler // command name
 
@@ -62,7 +61,6 @@ func NewBot(
 		openaiAPIKey:      openaiAPIKey,
 		elevenLabsAPIKey:  elevenLabsAPIKey,
 		commands:          make(map[string]CommandHandler),
-		audioBuffers:      make(map[string]chan []byte),
 		speechRecognition: speechRecognitionService,
 		speechRecognizers: make(
 			map[string]stt.SpeechRecognizer,

@@ -130,23 +130,17 @@ func (bot *Bot) acceptInboundAudioPacket(
 		)
 	}
 
-	session, err := bot.getSpeechRecognitionSession(streamID)
+	recognizer, err := bot.getRecognizerForStream(streamID)
 	if err != nil {
-		bot.log.Error("Failed to get speech recognition session",
-			"error", err,
-			"streamID", streamID,
-		)
-		return err
+		return fmt.Errorf("failed to get recognizer for stream: %w", err)
 	}
 
-	err = session.SendAudio(packet.Opus)
+	err = recognizer.SendAudio(packet.Opus)
 	if err != nil {
-		bot.log.Error(
-			"Failed to send audio to speech recognition service",
-			"error", err,
-			"streamID", streamID,
+		return fmt.Errorf(
+			"failed to send audio to speech recognition service: %w",
+			err,
 		)
-		return err
 	}
 
 	return nil
@@ -461,4 +455,3 @@ func (bot *Bot) processVoicePackets(packetChan <-chan *voicePacket) {
 		}
 	}
 }
-
