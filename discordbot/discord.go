@@ -42,6 +42,7 @@ type Bot struct {
 	speakingMu sync.Mutex
 
 	guildID string
+	defaultTalkMode bool
 }
 
 func NewBot(
@@ -52,6 +53,7 @@ func NewBot(
 	logger *log.Logger,
 	db *db.Queries,
 	guildID string,
+	talkMode bool,
 ) (*Bot, error) {
 	bot := &Bot{
 		db:                db,
@@ -63,8 +65,9 @@ func NewBot(
 		speechRecognizers: make(
 			map[string]stt.SpeechRecognizer,
 		),
-		speechGenerator: speechGenerationService,
-		guildID:         guildID,
+		speechGenerator:   speechGenerationService,
+		guildID:           guildID,
+		defaultTalkMode:   talkMode,
 	}
 
 	bot.registerCommands()

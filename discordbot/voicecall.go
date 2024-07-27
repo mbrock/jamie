@@ -52,7 +52,7 @@ func (bot *Bot) joinVoiceCall(guildID, channelID string) error {
 		GuildID:   guildID,
 		ChannelID: channelID,
 
-		TalkMode: false,
+		TalkMode: bot.defaultTalkMode,
 
 		InboundAudioPackets: make(
 			chan *discordgo.Packet,

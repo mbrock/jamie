@@ -39,6 +39,8 @@ func init() {
 	cobra.OnInitialize(initConfig)
 	discordCmd.Flags().
 		String("guild", "", "Specify a guild ID to join voice channels in")
+	discordCmd.Flags().
+		Bool("talk", false, "Enable talk mode on startup")
 	rootCmd.AddCommand(discordCmd)
 	rootCmd.AddCommand(summarizeTranscriptCmd)
 	rootCmd.AddCommand(generateAudioCmd)
@@ -467,6 +469,7 @@ func runDiscord(cmd *cobra.Command, args []string) {
 	deepgramAPIKey := viper.GetString("deepgram_api_key")
 	elevenlabsAPIKey := viper.GetString("elevenlabs_api_key")
 	guildID, _ := cmd.Flags().GetString("guild")
+	talkMode, _ := cmd.Flags().GetBool("talk")
 
 	if discordToken == "" {
 		mainLogger.Fatal("missing DISCORD_TOKEN or --discord-token=")
@@ -519,6 +522,7 @@ func runDiscord(cmd *cobra.Command, args []string) {
 		discordLogger,
 		queries,
 		guildID,
+		talkMode,
 	)
 	if err != nil {
 		mainLogger.Fatal("start discord bot", "error", err.Error())
