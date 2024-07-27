@@ -21,28 +21,6 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
-type TextMessage interface {
-	GetChannelID() string
-	GetAuthorID() string
-	GetAuthorBot() bool
-	GetID() string
-	GetContent() string
-}
-
-func (bot *Bot) saveTextMessage(message TextMessage) error {
-	return bot.db.SaveTextMessage(
-		context.Background(),
-		db.SaveTextMessageParams{
-			ID:               etc.Gensym(),
-			DiscordChannel:   message.GetChannelID(),
-			DiscordUser:      message.GetAuthorID(),
-			DiscordMessageID: message.GetID(),
-			Content:          message.GetContent(),
-			IsBot:            message.GetAuthorBot(),
-		},
-	)
-}
-
 type CommandHandler func(*dis.Session, *dis.MessageCreate, []string) error
 
 type VoiceChannel struct {
@@ -136,16 +114,23 @@ func (bot *Bot) Close() error {
 	return bot.conn.Close()
 }
 
+func (bot *Bot) saveTextMessage(message *dis.Message) error {
+	return bot.db.SaveTextMessage(
+		context.Background(),
+		db.SaveTextMessageParams{
+			ID:               etc.Gensym(),
+			DiscordChannel:   message.ChannelID,
+			DiscordUser:      message.Author.ID,
+			DiscordMessageID: message.ID,
+			Content:          message.Content,
+			IsBot:            message.Author.Bot,
+		},
+	)
+}
+
 func (bot *Bot) handleGuildCreate(_ *dis.Session, event *dis.GuildCreate) {
-	bot.log.Info("joined guild", "guild", event.Guild.Name)
-	err := bot.joinAllVoiceChannels(event.Guild.ID)
-	if err != nil {
-		bot.log.Error(
-			"failed to join voice channels",
-			"error",
-			err.Error(),
-		)
-	}
+	bot.log.Info("joined guild", "name", event.Guild.Name)
+	bot.joinAllVoiceChannels(event.Guild.ID)
 }
 
 func (bot *Bot) handleMessageCreate(
@@ -156,12 +141,11 @@ func (bot *Bot) handleMessageCreate(
 		return
 	}
 
-	err := bot.saveTextMessage(discordTextMessage{m.Message})
+	err := bot.saveTextMessage(m.Message)
 	if err != nil {
 		bot.log.Error("Failed to save received message", "error", err.Error())
 	}
 
-	// Check if the bot is currently speaking
 	bot.speakingMu.Lock()
 	if bot.isSpeaking {
 		bot.speakingMu.Unlock()
@@ -176,22 +160,18 @@ func (bot *Bot) handleMessageCreate(
 
 	if ok && voiceChannel.TalkMode {
 		if strings.HasPrefix(m.Content, "!talk") {
-			// Turn off talk mode
 			voiceChannel.TalkMode = false
-			bot.sendAndSaveMessage(s, m.ChannelID, "Talk mode deactivated.")
+			bot.sendAndSaveMessage(m.ChannelID, "Talk mode deactivated.")
 		} else {
-			// Process the message as a talk command
 			bot.handleTalkCommand(s, m, strings.Fields(m.Content))
 		}
 		return
 	}
 
-	// Check if the message starts with the command prefix
 	if !strings.HasPrefix(m.Content, "!") {
 		return
 	}
 
-	// Split the message into command and arguments
 	args := strings.Fields(m.Content[1:])
 	if len(args) == 0 {
 		return
@@ -199,17 +179,14 @@ func (bot *Bot) handleMessageCreate(
 
 	commandName := args[0]
 	if commandName == "talk" {
-		// Turn on talk mode
 		if ok {
 			voiceChannel.TalkMode = true
 			bot.sendAndSaveMessage(
-				s,
 				m.ChannelID,
 				"Talk mode activated. Type !talk again to deactivate.",
 			)
 		} else {
 			bot.sendAndSaveMessage(
-				s,
 				m.ChannelID,
 				"You must be in a voice channel to activate talk mode.",
 			)
@@ -220,7 +197,6 @@ func (bot *Bot) handleMessageCreate(
 	handler, exists := bot.commands[commandName]
 	if !exists {
 		bot.sendAndSaveMessage(
-			s,
 			m.ChannelID,
 			fmt.Sprintf("Unknown command: %s", commandName),
 		)
@@ -237,29 +213,23 @@ func (bot *Bot) handleMessageCreate(
 			err.Error(),
 		)
 		bot.sendAndSaveMessage(
-			s,
 			m.ChannelID,
 			fmt.Sprintf("Error executing command: %s", err.Error()),
 		)
 	}
 }
 
-func (bot *Bot) processSegment(
+func (bot *Bot) processPendingRecognitionResult(
 	streamID string,
-	segmentDrafts <-chan stt.Result,
+	drafts <-chan stt.Result,
 ) {
-	var finalResult stt.Result
-
-	for draft := range segmentDrafts {
-		finalResult = draft
+	var result stt.Result
+	for draft := range drafts {
+		result = draft
 	}
 
-	if finalResult.Text != "" {
-		bot.log.Info(
-			"heard",
-			"text",
-			finalResult.Text,
-		)
+	if result.Text != "" {
+		bot.log.Info("recognized", "text", result.Text)
 
 		row, err := bot.db.GetChannelAndUsernameForStream(
 			context.Background(),
@@ -274,10 +244,10 @@ func (bot *Bot) processSegment(
 			return
 		}
 
-		// Check if the channel is in talk mode
 		bot.mu.Lock()
 		voiceChannel, ok := bot.voiceChannels[row.DiscordChannel]
 		bot.mu.Unlock()
+
 		if ok && voiceChannel.TalkMode {
 			bot.speakingMu.Lock()
 			isSpeaking := bot.isSpeaking
@@ -287,23 +257,23 @@ func (bot *Bot) processSegment(
 				bot.speakingMu.Lock()
 				bot.isSpeaking = true
 				bot.speakingMu.Unlock()
-				// Process the speech recognition result as a yo command
+
 				bot.handleTalkCommand(bot.conn, &dis.MessageCreate{
 					Message: &dis.Message{
 						ChannelID: row.DiscordChannel,
 						Author: &dis.User{
 							Username: row.Username,
 						},
-						Content: finalResult.Text,
+						Content: result.Text,
 					},
 				},
-					strings.Fields(finalResult.Text),
+					strings.Fields(result.Text),
 				)
 
 				// Send the transcription to the Discord channel
 				_, err = bot.conn.ChannelMessageSend(
 					row.DiscordChannel,
-					fmt.Sprintf("> %s: %s", row.Username, finalResult.Text),
+					fmt.Sprintf("> %s: %s", row.Username, result.Text),
 				)
 				if err != nil {
 					bot.log.Error(
@@ -317,7 +287,7 @@ func (bot *Bot) processSegment(
 			// Send the transcribed message as usual
 			_, err = bot.conn.ChannelMessageSend(
 				row.DiscordChannel,
-				fmt.Sprintf("> %s: %s", row.Username, finalResult.Text),
+				fmt.Sprintf("> %s: %s", row.Username, result.Text),
 			)
 
 			if err != nil {
@@ -336,10 +306,10 @@ func (bot *Bot) processSegment(
 			db.SaveRecognitionParams{
 				ID:         recognitionID,
 				Stream:     streamID,
-				SampleIdx:  int64(finalResult.Start * 48000),
-				SampleLen:  int64(finalResult.Duration * 48000),
-				Text:       finalResult.Text,
-				Confidence: finalResult.Confidence,
+				SampleIdx:  int64(result.Start * 48000),
+				SampleLen:  int64(result.Duration * 48000),
+				Text:       result.Text,
+				Confidence: result.Confidence,
 			},
 		)
 		if err != nil {
@@ -353,10 +323,9 @@ func (bot *Bot) processSegment(
 }
 
 func (bot *Bot) sendAndSaveMessage(
-	s *dis.Session,
 	channelID, content string,
 ) {
-	msg, err := s.ChannelMessageSend(channelID, content)
+	msg, err := bot.conn.ChannelMessageSend(channelID, content)
 	if err != nil {
 		bot.log.Error("Failed to send message", "error", err.Error())
 		return
@@ -737,7 +706,7 @@ func (bot *Bot) speechRecognitionLoop(
 	session stt.SpeechRecognizer,
 ) {
 	for segmentDrafts := range session.Receive() {
-		bot.processSegment(streamID, segmentDrafts)
+		bot.processPendingRecognitionResult(streamID, segmentDrafts)
 	}
 
 	bot.log.Info(
@@ -887,7 +856,6 @@ func (bot *Bot) handlePromptCommand(
 	}
 
 	bot.sendAndSaveMessage(
-		s,
 		m.ChannelID,
 		fmt.Sprintf("System prompt '%s' has been set.", name),
 	)
@@ -907,7 +875,6 @@ func (bot *Bot) handleListPromptsCommand(
 
 	if len(prompts) == 0 {
 		bot.sendAndSaveMessage(
-			s,
 			m.ChannelID,
 			"No system prompts have been set.",
 		)
@@ -922,13 +889,13 @@ func (bot *Bot) handleListPromptsCommand(
 		)
 	}
 
-	bot.sendAndSaveMessage(s, m.ChannelID, message.String())
+	bot.sendAndSaveMessage(m.ChannelID, message.String())
 
 	return nil
 }
 
 func (bot *Bot) handleTalkCommand(
-	s *dis.Session,
+	_ *dis.Session,
 	m *dis.MessageCreate,
 	args []string,
 ) error {
@@ -940,37 +907,32 @@ func (bot *Bot) handleTalkCommand(
 
 	// Start a goroutine to handle the command asynchronously
 	go func() {
-		response, err := bot.processTalkCommand(s, m, prompt)
+		response, err := bot.processTalkCommand(m, prompt)
 		if err != nil {
 			bot.log.Error("Failed to process talk command", "error", err)
 			bot.sendAndSaveMessage(
-				s,
 				m.ChannelID,
 				fmt.Sprintf("An error occurred: %v", err),
 			)
 			return
 		}
 
-		// Speak the response
-		err = bot.speakInChannel(s, m.ChannelID, response)
+		err = bot.speakInChannel(m.ChannelID, response)
 		if err != nil {
 			bot.log.Error("Failed to speak response", "error", err)
 			bot.sendAndSaveMessage(
-				s,
 				m.ChannelID,
 				fmt.Sprintf("Failed to speak the response: %v", err),
 			)
 		}
 
-		// Also send the response as a text message
-		bot.sendAndSaveMessage(s, m.ChannelID, response)
+		bot.sendAndSaveMessage(m.ChannelID, response)
 	}()
 
 	return nil
 }
 
 func (bot *Bot) processTalkCommand(
-	_ *dis.Session,
 	m *dis.MessageCreate,
 	prompt string,
 ) (string, error) {
@@ -1071,7 +1033,6 @@ func (bot *Bot) processTalkCommand(
 }
 
 func (bot *Bot) speakInChannel(
-	s *dis.Session,
 	channelID string,
 	text string,
 ) error {
@@ -1086,12 +1047,12 @@ func (bot *Bot) speakInChannel(
 	}()
 
 	// Find the voice channel associated with the text channel
-	channel, err := s.Channel(channelID)
+	channel, err := bot.conn.Channel(channelID)
 	if err != nil {
 		return fmt.Errorf("failed to get channel: %w", err)
 	}
 
-	guild, err := s.State.Guild(channel.GuildID)
+	guild, err := bot.conn.State.Guild(channel.GuildID)
 	if err != nil {
 		return fmt.Errorf("failed to get guild: %w", err)
 	}
@@ -1112,7 +1073,12 @@ func (bot *Bot) speakInChannel(
 	// Join the voice channel if not already connected
 	voiceChannel, ok := bot.voiceChannels[voiceChannelID]
 	if !ok {
-		vc, err := s.ChannelVoiceJoin(guild.ID, voiceChannelID, false, true)
+		vc, err := bot.conn.ChannelVoiceJoin(
+			guild.ID,
+			voiceChannelID,
+			false,
+			true,
+		)
 		if err != nil {
 			bot.mu.Unlock()
 			return fmt.Errorf("failed to join voice channel: %w", err)
@@ -1299,27 +1265,4 @@ func (bot *Bot) processAudioBuffer(
 			)
 		}
 	}
-}
-type discordTextMessage struct {
-	*dis.Message
-}
-
-func (m discordTextMessage) GetChannelID() string {
-	return m.ChannelID
-}
-
-func (m discordTextMessage) GetAuthorID() string {
-	return m.Author.ID
-}
-
-func (m discordTextMessage) GetAuthorBot() bool {
-	return m.Author.Bot
-}
-
-func (m discordTextMessage) GetID() string {
-	return m.ID
-}
-
-func (m discordTextMessage) GetContent() string {
-	return m.Content
 }

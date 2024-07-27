@@ -42,8 +42,6 @@ func (c *DeepgramClient) Start(
 		SmartFormat:    true,
 		InterimResults: true,
 		UtteranceEndMs: "1000",
-		VadEvents:      true,
-		Diarize:        true,
 	}
 
 	session := &DeepgramSession{
