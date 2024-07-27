@@ -538,7 +538,13 @@ func (bot *Bot) speakInChannel(
 							return
 						}
 
-						voiceChannel.Conn.OpusSend <- opusData
+						select {
+						case <-bot.cancelSpeech:
+							bot.log.Info("Speech cancelled while sending Opus data")
+							return
+						case voiceChannel.Conn.OpusSend <- opusData:
+							// Opus data sent successfully
+						}
 					}
 
 					// Reset the buffer index
@@ -550,7 +556,6 @@ func (bot *Bot) speakInChannel(
 				}
 			}
 		}
-
 	}()
 
 	// Wait for FFmpeg to finish or for cancellation
