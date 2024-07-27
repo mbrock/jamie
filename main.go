@@ -409,10 +409,13 @@ func runDiscord(cmd *cobra.Command, args []string) {
 		mainLogger.Fatal("error creating Discord session", "error", err.Error())
 	}
 
+	// Wrap the discord session with our DiscordSession struct
+	discordWrapper := &discordbot.DiscordSession{Session: discord}
+
 	speechGenerator := tts.NewElevenLabsSpeechGenerator(elevenlabsAPIKey)
 	languageModel := llm.NewOpenAILanguageModel(openaiAPIKey)
 	bot, err = discordbot.NewBot(
-		discord,
+		discordWrapper,
 		transcriptionService,
 		speechGenerator,
 		languageModel,

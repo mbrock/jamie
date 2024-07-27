@@ -451,3 +451,27 @@ func (bot *Bot) TextToSpeech(text string, writer io.Writer) error {
 
 	return nil
 }
+package discordbot
+
+import (
+	"github.com/bwmarrin/discordgo"
+)
+
+// DiscordSession wraps discordgo.Session to implement the SocialNetwork interface
+type DiscordSession struct {
+	*discordgo.Session
+}
+
+// MyUserID returns the ID of the bot user
+func (d *DiscordSession) MyUserID() (string, error) {
+	return d.State.User.ID, nil
+}
+
+// GuildVoiceStates returns all voice states for a given guild
+func (d *DiscordSession) GuildVoiceStates(guildID string) ([]*discordgo.VoiceState, error) {
+	guild, err := d.State.Guild(guildID)
+	if err != nil {
+		return nil, err
+	}
+	return guild.VoiceStates, nil
+}
