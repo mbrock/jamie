@@ -383,14 +383,15 @@ func (bot *Bot) processTalkCommand(
 	})
 
 	for _, item := range items {
-		contextBuilder.WriteString(item.content + "\n")
+		timestamp := etc.JulianDayToTime(item.createdAt).Format("15:04:05")
+		contextBuilder.WriteString(fmt.Sprintf("[%s] %s\n", timestamp, item.content))
 	}
 
 	contextBuilder.WriteString("\n")
 	contextBuilder.WriteString(
 		fmt.Sprintf(
-			"[%s UTC] %s: %s\n\n",
-			m.Timestamp.Format("2006-01-02 15:04:05"),
+			"[%s] %s: %s\n\n",
+			m.Timestamp.Format("15:04:05"),
 			m.Author.Username,
 			prompt,
 		),
