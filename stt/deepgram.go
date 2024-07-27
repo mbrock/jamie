@@ -28,14 +28,15 @@ func NewDeepgramClient(
 
 func (c *DeepgramClient) Start(
 	ctx context.Context,
+	language string,
 ) (SpeechRecognizer, error) {
 	cOptions := &interfaces.ClientOptions{
 		EnableKeepAlive: true,
 	}
 	tOptions := &interfaces.LiveTranscriptionOptions{
 		Model:          "nova-2",
-		Language:       "en-US",
-		Punctuate:      true,
+		Language:       language,
+		Punctuate:      false,
 		Encoding:       "opus",
 		Channels:       2,
 		SampleRate:     48000,

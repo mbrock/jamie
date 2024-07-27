@@ -18,5 +18,5 @@ type SpeechRecognizer interface {
 }
 
 type SpeechRecognition interface {
-	Start(ctx context.Context) (SpeechRecognizer, error)
+	Start(ctx context.Context, language string) (SpeechRecognizer, error)
 }

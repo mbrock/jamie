@@ -20,17 +20,13 @@ func (bot *Bot) getRecognizersForStream(
 	recognizers, exists := bot.voiceCall.Recognizers[streamID]
 	if !exists {
 		recognizers = make([]stt.SpeechRecognizer, 0)
-		
+
 		// Start a default recognizer
-		session, err := bot.speechRecognition.Start(context.Background())
+		session, err := bot.speechRecognition.Start(
+			context.Background(),
+			"en-US",
+		)
 		if err != nil {
-			bot.log.Error(
-				"Failed to start speech recognition session",
-				"error",
-				err,
-				"streamID",
-				streamID,
-			)
 			return nil, fmt.Errorf(
 				"failed to start speech recognition session: %w",
 				err,
@@ -39,13 +35,14 @@ func (bot *Bot) getRecognizersForStream(
 		recognizers = append(recognizers, session)
 		go bot.speechRecognitionLoop(streamID, session)
 
-		// You can add more recognizers here for different languages or configurations
-		// For example:
-		// spanishSession, err := bot.speechRecognition.StartWithLanguage(context.Background(), "es")
-		// if err == nil {
-		//     recognizers = append(recognizers, spanishSession)
-		//     go bot.speechRecognitionLoop(streamID, spanishSession)
-		// }
+		swedishSession, err := bot.speechRecognition.Start(
+			context.Background(),
+			"sv-SE",
+		)
+		if err == nil {
+			recognizers = append(recognizers, swedishSession)
+			go bot.speechRecognitionLoop(streamID, swedishSession)
+		}
 
 		bot.voiceCall.Recognizers[streamID] = recognizers
 	}
