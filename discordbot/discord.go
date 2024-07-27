@@ -25,7 +25,7 @@ type Bot struct {
 	mu   sync.Mutex
 	db   *db.Queries
 	log  *log.Logger
-	chat SocialNetwork
+	conn SocialNetwork
 
 	languageModel llm.LanguageModel
 
@@ -55,7 +55,7 @@ func NewBot(
 	bot := &Bot{
 		db:                db,
 		log:               logger,
-		chat:              chat,
+		conn:              chat,
 		languageModel:     languageModelService,
 		commands:          make(map[string]CommandHandler),
 		speechRecognition: speechRecognitionService,
@@ -68,11 +68,11 @@ func NewBot(
 
 	bot.registerCommands()
 
-	chat.AddHandler(bot.handleGuildCreate)
-	chat.AddHandler(bot.handleVoiceStateUpdate)
-	chat.AddHandler(bot.handleMessageCreate)
+	bot.conn.AddHandler(bot.handleGuildCreate)
+	bot.conn.AddHandler(bot.handleVoiceStateUpdate)
+	bot.conn.AddHandler(bot.handleMessageCreate)
 
-	err := chat.Open()
+	err := bot.conn.Open()
 	if err != nil {
 		return nil, fmt.Errorf("error opening connection: %w", err)
 	}
@@ -86,7 +86,7 @@ func (bot *Bot) registerCommands() {
 }
 
 func (bot *Bot) Close() error {
-	return bot.chat.Close()
+	return bot.conn.Close()
 }
 
 func (bot *Bot) saveTextMessage(message *dis.Message) error {
