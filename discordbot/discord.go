@@ -26,6 +26,7 @@ type Bot struct {
 	db   *db.Queries
 	log  *log.Logger
 	conn *dis.Session
+	chat SocialNetwork
 
 	languageModel llm.LanguageModel
 
