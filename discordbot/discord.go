@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"jamie/db"
+	"jamie/discordbot/tts"
 	"jamie/etc"
 	"jamie/llm"
 	"jamie/ogg"
@@ -15,7 +16,6 @@ import (
 
 	dis "github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
-	"github.com/haguro/elevenlabs-go"
 	"github.com/sashabaranov/go-openai"
 )
 
