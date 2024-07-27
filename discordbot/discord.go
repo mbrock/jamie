@@ -51,6 +51,8 @@ type Bot struct {
 
 	isSpeaking bool
 	speakingMu sync.Mutex
+
+	guildID string
 }
 
 type voicePacket struct {
@@ -66,6 +68,7 @@ func NewBot(
 	openaiAPIKey string,
 	elevenLabsAPIKey string,
 	db *db.Queries,
+	guildID string,
 ) (*Bot, error) {
 	bot := &Bot{
 		db:                db,
@@ -80,6 +83,7 @@ func NewBot(
 			map[string]stt.SpeechRecognizer,
 		),
 		streamIdCache: make(map[string]string),
+		guildID:       guildID,
 	}
 
 	bot.registerCommands()
@@ -129,8 +133,10 @@ func (bot *Bot) saveTextMessage(message *dis.Message) error {
 }
 
 func (bot *Bot) handleGuildCreate(_ *dis.Session, event *dis.GuildCreate) {
-	bot.log.Info("joined guild", "name", event.Guild.Name)
-	bot.joinAllVoiceChannels(event.Guild.ID)
+	bot.log.Info("joined guild", "name", event.Guild.Name, "id", event.Guild.ID)
+	if bot.guildID == "" || bot.guildID == event.Guild.ID {
+		bot.joinAllVoiceChannels(event.Guild.ID)
+	}
 }
 
 func (bot *Bot) handleMessageCreate(
