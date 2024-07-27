@@ -21,19 +21,24 @@ import (
 	"github.com/sashabaranov/go-openai"
 )
 
-func (bot *Bot) saveTextMessage(
-	channelID, userID, messageID, content string,
-	isBot bool,
-) error {
+type TextMessage interface {
+	GetChannelID() string
+	GetAuthorID() string
+	GetAuthorBot() bool
+	GetID() string
+	GetContent() string
+}
+
+func (bot *Bot) saveTextMessage(message TextMessage) error {
 	return bot.db.SaveTextMessage(
 		context.Background(),
 		db.SaveTextMessageParams{
 			ID:               etc.Gensym(),
-			DiscordChannel:   channelID,
-			DiscordUser:      userID,
-			DiscordMessageID: messageID,
-			Content:          content,
-			IsBot:            isBot,
+			DiscordChannel:   message.GetChannelID(),
+			DiscordUser:      message.GetAuthorID(),
+			DiscordMessageID: message.GetID(),
+			Content:          message.GetContent(),
+			IsBot:            message.GetAuthorBot(),
 		},
 	)
 }
@@ -151,13 +156,7 @@ func (bot *Bot) handleMessageCreate(
 		return
 	}
 
-	err := bot.saveTextMessage(
-		m.ChannelID,
-		m.Author.ID,
-		m.ID,
-		m.Content,
-		m.Author.Bot,
-	)
+	err := bot.saveTextMessage(discordTextMessage{m.Message})
 	if err != nil {
 		bot.log.Error("Failed to save received message", "error", err.Error())
 	}
@@ -363,13 +362,7 @@ func (bot *Bot) sendAndSaveMessage(
 		return
 	}
 
-	err = bot.saveTextMessage(
-		channelID,
-		s.State.User.ID,
-		msg.ID,
-		content,
-		true,
-	)
+	err = bot.saveTextMessage(msg)
 	if err != nil {
 		bot.log.Error("Failed to save sent message", "error", err.Error())
 	}
@@ -814,13 +807,7 @@ func (bot *Bot) handleSummaryCommand(
 	)
 
 	// Save the final summary message
-	err = bot.saveTextMessage(
-		m.ChannelID,
-		s.State.User.ID,
-		message.ID,
-		fullSummary,
-		true,
-	)
+	err = bot.saveTextMessage(message)
 	if err != nil {
 		bot.log.Error(
 			"Failed to save final summary message",
@@ -1312,4 +1299,27 @@ func (bot *Bot) processAudioBuffer(
 			)
 		}
 	}
+}
+type discordTextMessage struct {
+	*dis.Message
+}
+
+func (m discordTextMessage) GetChannelID() string {
+	return m.ChannelID
+}
+
+func (m discordTextMessage) GetAuthorID() string {
+	return m.Author.ID
+}
+
+func (m discordTextMessage) GetAuthorBot() bool {
+	return m.Author.Bot
+}
+
+func (m discordTextMessage) GetID() string {
+	return m.ID
+}
+
+func (m discordTextMessage) GetContent() string {
+	return m.Content
 }
