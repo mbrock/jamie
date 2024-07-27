@@ -87,9 +87,6 @@ func NewBot(
 }
 
 func (bot *Bot) registerCommands() {
-	bot.commands["summary"] = bot.handleSummaryCommand
-	bot.commands["prompt"] = bot.handlePromptCommand
-	bot.commands["listprompts"] = bot.handleListPromptsCommand
 	bot.commands["talk"] = bot.handleTalkCommand
 }
 
@@ -234,77 +231,7 @@ func (bot *Bot) getUsernameFromID(userID string) string {
 	return user.Username
 }
 
-func (bot *Bot) handleSummaryCommand(
-	s *dis.Session,
-	m *dis.MessageCreate,
-	args []string,
-) error {
-	bot.log.Info(
-		"Summary command received",
-		"channel",
-		m.ChannelID,
-		"args",
-		args,
-	)
-
-	if len(args) < 1 {
-		return fmt.Errorf("usage: !summary [prompt_name] [speak]")
-	}
-
-	var promptName string
-	var speak bool
-	if len(args) > 0 {
-		promptName = args[0]
-	}
-	if len(args) > 1 && args[1] == "speak" {
-		speak = true
-	}
-
-	// Generate summary
-	summaryChan, err := llm.SummarizeTranscript(
-		bot.db,
-		bot.languageModel,
-		promptName,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to start summary generation: %w", err)
-	}
-
-	// Send initial message
-	message, err := s.ChannelMessageSend(m.ChannelID, "Generating summary...")
-	if err != nil {
-		return fmt.Errorf("failed to send initial message: %w", err)
-	}
-
-	// Update the message with the summary
-	fullSummary := bot.updateMessageWithSummary(
-		s,
-		m.ChannelID,
-		message.ID,
-		summaryChan,
-	)
-
-	// Save the final summary message
-	err = bot.saveTextMessage(message)
-	if err != nil {
-		bot.log.Error(
-			"Failed to save final summary message",
-			"error",
-			err.Error(),
-		)
-	}
-
-	if speak {
-		err = bot.speakSummary(s, m, fullSummary)
-		if err != nil {
-			return fmt.Errorf("failed to speak summary: %w", err)
-		}
-	}
-
-	return nil
-}
-
-func (bot *Bot) updateMessageWithSummary(
+func (bot *Bot) UpdateMessageWithSummary(
 	s *dis.Session,
 	channelID string,
 	messageID string,
@@ -339,68 +266,6 @@ func (bot *Bot) updateMessageWithSummary(
 			}
 		}
 	}
-}
-
-func (bot *Bot) handlePromptCommand(
-	s *dis.Session,
-	m *dis.MessageCreate,
-	args []string,
-) error {
-	if len(args) < 2 {
-		return fmt.Errorf("usage: !prompt <name> <prompt text>")
-	}
-
-	name := args[0]
-	prompt := strings.Join(args[1:], " ")
-
-	err := bot.db.SetSystemPrompt(
-		context.Background(),
-		db.SetSystemPromptParams{
-			Name:   name,
-			Prompt: prompt,
-		},
-	)
-	if err != nil {
-		return fmt.Errorf("failed to set system prompt: %w", err)
-	}
-
-	bot.sendAndSaveMessage(
-		m.ChannelID,
-		fmt.Sprintf("System prompt '%s' has been set.", name),
-	)
-
-	return nil
-}
-
-func (bot *Bot) handleListPromptsCommand(
-	s *dis.Session,
-	m *dis.MessageCreate,
-	args []string,
-) error {
-	prompts, err := bot.db.ListSystemPrompts(context.Background())
-	if err != nil {
-		return fmt.Errorf("failed to list system prompts: %w", err)
-	}
-
-	if len(prompts) == 0 {
-		bot.sendAndSaveMessage(
-			m.ChannelID,
-			"No system prompts have been set.",
-		)
-		return nil
-	}
-
-	var message strings.Builder
-	message.WriteString("Available system prompts:\n")
-	for _, prompt := range prompts {
-		message.WriteString(
-			fmt.Sprintf("- %s: %s\n", prompt.Name, prompt.Prompt),
-		)
-	}
-
-	bot.sendAndSaveMessage(m.ChannelID, message.String())
-
-	return nil
 }
 
 func (bot *Bot) handleTalkCommand(
@@ -570,65 +435,6 @@ func (bot *Bot) TextToSpeech(text string, writer io.Writer) error {
 			err,
 		)
 		return fmt.Errorf("failed to generate speech: %w", err)
-	}
-
-	return nil
-}
-
-func (bot *Bot) speakSummary(
-	s *dis.Session,
-	m *dis.MessageCreate,
-	summary string,
-) error {
-	// Find the voice channel the user is in
-	guild, err := s.State.Guild(m.GuildID)
-	if err != nil {
-		return fmt.Errorf("failed to get guild: %w", err)
-	}
-
-	var voiceChannelID string
-	for _, vs := range guild.VoiceStates {
-		if vs.UserID == m.Author.ID {
-			voiceChannelID = vs.ChannelID
-			break
-		}
-	}
-
-	if voiceChannelID == "" {
-		return fmt.Errorf("user is not in a voice channel")
-	}
-
-	// Join the voice channel if not already connected
-	bot.mu.Lock()
-	if bot.voiceCall == nil ||
-		bot.voiceCall.Conn.ChannelID != voiceChannelID {
-		err := bot.joinVoiceCall(m.GuildID, voiceChannelID)
-		if err != nil {
-			bot.mu.Unlock()
-			return fmt.Errorf("failed to join voice channel: %w", err)
-		}
-	}
-	voiceChannel := bot.voiceCall
-	bot.mu.Unlock()
-
-	// Generate speech
-	speechData, err := bot.TextToSpeech(summary)
-	if err != nil {
-		return fmt.Errorf("failed to generate speech: %w", err)
-	}
-
-	// Convert to Opus packets
-	opusPackets, err := ogg.ConvertToOpus(speechData)
-	if err != nil {
-		return fmt.Errorf("failed to convert to Opus: %w", err)
-	}
-
-	// Send Opus packets
-	voiceChannel.Conn.Speaking(true)
-	defer voiceChannel.Conn.Speaking(false)
-
-	for _, packet := range opusPackets {
-		voiceChannel.Conn.OpusSend <- packet
 	}
 
 	return nil
