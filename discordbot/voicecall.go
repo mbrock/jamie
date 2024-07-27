@@ -14,7 +14,7 @@ import (
 )
 
 type VoiceCall struct {
-	*sync.RWMutex
+	sync.RWMutex
 	Conn                *discordgo.VoiceConnection
 	TalkMode            bool
 	InboundAudioPackets chan *discordgo.Packet
@@ -41,7 +41,7 @@ func (bot *Bot) joinVoiceCall(guildID, channelID string) error {
 		return fmt.Errorf("failed to join voice channel: %w", err)
 	}
 
-	bot.log.Info("joined voice channel", "channel", channelID)
+	bot.log.Info("joined", "channel", channelID)
 
 	bot.voiceCall = &VoiceCall{
 		Conn:      vc,
@@ -158,10 +158,10 @@ func (bot *Bot) handleVoiceSpeakingUpdate(
 	v *discordgo.VoiceSpeakingUpdate,
 ) {
 	bot.log.Info(
-		"speaking update",
-		"ssrc", v.SSRC,
-		"userID", v.UserID,
+		"state",
 		"speaking", v.Speaking,
+		"userID", v.UserID,
+		"ssrc", v.SSRC,
 	)
 
 	err := bot.db.UpsertVoiceState(

@@ -152,7 +152,7 @@ func (s *DeepgramSession) Message(mr *api.MessageResponse) error {
 }
 
 func (s *DeepgramSession) Open(ocr *api.OpenResponse) error {
-	s.logger.Info("open", "kind", "deepgram")
+	s.logger.Info("session", "state", "open", "api", "deepgram")
 	s.isOpen = true
 	go func() {
 		for data := range s.audioBuffer {

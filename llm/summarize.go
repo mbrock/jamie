@@ -54,7 +54,7 @@ func SummarizeTranscript(
 
 	for _, rec := range recognitions {
 		items = append(items, contextItem{
-			content:   fmt.Sprintf("%s: %s", rec.Username, rec.Text),
+			content:   fmt.Sprintf("%s: %s", rec.DiscordUsername, rec.Text),
 			createdAt: rec.CreatedAt,
 		})
 	}

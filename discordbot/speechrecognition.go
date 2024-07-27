@@ -67,8 +67,6 @@ func (bot *Bot) processPendingRecognitionResult(
 	}
 
 	if result.Text != "" {
-		bot.log.Info("recognized", "text", result.Text)
-
 		row, err := bot.db.GetChannelAndUsernameForStream(
 			context.Background(),
 			streamID,

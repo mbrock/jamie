@@ -16,7 +16,6 @@ import (
 
 	dis "github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
-	"github.com/sashabaranov/go-openai"
 )
 
 type CommandHandler func(*dis.Session, *dis.MessageCreate, []string) error
@@ -113,8 +112,8 @@ func (bot *Bot) saveTextMessage(message *dis.Message) error {
 
 func (bot *Bot) handleGuildCreate(_ *dis.Session, event *dis.GuildCreate) {
 	bot.log.Info(
-		"joined guild",
-		"name",
+		"joined",
+		"guild",
 		event.Guild.Name,
 		"id",
 		event.Guild.ID,
@@ -445,12 +444,11 @@ func (bot *Bot) processTalkCommand(
 	m *dis.MessageCreate,
 	prompt string,
 ) (string, error) {
-	// Fetch today's text messages and recognitions
 	messages, err := bot.db.GetRecentTextMessages(
 		context.Background(),
 		db.GetRecentTextMessagesParams{
 			DiscordChannel: m.ChannelID,
-			Limit:          50,
+			Limit:          100,
 		},
 	)
 	if err != nil {
@@ -459,19 +457,17 @@ func (bot *Bot) processTalkCommand(
 
 	recognitions, err := bot.db.GetRecentRecognitions(
 		context.Background(),
-		50,
+		100,
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch recent recognitions: %w", err)
 	}
 
-	// Create context from today's messages and recognitions
 	var contextBuilder strings.Builder
 	contextBuilder.WriteString(
-		"Today's conversation and voice transcriptions:\n",
+		"Context:\n\n",
 	)
 
-	// Combine and sort messages and recognitions
 	type contextItem struct {
 		content   string
 		createdAt float64
@@ -491,45 +487,59 @@ func (bot *Bot) processTalkCommand(
 
 	for _, rec := range recognitions {
 		items = append(items, contextItem{
-			content:   fmt.Sprintf("%s: %s", rec.Emoji, rec.Text),
+			content: fmt.Sprintf(
+				"[%s UTC] %s: %s",
+				etc.JulianDayToTime(rec.CreatedAt).UTC().
+					Format("2006-01-02 15:04:05"),
+				rec.DiscordUsername,
+				rec.Text,
+			),
 			createdAt: rec.CreatedAt,
 		})
 	}
 
-	// Sort items by createdAt
 	sort.Slice(items, func(i, j int) bool {
 		return items[i].createdAt < items[j].createdAt
 	})
 
-	// Add sorted items to context
 	for _, item := range items {
 		contextBuilder.WriteString(item.content + "\n")
 	}
 
+	contextBuilder.WriteString("\n")
 	contextBuilder.WriteString(
-		"\nBased on the conversation and voice transcriptions above, react to the following prompt. Remember, you are a brief, terse, stoner noir, weird interlocutor named Jamie. You never offer to help. You improvise together. Respond without using any markup or formatting, as your response will be sent to a text-to-speech service.\n",
+		fmt.Sprintf(
+			"[%s UTC] %s: %s",
+			m.Timestamp.Format("2006-01-02 15:04:05"),
+			m.Author.Username,
+			prompt,
+		),
 	)
-	contextBuilder.WriteString(prompt)
 
 	ctx := context.Background()
 
-	// Generate response using LanguageModel
 	response, err := bot.languageModel.ChatCompletion(
 		ctx,
-		(&ChatCompletionRequest{
-			SystemPrompt: "You never offer to help. You hang back. Write terse, weird analyses without formatting. Do not react, just write.",
+		(&llm.ChatCompletionRequest{
+			SystemPrompt: "Briefly describe the latest conversation turn and its context, narratively, verbally, without any formatting.",
 			MaxTokens:    300,
 		}).WithUserMessage(contextBuilder.String()),
 	)
 
 	if err != nil {
-		return "", fmt.Errorf("failed to generate language model response: %w", err)
+		return "", fmt.Errorf(
+			"failed to generate language model response: %w",
+			err,
+		)
 	}
 
 	var fullResponse strings.Builder
 	for chunk := range response {
 		if chunk.Err != nil {
-			return "", fmt.Errorf("error during response generation: %w", chunk.Err)
+			return "", fmt.Errorf(
+				"error during response generation: %w",
+				chunk.Err,
+			)
 		}
 		fullResponse.WriteString(chunk.Content)
 	}

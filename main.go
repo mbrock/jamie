@@ -17,6 +17,7 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -479,18 +480,38 @@ func createLoggers() (mainLogger, discordLogger, deepgramLogger, sqlLogger *log.
 	logger.SetReportCaller(true)
 	logger.SetCallerFormatter(
 		func(file string, line int, funcName string) string {
-			return fmt.Sprintf("./%s:%d", filepath.Base(file), line)
+			path, err := filepath.Rel(".", file)
+			if err != nil {
+				path = file
+			}
+			return fmt.Sprintf("%s:%d", path, line)
 		},
 	)
 
-	mainLogger = logger.WithPrefix("app")
-	mainLogger.SetLevel(logLevel)
-	discordLogger = logger.WithPrefix("yap")
-	discordLogger.SetLevel(logLevel)
-	deepgramLogger = logger.WithPrefix("ear")
-	deepgramLogger.SetLevel(logLevel)
-	sqlLogger = logger.WithPrefix("sql")
-	sqlLogger.SetLevel(logLevel)
+	styles := log.DefaultStyles()
+	styles.Prefix = styles.Prefix.MarginTop(1).
+		Bold(false).Transform(func(s string) string {
+		return strings.TrimSuffix(s, ":")
+	})
+	styles.Levels[log.InfoLevel] = styles.Levels[log.InfoLevel].
+		MaxWidth(6).
+		MarginRight(1).
+		Bold(false)
+	styles.Levels[log.ErrorLevel] = styles.Levels[log.ErrorLevel].
+		MaxWidth(6).
+		MarginRight(1).
+		Bold(false)
+	styles.Message = styles.Message.Bold(true).Width(24)
+	styles.Key = styles.Key.MarginLeft(1).
+		Bold(false).
+		Foreground(lipgloss.Color("#ff8800"))
+
+	logger.SetStyles(styles)
+
+	mainLogger = logger.With().WithPrefix("main")
+	discordLogger = logger.With().WithPrefix("chat")
+	deepgramLogger = logger.With().WithPrefix("hear")
+	sqlLogger = logger.With().WithPrefix("data")
 
 	return
 }
