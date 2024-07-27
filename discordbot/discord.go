@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"jamie/db"
 	"jamie/discordbot/tts"
-	"jamie/discordbot/llm"
 	"jamie/etc"
+	"jamie/llm"
 	"jamie/ogg"
 	"jamie/stt"
 	"sort"
@@ -16,6 +16,7 @@ import (
 
 	dis "github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
+	"github.com/sashabaranov/go-openai"
 )
 
 type CommandHandler func(*dis.Session, *dis.MessageCreate, []string) error

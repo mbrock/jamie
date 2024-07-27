@@ -1,13 +1,13 @@
 package main
 
 import (
-	"jamie/discordbot/tts"
-	"jamie/discordbot/llm"
 	"context"
 	"database/sql"
 	_ "embed"
 	"fmt"
+	"jamie/discordbot/tts"
 	"jamie/etc"
+	"jamie/llm"
 	"os"
 	"os/signal"
 	"path/filepath"
