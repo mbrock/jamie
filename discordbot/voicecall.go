@@ -8,16 +8,17 @@ import (
 	"jamie/db"
 	"jamie/etc"
 	"jamie/ogg"
+	"sync"
 
 	"github.com/bwmarrin/discordgo"
 )
 
 type VoiceCall struct {
+	*sync.RWMutex
 	Conn                *discordgo.VoiceConnection
 	TalkMode            bool
 	InboundAudioPackets chan *voicePacket
 	streamIdCache       map[string]string // cacheKey -> streamID
-	streamIdCacheMu     sync.RWMutex
 }
 
 type voicePacket struct {
@@ -26,7 +27,7 @@ type voicePacket struct {
 	channelID string
 }
 
-func (bot *Bot) joinVoiceChannel(guildID, channelID string) error {
+func (bot *Bot) joinVoiceCall(guildID, channelID string) error {
 	bot.mu.Lock()
 	defer bot.mu.Unlock()
 
@@ -72,7 +73,7 @@ func (bot *Bot) joinAllVoiceChannels(guildID string) error {
 
 	for _, channel := range channels {
 		if channel.Type == discordgo.ChannelTypeGuildVoice {
-			err := bot.joinVoiceChannel(guildID, channel.ID)
+			err := bot.joinVoiceCall(guildID, channel.ID)
 			if err != nil {
 				bot.log.Error(
 					"failed to join voice channel",
@@ -195,17 +196,17 @@ func (bot *Bot) ensureVoiceStream(
 		return "", err
 	}
 
-	bot.streamIdCacheMu.Lock()
-	bot.streamIdCache[cacheKey] = streamID
-	bot.streamIdCacheMu.Unlock()
+	bot.voiceCall.Lock()
+	bot.voiceCall.streamIdCache[cacheKey] = streamID
+	bot.voiceCall.Unlock()
 
 	return streamID, nil
 }
 
 func (bot *Bot) getCachedVoiceStream(cacheKey string) (string, bool) {
-	bot.streamIdCacheMu.RLock()
-	streamID, ok := bot.streamIdCache[cacheKey]
-	bot.streamIdCacheMu.RUnlock()
+	bot.voiceCall.RLock()
+	streamID, ok := bot.voiceCall.streamIdCache[cacheKey]
+	bot.voiceCall.RUnlock()
 	return streamID, ok
 }
 
@@ -213,14 +214,14 @@ func (bot *Bot) findOrSaveVoiceStream(
 	packet *discordgo.Packet,
 	guildID, channelID string,
 ) (string, error) {
-	discordID, username, streamID, err := bot.findVoiceStream(
+	discordID, username, streamID, err := bot.resolveStreamForPacket(
 		packet,
 		guildID,
 		channelID,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			streamID, err = bot.createNewVoiceStream(
+			streamID, err = bot.createStreamForPacket(
 				packet,
 				guildID,
 				channelID,
@@ -241,7 +242,7 @@ func (bot *Bot) findOrSaveVoiceStream(
 	return streamID, nil
 }
 
-func (bot *Bot) findVoiceStream(
+func (bot *Bot) resolveStreamForPacket(
 	packet *discordgo.Packet,
 	guildID string,
 	channelID string,
@@ -275,7 +276,7 @@ func (bot *Bot) findVoiceStream(
 	return discordID, username, streamID, nil
 }
 
-func (bot *Bot) createNewVoiceStream(
+func (bot *Bot) createStreamForPacket(
 	packet *discordgo.Packet,
 	guildID, channelID, discordID, username string,
 ) (string, error) {
@@ -397,7 +398,7 @@ func (bot *Bot) speakInChannel(
 	// Join the voice channel if not already connected
 	if bot.voiceCall == nil ||
 		bot.voiceCall.Conn.ChannelID != voiceChannelID {
-		err := bot.joinVoiceChannel(guild.ID, voiceChannelID)
+		err := bot.joinVoiceCall(guild.ID, voiceChannelID)
 		if err != nil {
 			bot.mu.Unlock()
 			return fmt.Errorf("failed to join voice channel: %w", err)

@@ -62,7 +62,7 @@ func NewBot(
 		speechRecognizers: make(
 			map[string]stt.SpeechRecognizer,
 		),
-		guildID:       guildID,
+		guildID: guildID,
 	}
 
 	bot.registerCommands()
@@ -602,7 +602,7 @@ func (bot *Bot) speakSummary(
 	bot.mu.Lock()
 	if bot.voiceCall == nil ||
 		bot.voiceCall.Conn.ChannelID != voiceChannelID {
-		err := bot.joinVoiceChannel(m.GuildID, voiceChannelID)
+		err := bot.joinVoiceCall(m.GuildID, voiceChannelID)
 		if err != nil {
 			bot.mu.Unlock()
 			return fmt.Errorf("failed to join voice channel: %w", err)
