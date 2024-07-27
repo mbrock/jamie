@@ -32,7 +32,7 @@ func (e *ElevenLabsSpeechGenerator) TextToSpeechStreaming(
 
 	err := elevenlabs.TextToSpeechStream(
 		writer,
-		"uVKHymY7OYMd6OailpG5",
+		"NFG5qt843uXKj4pFvR7C",
 		ttsReq,
 	)
 	if err != nil {

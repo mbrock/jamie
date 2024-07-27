@@ -10,7 +10,6 @@ import (
 	"jamie/etc"
 	"os/exec"
 	"sync"
-	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"layeh.com/gopus"
@@ -412,8 +411,6 @@ func (bot *Bot) speakInChannel(
 	}
 	defer voiceChannel.Conn.Speaking(false)
 
-	bot.log.Debug("status", "speaking", "true")
-
 	// Create pipes for FFmpeg input and output
 	ffmpegIn, ffmpegInWriter := io.Pipe()
 	ffmpegOutReader, ffmpegOut := io.Pipe()
@@ -425,6 +422,11 @@ func (bot *Bot) speakInChannel(
 		"-acodec", "pcm_s16le",
 		"-ar", "48000",
 		"-ac", "2",
+		"-fflags", "nobuffer+flush_packets",
+		"-flags", "low_delay",
+		"-strict", "experimental",
+		"-probesize", "32",
+		"-analyzeduration", "0",
 		"-")
 	ffmpegCmd.Stdin = ffmpegIn
 	ffmpegCmd.Stdout = ffmpegOut
@@ -436,19 +438,22 @@ func (bot *Bot) speakInChannel(
 
 	// Start the text-to-speech generation in a goroutine
 	go func() {
-		defer ffmpegInWriter.Close()
 		if err := bot.TextToSpeech(text, ffmpegInWriter); err != nil {
 			bot.log.Error("failed to generate speech", "error", err)
 		}
-		bot.log.Debug("closing mp3 writer")
+		if err := ffmpegInWriter.Close(); err != nil {
+			bot.log.Error("failed to close mp3 writer", "error", err)
+		}
 	}()
+
+	speakingDone := make(chan struct{})
 
 	// Run audio encoding and sending in a goroutine
 	go func() {
 		// Create an Opus encoder
 		encoder, err := gopus.NewEncoder(48000, 2, gopus.Audio)
 		if err != nil {
-			bot.log.Error("failed to create Opus encoder", "error", err)
+			bot.log.Error("Failed to create Opus encoder", "error", err)
 			return
 		}
 
@@ -457,14 +462,17 @@ func (bot *Bot) speakInChannel(
 		bufferIndex := 0
 
 		// Read and encode audio data in chunks
-		buffer := make([]byte, 960*2*2) // 20ms of audio at 48kHz, 2 channels, 2 bytes per sample
+		buffer := make(
+			[]byte,
+			960*2*2,
+		) // 20ms of audio at 48kHz, 2 channels, 2 bytes per sample
 		for {
 			n, err := io.ReadFull(ffmpegOutReader, buffer)
 			if err == io.EOF && n == 0 {
 				break
 			}
 			if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-				bot.log.Error("failed to read audio data", "error", err)
+				bot.log.Error("Failed to read audio data", "error", err)
 				return
 			}
 
@@ -475,7 +483,7 @@ func (bot *Bot) speakInChannel(
 			// If we have at least 1 second of audio, start processing
 			if bufferIndex >= len(audioBuffer) {
 				// Process the entire audioBuffer
-				for i := 0; i < len(audioBuffer); i += 960*2*2 {
+				for i := 0; i < len(audioBuffer); i += 960 * 2 * 2 {
 					end := i + 960*2*2
 					if end > len(audioBuffer) {
 						end = len(audioBuffer)
@@ -485,22 +493,27 @@ func (bot *Bot) speakInChannel(
 					// Convert byte buffer to int16 slice
 					pcmBuffer := make([]int16, len(chunk)/2)
 					for j := 0; j < len(chunk); j += 2 {
-						pcmBuffer[j/2] = int16(chunk[j]) | int16(chunk[j+1])<<8
+						pcmBuffer[j/2] = int16(
+							chunk[j],
+						) | int16(
+							chunk[j+1],
+						)<<8
 					}
 
 					// If we got a partial read, pad with silence
 					if len(pcmBuffer) < 960*2 {
-						pcmBuffer = append(pcmBuffer, make([]int16, 960*2-len(pcmBuffer))...)
+						pcmBuffer = append(
+							pcmBuffer,
+							make([]int16, 960*2-len(pcmBuffer))...)
 					}
 
 					// Encode the frame to Opus
 					opusData, err := encoder.Encode(pcmBuffer, 960, 32000)
 					if err != nil {
-						bot.log.Error("failed to encode Opus", "error", err)
+						bot.log.Error("Failed to encode Opus", "error", err)
 						return
 					}
 
-					// Send the Opus packet
 					voiceChannel.Conn.OpusSend <- opusData
 				}
 
@@ -515,7 +528,7 @@ func (bot *Bot) speakInChannel(
 
 		// Process any remaining audio in the buffer
 		if bufferIndex > 0 {
-			for i := 0; i < bufferIndex; i += 960*2*2 {
+			for i := 0; i < bufferIndex; i += 960 * 2 * 2 {
 				end := i + 960*2*2
 				if end > bufferIndex {
 					end = bufferIndex
@@ -530,20 +543,23 @@ func (bot *Bot) speakInChannel(
 
 				// If we got a partial read, pad with silence
 				if len(pcmBuffer) < 960*2 {
-					pcmBuffer = append(pcmBuffer, make([]int16, 960*2-len(pcmBuffer))...)
+					pcmBuffer = append(
+						pcmBuffer,
+						make([]int16, 960*2-len(pcmBuffer))...)
 				}
 
 				// Encode the frame to Opus
 				opusData, err := encoder.Encode(pcmBuffer, 960, 32000)
 				if err != nil {
-					bot.log.Error("failed to encode Opus", "error", err)
+					bot.log.Error("Failed to encode Opus", "error", err)
 					return
 				}
 
-				// Send the Opus packet
 				voiceChannel.Conn.OpusSend <- opusData
 			}
 		}
+
+		speakingDone <- struct{}{}
 	}()
 
 	// Wait for FFmpeg to finish
@@ -552,10 +568,13 @@ func (bot *Bot) speakInChannel(
 		return fmt.Errorf("FFmpeg error: %w", err)
 	}
 
-	// Add a small delay to ensure all audio is sent
-	time.Sleep(1 * time.Second)
+	bot.log.Debug("ffmpeg", "status", "finished")
 
-	bot.log.Debug("status", "speaking", "false")
+	if err := ffmpegOut.Close(); err != nil {
+		bot.log.Error("failed to close ffmpeg stdout", "error", err)
+	}
+
+	<-speakingDone
 
 	return nil
 }
