@@ -417,10 +417,13 @@ func (bot *Bot) processTalkCommand(
 
 	responseStr := fullResponse.String()
 	if strings.Contains(responseStr, "<wait/>") {
+		bot.log.Info("LLM decided to wait", "response", responseStr)
 		return "", nil // Return an empty string to indicate no immediate response
 	}
 
-	return strings.ReplaceAll(responseStr, "<wait/>", ""), nil
+	finalResponse := strings.ReplaceAll(responseStr, "<wait/>", "")
+	bot.log.Info("Final LLM response", "response", finalResponse)
+	return finalResponse, nil
 }
 
 func (bot *Bot) GenerateOggOpusBlob(
