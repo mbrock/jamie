@@ -213,3 +213,36 @@ JOIN speakers s ON r.stream = s.stream
 JOIN discord_speakers ds ON s.id = ds.speaker
 ORDER BY r.created_at DESC
 LIMIT ?;
+
+-- name: GetStream :one
+SELECT * FROM streams WHERE id = ?;
+
+-- name: GetAllStreamsWithDetails :many
+SELECT 
+    s.id,
+    s.created_at,
+    s.ended_at,
+    dcs.discord_channel,
+    ds.username,
+    COALESCE(r.duration, 0) as duration,
+    COALESCE(r.transcription_count, 0) as transcription_count
+FROM 
+    streams s
+LEFT JOIN 
+    discord_channel_streams dcs ON s.id = dcs.stream
+LEFT JOIN 
+    speakers sp ON s.id = sp.stream
+LEFT JOIN 
+    discord_speakers ds ON sp.id = ds.speaker
+LEFT JOIN (
+    SELECT 
+        stream,
+        COUNT(*) as transcription_count,
+        (MAX(sample_idx) - MIN(sample_idx)) / 48000.0 as duration
+    FROM 
+        recognitions
+    GROUP BY 
+        stream
+) r ON s.id = r.stream
+ORDER BY 
+    s.created_at DESC;
