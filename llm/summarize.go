@@ -13,7 +13,7 @@ import (
 
 func SummarizeTranscript(
 	queries *db.Queries,
-	apiKey string,
+	languageModel LanguageModel,
 	promptName string,
 ) (<-chan string, error) {
 	// Get recent text messages
@@ -77,7 +77,7 @@ func SummarizeTranscript(
 	}
 
 	// Create OpenAI client
-	client := openai.NewClient(apiKey)
+	// We don't need to create an OpenAI client here anymore
 	ctx := context.Background()
 
 	// Get the system prompt
