@@ -37,9 +37,6 @@ type Bot struct {
 
 	voiceCall *VoiceCall
 
-	streamIdCache   map[string]string // cacheKey -> streamID
-	streamIdCacheMu sync.RWMutex
-
 	isSpeaking bool
 	speakingMu sync.Mutex
 
@@ -65,7 +62,6 @@ func NewBot(
 		speechRecognizers: make(
 			map[string]stt.SpeechRecognizer,
 		),
-		streamIdCache: make(map[string]string),
 		guildID:       guildID,
 	}
 

@@ -16,6 +16,8 @@ type VoiceCall struct {
 	Conn                *discordgo.VoiceConnection
 	TalkMode            bool
 	InboundAudioPackets chan *voicePacket
+	streamIdCache       map[string]string // cacheKey -> streamID
+	streamIdCacheMu     sync.RWMutex
 }
 
 type voicePacket struct {
@@ -51,6 +53,7 @@ func (bot *Bot) joinVoiceChannel(guildID, channelID string) error {
 			chan *voicePacket,
 			3*1000/20,
 		), // 3 second audio buffer
+		streamIdCache: make(map[string]string),
 	}
 
 	bot.voiceCall.Conn.AddHandler(bot.handleVoiceSpeakingUpdate)
