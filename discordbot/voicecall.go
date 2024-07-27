@@ -17,16 +17,10 @@ type VoiceCall struct {
 	*sync.RWMutex
 	Conn                *discordgo.VoiceConnection
 	TalkMode            bool
-	InboundAudioPackets chan *voicePacket
+	InboundAudioPackets chan *discordgo.Packet
 	streamIdCache       map[string]string // cacheKey -> streamID
 	GuildID             string
 	ChannelID           string
-}
-
-type voicePacket struct {
-	packet    *discordgo.Packet
-	guildID   string
-	channelID string
 }
 
 func (bot *Bot) joinVoiceCall(guildID, channelID string) error {
@@ -53,7 +47,7 @@ func (bot *Bot) joinVoiceCall(guildID, channelID string) error {
 		Conn:     vc,
 		TalkMode: false,
 		InboundAudioPackets: make(
-			chan *voicePacket,
+			chan *discordgo.Packet,
 			3*1000/20,
 		), // 3 second audio buffer
 		streamIdCache: make(map[string]string),
@@ -63,8 +57,8 @@ func (bot *Bot) joinVoiceCall(guildID, channelID string) error {
 
 	bot.voiceCall.Conn.AddHandler(bot.handleVoiceSpeakingUpdate)
 
-	go bot.acceptInboundAudioPackets(bot.voiceCall, guildID, channelID)
-	go bot.processVoicePackets(bot.voiceCall.InboundAudioPackets)
+	go bot.acceptInboundAudioPackets()
+	go bot.processVoicePackets()
 
 	return nil
 }
@@ -93,23 +87,16 @@ func (bot *Bot) joinAllVoiceChannels(guildID string) error {
 	return nil
 }
 
-func (bot *Bot) acceptInboundAudioPackets(
-	voiceCall *VoiceCall,
-	guildID, channelID string,
-) {
-	for packet := range voiceCall.Conn.OpusRecv {
+func (bot *Bot) acceptInboundAudioPackets() {
+	for packet := range bot.voiceCall.Conn.OpusRecv {
 		select {
-		case voiceCall.InboundAudioPackets <- &voicePacket{
-			packet:    packet,
-			guildID:   guildID,
-			channelID: channelID,
-		}:
+		case bot.voiceCall.InboundAudioPackets <- packet:
 			// good
 		default:
 			bot.log.Warn(
 				"voice packet channel full, dropping packet",
 				"channelID",
-				channelID,
+				bot.voiceCall.ChannelID,
 			)
 		}
 	}
@@ -446,19 +433,19 @@ func (bot *Bot) speakInChannel(
 	return nil
 }
 
-func (bot *Bot) processVoicePackets(packetChan <-chan *voicePacket) {
-	for packet := range packetChan {
+func (bot *Bot) processVoicePackets() {
+	for packet := range bot.voiceCall.InboundAudioPackets {
 		err := bot.acceptInboundAudioPacket(
-			packet.packet,
-			packet.guildID,
-			packet.channelID,
+			packet,
+			bot.voiceCall.GuildID,
+			bot.voiceCall.ChannelID,
 		)
 		if err != nil {
 			bot.log.Error(
 				"failed to process voice packet",
 				"error", err.Error(),
-				"guildID", packet.guildID,
-				"channelID", packet.channelID,
+				"guildID", bot.voiceCall.GuildID,
+				"channelID", bot.voiceCall.ChannelID,
 			)
 		}
 	}
