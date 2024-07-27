@@ -25,7 +25,6 @@ type Bot struct {
 	mu   sync.Mutex
 	db   *db.Queries
 	log  *log.Logger
-	conn *dis.Session
 	chat SocialNetwork
 
 	languageModel llm.LanguageModel
@@ -45,7 +44,7 @@ type Bot struct {
 }
 
 func NewBot(
-	discordToken string,
+	chat SocialNetwork,
 	speechRecognitionService stt.SpeechRecognition,
 	speechGenerationService tts.SpeechGenerator,
 	languageModelService llm.LanguageModel,
@@ -56,6 +55,7 @@ func NewBot(
 	bot := &Bot{
 		db:                db,
 		log:               logger,
+		chat:              chat,
 		languageModel:     languageModelService,
 		commands:          make(map[string]CommandHandler),
 		speechRecognition: speechRecognitionService,
@@ -68,22 +68,16 @@ func NewBot(
 
 	bot.registerCommands()
 
-	dg, err := dis.New("Bot " + discordToken)
-	if err != nil {
-		return nil, fmt.Errorf("error creating Discord session: %w", err)
-	}
+	chat.AddHandler(bot.handleGuildCreate)
+	chat.AddHandler(bot.handleVoiceStateUpdate)
+	chat.AddHandler(bot.handleMessageCreate)
 
-	dg.AddHandler(bot.handleGuildCreate)
-	dg.AddHandler(bot.handleVoiceStateUpdate)
-	dg.AddHandler(bot.handleMessageCreate)
-
-	err = dg.Open()
+	err := chat.Open()
 	if err != nil {
 		return nil, fmt.Errorf("error opening connection: %w", err)
 	}
 
-	bot.conn = dg
-	bot.log.Info("bot", "username", bot.conn.State.User.Username)
+	bot.log.Info("bot connected")
 	return bot, nil
 }
 
@@ -92,7 +86,7 @@ func (bot *Bot) registerCommands() {
 }
 
 func (bot *Bot) Close() error {
-	return bot.conn.Close()
+	return bot.chat.Close()
 }
 
 func (bot *Bot) saveTextMessage(message *dis.Message) error {
