@@ -41,6 +41,7 @@ func init() {
 	rootCmd.AddCommand(discordCmd)
 	rootCmd.AddCommand(summarizeTranscriptCmd)
 	rootCmd.AddCommand(generateAudioCmd)
+	rootCmd.AddCommand(generateOggCmd)
 
 	// Add persistent flags
 	rootCmd.PersistentFlags().String("discord-token", "", "Discord bot token")
@@ -108,6 +109,14 @@ var generateAudioCmd = &cobra.Command{
 	Short: "Generate an audio file from a stream",
 	Long:  `Generate an OGG Opus audio file from a specified stream ID, start time, and end time`,
 	Run:   runGenerateAudio,
+}
+
+var generateOggCmd = &cobra.Command{
+	Use:   "generateogg <streamID>",
+	Short: "Generate an OGG file from a given stream ID",
+	Long:  `Generate an OGG Opus audio file from a specified stream ID`,
+	Args:  cobra.ExactArgs(1),
+	Run:   runGenerateOgg,
 }
 
 //go:embed schema.sql
@@ -275,6 +284,41 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	}
 
 	fmt.Printf("Audio file generated: %s\n", outputFileName)
+}
+
+func runGenerateOgg(cmd *cobra.Command, args []string) {
+	mainLogger, _, _, sqlLogger := createLoggers()
+
+	queries, err := InitDB(sqlLogger)
+	if err != nil {
+		mainLogger.Fatal("initialize database", "error", err.Error())
+	}
+
+	streamID := args[0]
+
+	// Fetch the stream details
+	stream, err := queries.GetStream(context.Background(), streamID)
+	if err != nil {
+		mainLogger.Fatal("fetch stream", "error", err.Error())
+	}
+
+	oggData, err := generateOggOpusBlob(
+		queries,
+		streamID,
+		stream.SampleIdxOffset,
+		-1, // Use -1 to indicate we want all samples until the end
+	)
+	if err != nil {
+		mainLogger.Fatal("generate OGG Opus blob", "error", err.Error())
+	}
+
+	outputFileName := fmt.Sprintf("audio_%s.ogg", streamID)
+	err = os.WriteFile(outputFileName, oggData, 0644)
+	if err != nil {
+		mainLogger.Fatal("write audio file", "error", err.Error())
+	}
+
+	fmt.Printf("OGG file generated: %s\n", outputFileName)
 }
 
 func generateOggOpusBlob(
