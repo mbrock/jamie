@@ -5,12 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"jamie/db"
 	"jamie/etc"
-	"jamie/ogg"
 	"sync"
 
 	"github.com/bwmarrin/discordgo"
+	"layeh.com/gopus"
 )
 
 type VoiceCall struct {
@@ -403,33 +404,53 @@ func (bot *Bot) speakInChannel(
 	voiceChannel := bot.voiceCall
 	bot.mu.Unlock()
 
-	// Generate speech
-	speechData, err := bot.TextToSpeech(text)
-	if err != nil {
-		return fmt.Errorf("failed to generate speech: %w", err)
+	// Start speaking
+	if err := voiceChannel.Conn.Speaking(true); err != nil {
+		return fmt.Errorf("failed to set speaking state: %w", err)
 	}
+	defer voiceChannel.Conn.Speaking(false)
 
-	// Convert to Opus packets
-	opusPackets, err := ogg.ConvertToOpus(speechData)
-	if err != nil {
-		return fmt.Errorf("failed to convert to Opus: %w", err)
-	}
-
-	// Send Opus packets
-	err = voiceChannel.Conn.Speaking(true)
-	if err != nil {
-		return err
-	}
 	bot.log.Debug("status", "speaking", "true")
 
-	for _, packet := range opusPackets {
-		voiceChannel.Conn.OpusSend <- packet
+	// Create a pipe to connect the text-to-speech output with the Opus encoder
+	pr, pw := io.Pipe()
+	defer pr.Close()
+
+	// Start the text-to-speech generation in a goroutine
+	go func() {
+		defer pw.Close()
+		if err := bot.TextToSpeech(text, pw); err != nil {
+			bot.log.Error("failed to generate speech", "error", err)
+		}
+	}()
+
+	// Create an Opus encoder
+	encoder, err := gopus.NewEncoder(48000, 2, gopus.Audio)
+	if err != nil {
+		return fmt.Errorf("failed to create Opus encoder: %w", err)
 	}
 
-	err = voiceChannel.Conn.Speaking(false)
-	if err != nil {
-		return err
+	// Read and encode audio data in chunks
+	buffer := make([]int16, 960*2) // 20ms of audio at 48kHz
+	for {
+		_, err := io.ReadFull(pr, buffer)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("failed to read audio data: %w", err)
+		}
+
+		// Encode the frame to Opus
+		opusData, err := encoder.Encode(buffer, 960, 32000)
+		if err != nil {
+			return fmt.Errorf("failed to encode Opus: %w", err)
+		}
+
+		// Send the Opus packet
+		voiceChannel.Conn.OpusSend <- opusData
 	}
+
 	bot.log.Debug("status", "speaking", "false")
 
 	return nil
