@@ -19,7 +19,7 @@ import (
 	"github.com/charmbracelet/log"
 )
 
-type CommandHandler func(*dis.Session, *dis.MessageCreate, []string) error
+type CommandHandler func(*dis.MessageCreate, []string) error
 
 type Bot struct {
 	mu   sync.Mutex
@@ -180,7 +180,7 @@ func (bot *Bot) handleMessageCreate(
 		return
 	}
 
-	err = handler(s, m, args[1:])
+	err = handler(m, args[1:])
 	if err != nil {
 		bot.log.Error(
 			"Command execution failed",
@@ -264,7 +264,6 @@ func (bot *Bot) UpdateMessageWithSummary(
 }
 
 func (bot *Bot) handleTalkCommand(
-	_ *dis.Session,
 	m *dis.MessageCreate,
 	args []string,
 ) error {
