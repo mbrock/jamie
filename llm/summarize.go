@@ -128,7 +128,15 @@ func SummarizeTranscript(
 			return
 		}
 
-		summaryChannel <- response.Content
+		var chunk *ChatCompletionResponse
+		for chunk = range response {
+			summaryChannel <- chunk.Content
+		}
+
+		if chunk.Err != nil {
+			summaryChannel <- fmt.Sprintf("Error generating response: %v", chunk.Err)
+			return
+		}
 	}()
 
 	return summaryChannel, nil

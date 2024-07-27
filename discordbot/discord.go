@@ -263,7 +263,7 @@ func (bot *Bot) handleSummaryCommand(
 	// Generate summary
 	summaryChan, err := llm.SummarizeTranscript(
 		bot.db,
-		bot.openaiAPIKey,
+		bot.languageModel,
 		promptName,
 	)
 	if err != nil {
@@ -512,7 +512,7 @@ func (bot *Bot) processTalkCommand(
 	contextBuilder.WriteString(prompt)
 
 	// Create OpenAI client
-	client := openai.NewClient(bot.openaiAPIKey)
+	client := openai.NewClient("") // We don't need this anymore, but let's keep the client creation for now
 	ctx := context.Background()
 
 	// Generate response using GPT-4

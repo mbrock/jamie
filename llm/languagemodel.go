@@ -3,12 +3,16 @@ package llm
 import (
 	"context"
 	"fmt"
+	"io"
 
 	"github.com/sashabaranov/go-openai"
 )
 
 type LanguageModel interface {
-	ChatCompletion(ctx context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error)
+	ChatCompletion(
+		ctx context.Context,
+		req *ChatCompletionRequest,
+	) (chan *ChatCompletionResponse, error)
 }
 
 type OpenAILanguageModel struct {
@@ -25,24 +29,24 @@ type ChatCompletionRequest struct {
 	SystemPrompt string
 	UserMessages []string
 	MaxTokens    int
-	Stream       bool
 }
 
-func (r *ChatCompletionRequest) WithUserMessage(message string) *ChatCompletionRequest {
+func (r *ChatCompletionRequest) WithUserMessage(
+	message string,
+) *ChatCompletionRequest {
 	r.UserMessages = append(r.UserMessages, message)
 	return r
 }
 
-func (r *ChatCompletionRequest) Stream() *ChatCompletionRequest {
-	r.Stream = true
-	return r
-}
-
 type ChatCompletionResponse struct {
+	Err     error
 	Content string
 }
 
-func (o *OpenAILanguageModel) ChatCompletion(ctx context.Context, req *ChatCompletionRequest) (*ChatCompletionResponse, error) {
+func (o *OpenAILanguageModel) ChatCompletion(
+	ctx context.Context,
+	req *ChatCompletionRequest,
+) (chan *ChatCompletionResponse, error) {
 	messages := []openai.ChatCompletionMessage{
 		{
 			Role:    openai.ChatMessageRoleSystem,
@@ -57,12 +61,13 @@ func (o *OpenAILanguageModel) ChatCompletion(ctx context.Context, req *ChatCompl
 		})
 	}
 
-	resp, err := o.client.CreateChatCompletion(
+	resp, err := o.client.CreateChatCompletionStream(
 		ctx,
 		openai.ChatCompletionRequest{
-			Model:     openai.GPT3Dot5Turbo,
+			Model:     openai.GPT4o,
 			Messages:  messages,
 			MaxTokens: req.MaxTokens,
+			Stream:    true,
 		},
 	)
 
@@ -70,11 +75,25 @@ func (o *OpenAILanguageModel) ChatCompletion(ctx context.Context, req *ChatCompl
 		return nil, fmt.Errorf("OpenAI API error: %w", err)
 	}
 
-	if len(resp.Choices) == 0 {
-		return nil, fmt.Errorf("no response from OpenAI")
-	}
+	result := make(chan *ChatCompletionResponse)
+	go func() {
+		defer close(result)
+		for {
+			response, err := resp.Recv()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				result <- &ChatCompletionResponse{
+					Err: err,
+				}
+				break
+			}
+			result <- &ChatCompletionResponse{
+				Content: response.Choices[0].Delta.Content,
+			}
+		}
+	}()
 
-	return &ChatCompletionResponse{
-		Content: resp.Choices[0].Message.Content,
-	}, nil
+	return result, nil
 }
