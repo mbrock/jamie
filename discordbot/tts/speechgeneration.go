@@ -2,12 +2,6 @@ package tts
 
 import (
 	"fmt"
-
-	"github.com/haguro/elevenlabs-go"
-)
-
-import (
-	"fmt"
 	"io"
 
 	"github.com/haguro/elevenlabs-go"
@@ -25,7 +19,10 @@ func NewElevenLabsSpeechGenerator(apiKey string) *ElevenLabsSpeechGenerator {
 	return &ElevenLabsSpeechGenerator{apiKey: apiKey}
 }
 
-func (e *ElevenLabsSpeechGenerator) TextToSpeechStreaming(text string, writer io.Writer) error {
+func (e *ElevenLabsSpeechGenerator) TextToSpeechStreaming(
+	text string,
+	writer io.Writer,
+) error {
 	elevenlabs.SetAPIKey(e.apiKey)
 
 	ttsReq := elevenlabs.TextToSpeechRequest{
@@ -33,7 +30,11 @@ func (e *ElevenLabsSpeechGenerator) TextToSpeechStreaming(text string, writer io
 		ModelID: "eleven_turbo_v2_5",
 	}
 
-	err := elevenlabs.TextToSpeechStreaming("XB0fDUnXU5powFXDhCwa", ttsReq, writer)
+	err := elevenlabs.TextToSpeechStream(
+		writer,
+		"uVKHymY7OYMd6OailpG5",
+		ttsReq,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to generate speech: %w", err)
 	}

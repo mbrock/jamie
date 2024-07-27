@@ -50,7 +50,7 @@ func (bot *Bot) joinVoiceCall(guildID, channelID string) error {
 		GuildID:   guildID,
 		ChannelID: channelID,
 
-		TalkMode: false,
+		TalkMode: true,
 
 		InboundAudioPackets: make(
 			chan *discordgo.Packet,
@@ -439,40 +439,61 @@ func (bot *Bot) speakInChannel(
 		if err := bot.TextToSpeech(text, ffmpegInWriter); err != nil {
 			bot.log.Error("failed to generate speech", "error", err)
 		}
+		bot.log.Debug("closing mp3 writer")
 	}()
 
-	// Create an Opus encoder
-	encoder, err := gopus.NewEncoder(48000, 2, gopus.Audio)
-	if err != nil {
-		return fmt.Errorf("failed to create Opus encoder: %w", err)
-	}
-
-	// Read and encode audio data in chunks
-	buffer := make([]byte, 960*2*2) // 20ms of audio at 48kHz, 2 channels, 2 bytes per sample
-	for {
-		_, err := io.ReadFull(ffmpegOutReader, buffer)
-		if err == io.EOF {
-			break
-		}
+	// Run audio encoding and sending in a goroutine
+	go func() {
+		// Create an Opus encoder
+		encoder, err := gopus.NewEncoder(48000, 2, gopus.Audio)
 		if err != nil {
-			return fmt.Errorf("failed to read audio data: %w", err)
+			bot.log.Error("failed to create Opus encoder", "error", err)
+			return
 		}
 
-		// Convert byte buffer to int16 slice
-		pcmBuffer := make([]int16, 960*2)
-		for i := 0; i < len(buffer); i += 2 {
-			pcmBuffer[i/2] = int16(buffer[i]) | int16(buffer[i+1])<<8
-		}
+		// Read and encode audio data in chunks
+		buffer := make(
+			[]byte,
+			960*2*2,
+		) // 20ms of audio at 48kHz, 2 channels, 2 bytes per sample
+		for {
+			n, err := io.ReadFull(ffmpegOutReader, buffer)
+			if err == io.EOF && n == 0 {
+				break
+			}
+			if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+				bot.log.Error("failed to read audio data", "error", err)
+				return
+			}
 
-		// Encode the frame to Opus
-		opusData, err := encoder.Encode(pcmBuffer, 960, 32000)
-		if err != nil {
-			return fmt.Errorf("failed to encode Opus: %w", err)
-		}
+			// Convert byte buffer to int16 slice
+			pcmBuffer := make([]int16, n/2)
+			for i := 0; i < n; i += 2 {
+				pcmBuffer[i/2] = int16(buffer[i]) | int16(buffer[i+1])<<8
+			}
 
-		// Send the Opus packet
-		voiceChannel.Conn.OpusSend <- opusData
-	}
+			// If we got a partial read, pad with silence
+			if n < len(buffer) {
+				for i := n / 2; i < len(pcmBuffer); i++ {
+					pcmBuffer[i] = 0
+				}
+			}
+
+			// Encode the frame to Opus
+			opusData, err := encoder.Encode(pcmBuffer, 960, 32000)
+			if err != nil {
+				bot.log.Error("failed to encode Opus", "error", err)
+				return
+			}
+
+			// Send the Opus packet
+			voiceChannel.Conn.OpusSend <- opusData
+
+			if err == io.EOF || err == io.ErrUnexpectedEOF {
+				break
+			}
+		}
+	}()
 
 	// Wait for FFmpeg to finish
 	err = ffmpegCmd.Wait()

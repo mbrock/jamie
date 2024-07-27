@@ -2,7 +2,6 @@ package discordbot
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"jamie/db"
@@ -11,7 +10,6 @@ import (
 	"jamie/llm"
 	"jamie/ogg"
 	"jamie/stt"
-	"os/exec"
 	"sort"
 	"strings"
 	"sync"
@@ -389,7 +387,7 @@ func (bot *Bot) processTalkCommand(
 	response, err := bot.languageModel.ChatCompletion(
 		ctx,
 		(&llm.ChatCompletionRequest{
-			SystemPrompt: "Briefly describe the latest conversation turn and its context, narratively, verbally, without any formatting.",
+			SystemPrompt: "Briefly respond, verbally, fluently, simply, without any formatting.",
 			MaxTokens:    300,
 		}).WithUserMessage(contextBuilder.String()),
 	)
