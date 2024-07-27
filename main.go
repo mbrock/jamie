@@ -450,12 +450,13 @@ func runDiscord(cmd *cobra.Command, args []string) {
 		mainLogger.Fatal("missing OPENAI_API_KEY or --openai-api-key=")
 	}
 
+	speechGenerator := tts.NewElevenLabsSpeechGenerator(elevenlabsAPIKey)
 	bot, err = discordbot.NewBot(
 		discordToken,
 		transcriptionService,
+		speechGenerator,
 		discordLogger,
 		openaiAPIKey,
-		elevenlabsAPIKey,
 		queries,
 		guildID,
 	)
