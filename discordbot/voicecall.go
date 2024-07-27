@@ -431,7 +431,7 @@ func (bot *Bot) speakInChannel(
 	}
 
 	// Read and encode audio data in chunks
-	buffer := make([]int16, 960*2) // 20ms of audio at 48kHz
+	buffer := make([]byte, 960*2*2) // 20ms of audio at 48kHz, 2 bytes per sample
 	for {
 		_, err := io.ReadFull(pr, buffer)
 		if err == io.EOF {
@@ -441,8 +441,14 @@ func (bot *Bot) speakInChannel(
 			return fmt.Errorf("failed to read audio data: %w", err)
 		}
 
+		// Convert []byte to []int16
+		pcmBuffer := make([]int16, 960*2)
+		for i := 0; i < len(buffer); i += 2 {
+			pcmBuffer[i/2] = int16(buffer[i]) | int16(buffer[i+1])<<8
+		}
+
 		// Encode the frame to Opus
-		opusData, err := encoder.Encode(buffer, 960, 32000)
+		opusData, err := encoder.Encode(pcmBuffer, 960, 32000)
 		if err != nil {
 			return fmt.Errorf("failed to encode Opus: %w", err)
 		}
