@@ -2,7 +2,7 @@ package discordbot
 
 import "github.com/bwmarrin/discordgo"
 
-type SocialNetwork interface {
+type Discord interface {
 	AddHandler(handler interface{}) func()
 	Open() error
 	UpdateStreamingStatus(idle int, name string, url string) (err error)

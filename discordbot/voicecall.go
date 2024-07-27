@@ -38,7 +38,7 @@ func (bot *Bot) joinVoiceCall(guildID, channelID string) error {
 		}
 	}
 
-	vc, err := bot.conn.ChannelVoiceJoin(guildID, channelID, false, false)
+	vc, err := bot.discord.ChannelVoiceJoin(guildID, channelID, false, false)
 	if err != nil {
 		return fmt.Errorf("failed to join voice channel: %w", err)
 	}
@@ -69,7 +69,7 @@ func (bot *Bot) joinVoiceCall(guildID, channelID string) error {
 }
 
 func (bot *Bot) joinAllVoiceChannels(guildID string) error {
-	channels, err := bot.conn.GuildChannels(guildID)
+	channels, err := bot.discord.GuildChannels(guildID)
 	if err != nil {
 		return fmt.Errorf("error getting guild channels: %w", err)
 	}
@@ -350,7 +350,14 @@ func (bot *Bot) handleVoiceStateUpdate(
 	_ *discordgo.Session,
 	v *discordgo.VoiceStateUpdate,
 ) {
-	if v.UserID == bot.conn.State.User.ID {
+	me, err := bot.discord.MyUserID()
+
+	if err != nil {
+		bot.log.Error("Failed to get bot's user ID", "error", err)
+		return
+	}
+
+	if v.UserID == me {
 		return
 	}
 }
@@ -370,18 +377,18 @@ func (bot *Bot) speakInChannel(
 	}()
 
 	// Find the voice channel associated with the text channel
-	channel, err := bot.conn.Channel(channelID)
+	channel, err := bot.discord.Channel(channelID)
 	if err != nil {
 		return fmt.Errorf("failed to get channel: %w", err)
 	}
 
-	guild, err := bot.conn.State.Guild(channel.GuildID)
+	voiceStates, err := bot.discord.GuildVoiceStates(channel.GuildID)
 	if err != nil {
-		return fmt.Errorf("failed to get guild: %w", err)
+		return fmt.Errorf("failed to get guild voice states: %w", err)
 	}
 
 	var voiceChannelID string
-	for _, vs := range guild.VoiceStates {
+	for _, vs := range voiceStates {
 		if vs.ChannelID != "" {
 			voiceChannelID = vs.ChannelID
 			break
@@ -396,7 +403,7 @@ func (bot *Bot) speakInChannel(
 	// Join the voice channel if not already connected
 	if bot.voiceCall == nil ||
 		bot.voiceCall.Conn.ChannelID != voiceChannelID {
-		err := bot.joinVoiceCall(guild.ID, voiceChannelID)
+		err := bot.joinVoiceCall(channel.GuildID, voiceChannelID)
 		if err != nil {
 			bot.mu.Unlock()
 			return fmt.Errorf("failed to join voice channel: %w", err)

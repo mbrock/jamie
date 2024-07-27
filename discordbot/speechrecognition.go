@@ -90,7 +90,7 @@ func (bot *Bot) processPendingRecognitionResult(
 				bot.isSpeaking = true
 				bot.speakingMu.Unlock()
 
-				bot.handleTalkCommand(bot.conn, &discordgo.MessageCreate{
+				bot.handleTalkCommand(&discordgo.MessageCreate{
 					Message: &discordgo.Message{
 						ChannelID: row.DiscordChannel,
 						Author: &discordgo.User{
@@ -102,7 +102,7 @@ func (bot *Bot) processPendingRecognitionResult(
 					strings.Fields(result.Text),
 				)
 
-				_, err = bot.conn.ChannelMessageSend(
+				_, err = bot.discord.ChannelMessageSend(
 					row.DiscordChannel,
 					fmt.Sprintf("> %s: %s", row.Username, result.Text),
 				)
@@ -117,7 +117,7 @@ func (bot *Bot) processPendingRecognitionResult(
 			}
 		} else {
 			// Send the transcribed message as usual
-			_, err = bot.conn.ChannelMessageSend(
+			_, err = bot.discord.ChannelMessageSend(
 				row.DiscordChannel,
 				fmt.Sprintf("> %s: %s", row.Username, result.Text),
 			)
