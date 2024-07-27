@@ -352,9 +352,10 @@ func runSummarizeTranscript(cmd *cobra.Command, args []string) {
 		mainLogger.Fatal("missing OPENAI_API_KEY or --openai-api-key=")
 	}
 
+	languageModel := llm.NewOpenAILanguageModel(openaiAPIKey)
 	summaryChan, err := llm.SummarizeTranscript(
 		queries,
-		openaiAPIKey,
+		languageModel,
 		"",
 	)
 	if err != nil {
