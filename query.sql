@@ -224,7 +224,7 @@ SELECT
     s.ended_at,
     dcs.discord_channel,
     ds.username,
-    COALESCE(r.duration, 0) as duration,
+    CAST(COALESCE(r.duration, 0) AS INTEGER) as duration,
     COALESCE(r.transcription_count, 0) as transcription_count
 FROM 
     streams s
@@ -238,7 +238,7 @@ LEFT JOIN (
     SELECT 
         stream,
         COUNT(*) as transcription_count,
-        (MAX(sample_idx) - MIN(sample_idx)) / 48000.0 as duration
+        (MAX(sample_idx) - MIN(sample_idx)) as duration
     FROM 
         recognitions
     GROUP BY 
