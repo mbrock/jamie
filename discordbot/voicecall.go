@@ -3,7 +3,6 @@ package discordbot
 import (
 	"context"
 	"database/sql"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
