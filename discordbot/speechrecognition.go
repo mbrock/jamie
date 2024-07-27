@@ -68,7 +68,10 @@ func (bot *Bot) processPendingRecognitionResult(
 		result = draft
 	}
 
-	if result.Text != "" {
+	// Define a confidence threshold (e.g., 0.7)
+	const confidenceThreshold = 0.7
+
+	if result.Text != "" && result.Confidence >= confidenceThreshold {
 		row, err := bot.db.GetChannelAndUsernameForStream(
 			context.Background(),
 			streamID,
@@ -121,7 +124,7 @@ func (bot *Bot) processPendingRecognitionResult(
 			// Send the transcribed message as usual
 			_, err = bot.discord.ChannelMessageSend(
 				row.DiscordChannel,
-				fmt.Sprintf("> %s: %s", row.Username, result.Text),
+				fmt.Sprintf("> %s: %s (Confidence: %.2f)", row.Username, result.Text, result.Confidence),
 			)
 
 			if err != nil {
@@ -131,9 +134,16 @@ func (bot *Bot) processPendingRecognitionResult(
 					"channel", row.DiscordChannel,
 				)
 			}
+		} else if result.Confidence < confidenceThreshold {
+			bot.log.Info(
+				"Rejected transcription due to low confidence",
+				"text", result.Text,
+				"confidence", result.Confidence,
+			)
 		}
 
-		recognitionID := etc.Gensym()
+		if result.Confidence >= confidenceThreshold {
+			recognitionID := etc.Gensym()
 
 		err = bot.db.SaveRecognition(
 			context.Background(),
