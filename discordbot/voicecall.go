@@ -19,6 +19,8 @@ type VoiceCall struct {
 	TalkMode            bool
 	InboundAudioPackets chan *voicePacket
 	streamIdCache       map[string]string // cacheKey -> streamID
+	GuildID             string
+	ChannelID           string
 }
 
 type voicePacket struct {
@@ -55,6 +57,8 @@ func (bot *Bot) joinVoiceCall(guildID, channelID string) error {
 			3*1000/20,
 		), // 3 second audio buffer
 		streamIdCache: make(map[string]string),
+		GuildID:       guildID,
+		ChannelID:     channelID,
 	}
 
 	bot.voiceCall.Conn.AddHandler(bot.handleVoiceSpeakingUpdate)
