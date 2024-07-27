@@ -85,6 +85,12 @@ func (bot *Bot) processPendingRecognitionResult(
 			return
 		}
 
+		// Signal to cancel any ongoing speech
+		select {
+		case bot.cancelSpeech <- struct{}{}:
+		default:
+		}
+
 		if bot.voiceCall != nil && bot.voiceCall.TalkMode {
 			bot.speakingMu.Lock()
 			isSpeaking := bot.isSpeaking
@@ -146,7 +152,7 @@ func (bot *Bot) processPendingRecognitionResult(
 	} else {
 		recognitionID := etc.Gensym()
 
-		err = bot.db.SaveRecognition(
+		err := bot.db.SaveRecognition(
 			context.Background(),
 			db.SaveRecognitionParams{
 				ID:         recognitionID,
