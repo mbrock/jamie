@@ -23,7 +23,11 @@ func GenerateOggOpusBlob(
 ) ([]byte, error) {
 	packets, err := db.GetPacketsForStreamInSampleRange(
 		context.Background(),
-		streamID,
+		db.GetPacketsForStreamInSampleRangeParams{
+			Stream:     streamID,
+			SampleIdx:  startSample,
+			SampleIdx_2: endSample,
+		},
 	)
 	if err != nil {
 		return nil, fmt.Errorf("fetch packets: %w", err)
