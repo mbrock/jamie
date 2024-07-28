@@ -35,22 +35,33 @@ func (bot *Bot) getRecognizersForStream(streamID string) ([]stt.SpeechRecognizer
 }
 
 func (bot *Bot) addRecognizer(streamID string, recognizers *[]stt.SpeechRecognizer, language string) error {
+	stream, err := bot.db.GetStream(context.Background(), streamID)
+	if err != nil {
+		return fmt.Errorf("failed to get stream: %w", err)
+	}
+
 	session, err := bot.speechRecognition.Start(context.Background(), language)
 	if err != nil {
 		return fmt.Errorf("failed to start %s speech recognition session: %w", language, err)
 	}
 
-	*recognizers = append(*recognizers, session)
-	go bot.speechRecognitionLoop(streamID, session)
+	deepgramSession, ok := session.(*DeepgramSession)
+	if !ok {
+		return fmt.Errorf("unexpected session type")
+	}
+	deepgramSession.initialSampleIndex = stream.SampleIdxOffset
+
+	*recognizers = append(*recognizers, deepgramSession)
+	go bot.speechRecognitionLoop(streamID, deepgramSession)
 	return nil
 }
 
 func (bot *Bot) speechRecognitionLoop(
 	streamID string,
-	session stt.SpeechRecognizer,
+	session *DeepgramSession,
 ) {
 	for segmentDrafts := range session.Receive() {
-		bot.processPendingRecognitionResult(streamID, segmentDrafts)
+		bot.processPendingRecognitionResult(streamID, segmentDrafts, session.initialSampleIndex)
 	}
 
 	bot.log.Info(
