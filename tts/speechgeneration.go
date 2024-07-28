@@ -32,12 +32,20 @@ func (e *ElevenLabsSpeechGenerator) TextToSpeechStreaming(
 		ModelID: "eleven_turbo_v2_5",
 	}
 
-	err := elevenlabs.TextToSpeechStream(
-		writer,
-		// "NFG5qt843uXKj4pFvR7C",
-		"pKLLpypGseGMUjkb5fEZ",
-		ttsReq,
-	)
+	errChan := make(chan error, 1)
+	go func() {
+		err := elevenlabs.TextToSpeechStream(
+			writer,
+			"pKLLpypGseGMUjkb5fEZ",
+			ttsReq,
+		)
+		errChan <- err
+	}()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case err := <-errChan:
 	if err != nil {
 		return fmt.Errorf("failed to generate speech: %w", err)
 	}
