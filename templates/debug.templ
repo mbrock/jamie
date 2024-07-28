@@ -32,6 +32,18 @@ type DebugViewModel struct {
 
 templ Debug(viewModel DebugViewModel) {
 	@layout("Debug View - Stream " + viewModel.Stream.ID) {
+		<style>
+			svg text {
+				font-family: Arial, sans-serif;
+				font-size: 10px;
+			}
+			svg rect:hover {
+				opacity: 0.7;
+			}
+			svg rect {
+				transition: opacity 0.2s;
+			}
+		</style>
 		<h1 class="text-3xl font-bold mb-6">Debug View - Stream { viewModel.Stream.ID }</h1>
 		<h2 class="text-2xl font-bold mt-8 mb-4">Stream Details</h2>
 		<div class="overflow-x-auto">
