@@ -271,8 +271,8 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 		}
 
 		packets, err := queries.GetPacketsForStreamInSampleRange(r.Context(), db.GetPacketsForStreamInSampleRangeParams{
-			Stream: streamID,
-			SampleIdx: stream.SampleIdxOffset,
+			Stream:      streamID,
+			SampleIdx:   stream.SampleIdxOffset,
 			SampleIdx_2: stream.SampleIdxOffset + 1000000000, // Arbitrary large number to get all packets
 		})
 		if err != nil {
@@ -297,6 +297,19 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 			Packets:      packets,
 			Recognitions: recognitions,
 		}
+
+		funcMap := template.FuncMap{
+			"subtract": func(a, b int64) int64 {
+				return a - b
+			},
+			"sampleIndexToTime": func(sampleIndex int64, createdAt float64) string {
+				createdTime := etc.JulianDayToTime(createdAt)
+				duration := time.Duration(sampleIndex-stream.SampleIdxOffset) * time.Second / 48000
+				return createdTime.Add(duration).Format(time.RFC3339Nano)
+			},
+		}
+
+		tmpl = tmpl.Funcs(funcMap)
 
 		tmpl := template.Must(template.New("debug").Parse(`
 		<html>
@@ -387,19 +400,6 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 			</body>
 		</html>
 		`))
-
-		funcMap := template.FuncMap{
-			"subtract": func(a, b int64) int64 {
-				return a - b
-			},
-			"sampleIndexToTime": func(sampleIndex int64, createdAt float64) string {
-				createdTime := etc.JulianDayToTime(createdAt)
-				duration := time.Duration(sampleIndex-stream.SampleIdxOffset) * time.Second / 48000
-				return createdTime.Add(duration).Format(time.RFC3339Nano)
-			},
-		}
-
-		tmpl = tmpl.Funcs(funcMap)
 
 		err = tmpl.Execute(w, data)
 		if err != nil {
