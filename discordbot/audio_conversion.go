@@ -4,8 +4,6 @@ import (
 	"context"
 	"io"
 	"os/exec"
-
-	"layeh.com/gopus"
 )
 
 func streamMp3ToPCM(

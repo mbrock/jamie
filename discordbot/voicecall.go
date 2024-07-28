@@ -386,24 +386,51 @@ func (bot *Bot) handleVoiceStateUpdate(
 	// Fetch the user information
 	user, err := bot.discord.User(v.UserID)
 	if err != nil {
-		bot.log.Error("Failed to fetch user information", "error", err, "userID", v.UserID)
+		bot.log.Error(
+			"Failed to fetch user information",
+			"error",
+			err,
+			"userID",
+			v.UserID,
+		)
 		return
 	}
 
 	// Update the username in the database
-	err = bot.db.UpdateDiscordSpeakerUsername(context.Background(), db.UpdateDiscordSpeakerUsernameParams{
-		DiscordID: v.UserID,
-		Username:  user.Username,
-	})
+	err = bot.db.UpdateDiscordSpeakerUsername(
+		context.Background(),
+		db.UpdateDiscordSpeakerUsernameParams{
+			DiscordID: v.UserID,
+			Username:  user.Username,
+		},
+	)
 	if err != nil {
-		bot.log.Error("Failed to update username", "error", err, "userID", v.UserID, "username", user.Username)
+		bot.log.Error(
+			"Failed to update username",
+			"error",
+			err,
+			"userID",
+			v.UserID,
+			"username",
+			user.Username,
+		)
 	} else {
 		bot.log.Info("Updated username", "userID", v.UserID, "username", user.Username)
 	}
 }
 
-func (bot *Bot) speakInChannel(ctx context.Context, channelID string, text string) error {
-	bot.log.Info("Starting speakInChannel", "channelID", channelID, "text", text)
+func (bot *Bot) speakInChannel(
+	ctx context.Context,
+	channelID string,
+	text string,
+) error {
+	bot.log.Info(
+		"Starting speakInChannel",
+		"channelID",
+		channelID,
+		"text",
+		text,
+	)
 
 	// Set the speaking flag
 	bot.speakingMu.Lock()
@@ -442,7 +469,6 @@ func (bot *Bot) speakInChannel(ctx context.Context, channelID string, text strin
 		return fmt.Errorf("failed to start audio conversion: %w", err)
 	}
 
-	timelineChan := streamPCMToTimelineData(ctx, pcmChan, 48000, 2)
 	int16Chan := streamPCMToInt16(ctx, pcmChan)
 
 	encoder, err := gopus.NewEncoder(48000, 2, gopus.Audio)
@@ -450,27 +476,19 @@ func (bot *Bot) speakInChannel(ctx context.Context, channelID string, text strin
 		return fmt.Errorf("failed to create Opus encoder: %w", err)
 	}
 
-	var timelineData []TimelineData
-
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case err := <-errChan:
 			return err
-		case data, ok := <-timelineChan:
-			if !ok {
-				continue
-			}
-			timelineData = append(timelineData, data)
+
 		case pcmData, ok := <-int16Chan:
 			if !ok {
 				bot.log.Info("Speech completed normally")
-				// Here you can process the collected timelineData
-				bot.processTimelineData(timelineData)
 				return nil
 			}
-			
+
 			// Encode the frame to Opus
 			opusData, err := encoder.Encode(pcmData, 960, 128000)
 			if err != nil {
@@ -485,13 +503,6 @@ func (bot *Bot) speakInChannel(ctx context.Context, channelID string, text strin
 			}
 		}
 	}
-}
-
-func (bot *Bot) processTimelineData(data []TimelineData) {
-	// Process the timeline data here
-	// For example, you could store it in the database or use it to update the UI
-	bot.log.Info("Processing timeline data", "dataPoints", len(data))
-	// Implement the logic to handle the timeline data as needed
 }
 
 type channelWriter struct {
