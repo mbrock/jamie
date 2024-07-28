@@ -176,7 +176,13 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 			Transcriptions: transcriptions,
 		}
 
-		tmpl := template.Must(template.New("streams").Parse(`
+		funcMap := template.FuncMap{
+			"add": func(a, b int64) int64 {
+				return a + b
+			},
+		}
+
+		tmpl := template.Must(template.New("streams").Funcs(funcMap).Parse(`
 		<html>
 			<head>
 				<title>Streams</title>
@@ -236,7 +242,7 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 						<td>{{.DiscordUsername}}</td>
 						<td>{{.Text}}</td>
 						<td>{{.CreatedAt}}</td>
-						<td><a href="/stream/{{.Stream}}">OGG</a></td>
+						<td><a href="/stream/{{.Stream}}?start={{.SampleIdx}}&end={{add .SampleIdx 48000}}">OGG</a></td>
 					</tr>
 					{{end}}
 				</table>
@@ -255,25 +261,32 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 		vars := mux.Vars(r)
 		streamID := vars["id"]
 
-		stream, err := queries.GetStream(r.Context(), streamID)
-		if err != nil {
-			http.Error(w, "Stream not found", http.StatusNotFound)
-			return
+		startSample, _ := strconv.ParseInt(r.URL.Query().Get("start"), 10, 64)
+		endSample, _ := strconv.ParseInt(r.URL.Query().Get("end"), 10, 64)
+
+		if startSample == 0 || endSample == 0 {
+			stream, err := queries.GetStream(r.Context(), streamID)
+			if err != nil {
+				http.Error(w, "Stream not found", http.StatusNotFound)
+				return
+			}
+			startSample = stream.SampleIdxOffset
+			endSample = stream.SampleIdxOffset + 10000*48000 // 10000 seconds of audio
 		}
 
 		oggData, err := ogg.GenerateOggOpusBlob(
 			mainLogger,
 			queries,
 			streamID,
-			stream.SampleIdxOffset,
-			stream.SampleIdxOffset+10000*48000, // 10000 seconds of audio
+			startSample,
+			endSample,
 		)
 		if err != nil {
 			http.Error(w, "Failed to generate OGG file", http.StatusInternalServerError)
 			return
 		}
 
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s.ogg\"", streamID))
+		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s_%d_%d.ogg\"", streamID, startSample, endSample))
 		w.Header().Set("Content-Type", "audio/ogg")
 		w.Header().Set("Content-Length", strconv.Itoa(len(oggData)))
 		w.Write(oggData)
