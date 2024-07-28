@@ -180,6 +180,13 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 			"add": func(a, b int64) int64 {
 				return a + b
 			},
+			"formatTime": func(julianDay float64) string {
+				return etc.JulianDayToTime(julianDay).Format("2006-01-02 15:04:05")
+			},
+			"formatDuration": func(samples int64) string {
+				duration := time.Duration(samples) * time.Second / 48000
+				return duration.Round(time.Second).String()
+			},
 		}
 
 		tmpl := template.Must(template.New("streams").Funcs(funcMap).Parse(`
@@ -237,6 +244,7 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 						<th>Username</th>
 						<th>Text</th>
 						<th>Created At</th>
+						<th>Duration</th>
 						<th>Audio</th>
 					</tr>
 					{{range .Transcriptions}}
@@ -244,8 +252,12 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 						<td>{{.Emoji}}</td>
 						<td>{{.DiscordUsername}}</td>
 						<td>{{.Text}}</td>
-						<td>{{.CreatedAt}}</td>
-						<td><audio controls src="/stream/{{.Stream}}?start={{.SampleIdx}}&end={{add .SampleIdx .SampleLen}}"></audio></td>
+						<td>{{formatTime .CreatedAt}}</td>
+						<td>{{formatDuration .SampleLen}}</td>
+						<td>
+							<audio controls src="/stream/{{.Stream}}?start={{.SampleIdx}}&end={{add .SampleIdx .SampleLen}}"></audio>
+							<a href="/stream/{{.Stream}}?start={{.SampleIdx}}&end={{add .SampleIdx .SampleLen}}" download="audio_{{.Stream}}_{{.SampleIdx}}.ogg">Download</a>
+						</td>
 					</tr>
 					{{end}}
 				</table>
