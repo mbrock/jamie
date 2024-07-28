@@ -2,12 +2,13 @@ package discordbot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	discordbot2 "jamie/audio"
 	"jamie/db"
 	"jamie/etc"
 	"jamie/llm"
-	"jamie/ogg"
 	"jamie/stt"
 	"jamie/tts"
 	"sort"
@@ -318,7 +319,7 @@ func (bot *Bot) handleTalkCommand(
 
 		err = bot.speakInChannel(ctx, m.ChannelID, response)
 		if err != nil {
-			if err == context.Canceled {
+			if errors.Is(err, context.Canceled) {
 				bot.log.Info("Speech was cancelled")
 			} else {
 				bot.log.Error("Failed to speak response", "error", err)
@@ -450,7 +451,7 @@ func (bot *Bot) GenerateOggOpusBlob(
 	streamID string,
 	startSample, endSample int,
 ) ([]byte, error) {
-	return ogg.GenerateOggOpusBlob(
+	return discordbot2.GenerateOggOpusBlob(
 		bot.log,
 		bot.db,
 		streamID,

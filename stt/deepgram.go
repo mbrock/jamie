@@ -157,7 +157,7 @@ func (s *DeepgramSession) Message(mr *api.MessageResponse) error {
 	return nil
 }
 
-func (s *DeepgramSession) Open(ocr *api.OpenResponse) error {
+func (s *DeepgramSession) Open(_ *api.OpenResponse) error {
 	s.logger.Info("session", "state", "open", "api", "deepgram")
 	s.isOpen = true
 	go func() {
@@ -176,12 +176,12 @@ func (s *DeepgramSession) Metadata(md *api.MetadataResponse) error {
 }
 
 func (s *DeepgramSession) SpeechStarted(
-	ssr *api.SpeechStartedResponse,
+	_ *api.SpeechStartedResponse,
 ) error {
 	return nil
 }
 
-func (s *DeepgramSession) UtteranceEnd(ur *api.UtteranceEndResponse) error {
+func (s *DeepgramSession) UtteranceEnd(_ *api.UtteranceEndResponse) error {
 	return nil
 }
 

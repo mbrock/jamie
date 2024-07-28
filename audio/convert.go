@@ -1,12 +1,14 @@
-package discordbot
+package audio
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"os/exec"
 )
 
-func streamMp3ToPCM(
+func StreamMp3ToPCM(
 	ctx context.Context,
 	mp3Input <-chan []byte,
 	bufferLength int,
@@ -64,7 +66,7 @@ func streamMp3ToPCM(
 				if err == io.EOF && n == 0 {
 					return
 				}
-				if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+				if err != nil && err != io.EOF && !errors.Is(err, io.ErrUnexpectedEOF) {
 					return
 				}
 				select {
@@ -83,7 +85,7 @@ func streamMp3ToPCM(
 	return pcmOutput, nil
 }
 
-func streamPCMToInt16(
+func StreamPCMToInt16(
 	ctx context.Context,
 	pcmInput <-chan []byte,
 ) <-chan []int16 {
@@ -121,4 +123,17 @@ func streamPCMToInt16(
 	}()
 
 	return int16Output
+}
+
+func DecodeMpeg20msPCM(
+	ctx context.Context,
+	mp3Chan <-chan []byte,
+) (<-chan []int16, error) {
+	bufferLength := 960 * 2 * 2 // 960 samples * 2 bytes per sample * 2 channels
+	pcmChan, err := StreamMp3ToPCM(ctx, mp3Chan, bufferLength)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start audio conversion: %w", err)
+	}
+
+	return StreamPCMToInt16(ctx, pcmChan), nil
 }

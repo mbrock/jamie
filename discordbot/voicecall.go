@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"jamie/audio"
 	"jamie/db"
 	"jamie/etc"
 	"jamie/stt"
@@ -369,7 +370,7 @@ func (bot *Bot) createStreamForPacket(
 }
 
 func (bot *Bot) handleVoiceStateUpdate(
-	s *discordgo.Session,
+	_ *discordgo.Session,
 	v *discordgo.VoiceStateUpdate,
 ) {
 	me, err := bot.discord.MyUserID()
@@ -440,10 +441,15 @@ func (bot *Bot) speakInChannel(
 	if err := voiceChannel.Conn.Speaking(true); err != nil {
 		return fmt.Errorf("failed to set speaking state: %w", err)
 	}
-	defer voiceChannel.Conn.Speaking(false)
+	defer func(Conn *discordgo.VoiceConnection, b bool) {
+		err := Conn.Speaking(b)
+		if err != nil {
+			bot.log.Warn("set speaking state", "error", err)
+		}
+	}(voiceChannel.Conn, false)
 
 	mpeg, errChan := bot.textToSpeechMpegStream(ctx, text)
-	int16Chan, err := bot.decodeMpeg20msPCM(ctx, mpeg)
+	int16Chan, err := audio.DecodeMpeg20msPCM(ctx, mpeg)
 	if err != nil {
 		return err
 	}
@@ -480,19 +486,6 @@ func (bot *Bot) textToSpeechMpegStream(
 	}()
 
 	return mp3Chan, errChan
-}
-
-func (bot *Bot) decodeMpeg20msPCM(
-	ctx context.Context,
-	mp3Chan <-chan []byte,
-) (<-chan []int16, error) {
-	bufferLength := 960 * 2 * 2 // 960 samples * 2 bytes per sample * 2 channels
-	pcmChan, err := streamMp3ToPCM(ctx, mp3Chan, bufferLength)
-	if err != nil {
-		return nil, fmt.Errorf("failed to start audio conversion: %w", err)
-	}
-
-	return streamPCMToInt16(ctx, pcmChan), nil
 }
 
 func (bot *Bot) streamPcmToDiscordAsOpusPackets(

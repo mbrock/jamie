@@ -5,10 +5,10 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
+	"jamie/audio"
 	"jamie/db"
 	"jamie/etc"
 	"jamie/llm"
-	"jamie/ogg"
 	"jamie/templates"
 	"jamie/tts"
 	"net/http"
@@ -80,7 +80,10 @@ func init() {
 		"elevenlabs_api_key",
 		rootCmd.PersistentFlags().Lookup("elevenlabs-api-key"),
 	)
-	viper.BindPFlag("http_port", rootCmd.PersistentFlags().Lookup("http-port"))
+	viper.BindPFlag(
+		"http_port",
+		rootCmd.PersistentFlags().Lookup("http-port"),
+	)
 }
 
 func initConfig() {
@@ -143,10 +146,10 @@ var httpServerCmd = &cobra.Command{
 	Run:   RunHTTPServer,
 }
 
-func RunHTTPServer(cmd *cobra.Command, args []string) {
+func RunHTTPServer(_ *cobra.Command, _ []string) {
 	mainLogger, _, _, sqlLogger := createLoggers()
 
-	queries, err := InitDB(sqlLogger)
+	queries, err := InitDB()
 	if err != nil {
 		mainLogger.Fatal("initialize database", "error", err.Error())
 	}
@@ -156,20 +159,32 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 	r.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		streams, err := queries.GetAllStreamsWithDetails(r.Context())
 		if err != nil {
-			http.Error(w, "Failed to fetch streams", http.StatusInternalServerError)
+			http.Error(
+				w,
+				"Failed to fetch streams",
+				http.StatusInternalServerError,
+			)
 			return
 		}
 
 		transcriptions, err := queries.GetRecentRecognitions(r.Context(), 100)
 		if err != nil {
-			http.Error(w, "Failed to fetch transcriptions", http.StatusInternalServerError)
+			http.Error(
+				w,
+				"Failed to fetch transcriptions",
+				http.StatusInternalServerError,
+			)
 			return
 		}
 
 		component := templates.Index(streams, transcriptions)
 		err = component.Render(r.Context(), w)
 		if err != nil {
-			http.Error(w, "Failed to render template", http.StatusInternalServerError)
+			http.Error(
+				w,
+				"Failed to render template",
+				http.StatusInternalServerError,
+			)
 			return
 		}
 	})
@@ -183,112 +198,161 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 		return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
 	}
 
-	r.HandleFunc("/stream/{id}/debug", func(w http.ResponseWriter, r *http.Request) {
-		vars := mux.Vars(r)
-		streamID := vars["id"]
+	r.HandleFunc(
+		"/stream/{id}/debug",
+		func(w http.ResponseWriter, r *http.Request) {
+			vars := mux.Vars(r)
+			streamID := vars["id"]
 
-		stream, err := queries.GetStream(r.Context(), streamID)
-		if err != nil {
-			http.Error(w, "Stream not found", http.StatusNotFound)
-			return
-		}
+			stream, err := queries.GetStream(r.Context(), streamID)
+			if err != nil {
+				http.Error(w, "Stream not found", http.StatusNotFound)
+				return
+			}
 
-		packets, err := queries.GetPacketsForStreamInSampleRange(r.Context(), db.GetPacketsForStreamInSampleRangeParams{
-			Stream:      streamID,
-			SampleIdx:   stream.SampleIdxOffset,
-			SampleIdx_2: stream.SampleIdxOffset + 1000000000, // Arbitrary large number to get all packets
-		})
-		if err != nil {
-			http.Error(w, "Failed to fetch packets", http.StatusInternalServerError)
-			return
-		}
+			packets, err := queries.GetPacketsForStreamInSampleRange(
+				r.Context(),
+				db.GetPacketsForStreamInSampleRangeParams{
+					Stream:      streamID,
+					SampleIdx:   stream.SampleIdxOffset,
+					SampleIdx_2: stream.SampleIdxOffset + 1000000000, // Arbitrary large number to get all packets
+				},
+			)
+			if err != nil {
+				http.Error(
+					w,
+					"Failed to fetch packets",
+					http.StatusInternalServerError,
+				)
+				return
+			}
 
-		recognitions, err := queries.GetTranscriptionsForStream(r.Context(), streamID)
-		if err != nil {
-			http.Error(w, "Failed to fetch recognitions", http.StatusInternalServerError)
-			return
-		}
+			recognitions, err := queries.GetTranscriptionsForStream(
+				r.Context(),
+				streamID,
+			)
+			if err != nil {
+				http.Error(
+					w,
+					"Failed to fetch recognitions",
+					http.StatusInternalServerError,
+				)
+				return
+			}
 
-		viewModel := templates.DebugViewModel{
-			Stream: stream,
-		}
+			viewModel := templates.DebugViewModel{
+				Stream: stream,
+			}
 
-		createdTime := etc.JulianDayToTime(stream.CreatedAt)
+			createdTime := etc.JulianDayToTime(stream.CreatedAt)
 
-		for _, packet := range packets {
-			duration := time.Duration(packet.SampleIdx-stream.SampleIdxOffset) * time.Second / 48000
-			viewModel.Packets = append(viewModel.Packets, templates.PacketViewModel{
-				SampleIdx:         packet.SampleIdx,
-				RelativeSampleIdx: packet.SampleIdx - stream.SampleIdxOffset,
-				Timestamp:         createdTime.Add(duration).Format(time.RFC3339Nano),
-				Duration:          samplesToDuration(packet.SampleIdx - stream.SampleIdxOffset),
-			})
-		}
+			for _, packet := range packets {
+				duration := time.Duration(
+					packet.SampleIdx-stream.SampleIdxOffset,
+				) * time.Second / 48000
+				viewModel.Packets = append(
+					viewModel.Packets,
+					templates.PacketViewModel{
+						SampleIdx:         packet.SampleIdx,
+						RelativeSampleIdx: packet.SampleIdx - stream.SampleIdxOffset,
+						Timestamp: createdTime.Add(duration).
+							Format(time.RFC3339Nano),
+						Duration: samplesToDuration(
+							packet.SampleIdx - stream.SampleIdxOffset,
+						),
+					},
+				)
+			}
 
-		for _, recognition := range recognitions {
-			duration := time.Duration(recognition.SampleIdx-stream.SampleIdxOffset) * time.Second / 48000
-			viewModel.Recognitions = append(viewModel.Recognitions, templates.RecognitionViewModel{
-				SampleIdx:         recognition.SampleIdx,
-				RelativeSampleIdx: recognition.SampleIdx - stream.SampleIdxOffset,
-				Timestamp:         createdTime.Add(duration).Format(time.RFC3339Nano),
-				Duration:          samplesToDuration(recognition.SampleIdx - stream.SampleIdxOffset),
-				Text:              recognition.Text,
-				SampleLen:         recognition.SampleLen,
-			})
-		}
+			for _, recognition := range recognitions {
+				duration := time.Duration(
+					recognition.SampleIdx-stream.SampleIdxOffset,
+				) * time.Second / 48000
+				viewModel.Recognitions = append(
+					viewModel.Recognitions,
+					templates.RecognitionViewModel{
+						SampleIdx:         recognition.SampleIdx,
+						RelativeSampleIdx: recognition.SampleIdx - stream.SampleIdxOffset,
+						Timestamp: createdTime.Add(duration).
+							Format(time.RFC3339Nano),
+						Duration: samplesToDuration(
+							recognition.SampleIdx - stream.SampleIdxOffset,
+						),
+						Text:      recognition.Text,
+						SampleLen: recognition.SampleLen,
+					},
+				)
+			}
 
-		if len(viewModel.Packets) > 0 {
-			viewModel.EndSample = viewModel.Packets[len(viewModel.Packets)-1].SampleIdx
-		} else {
-			viewModel.EndSample = stream.SampleIdxOffset
-		}
+			if len(viewModel.Packets) > 0 {
+				viewModel.EndSample = viewModel.Packets[len(viewModel.Packets)-1].SampleIdx
+			} else {
+				viewModel.EndSample = stream.SampleIdxOffset
+			}
 
-		component := templates.Debug(viewModel)
-		err = component.Render(r.Context(), w)
-		if err != nil {
-			http.Error(w, "Failed to render template", http.StatusInternalServerError)
-			return
-		}
-	})
+			component := templates.Debug(viewModel)
+			err = component.Render(r.Context(), w)
+			if err != nil {
+				http.Error(
+					w,
+					"Failed to render template",
+					http.StatusInternalServerError,
+				)
+				return
+			}
+		},
+	)
 
-	r.HandleFunc("/stream/{id}", func(w http.ResponseWriter, r *http.Request) {
-		vars := mux.Vars(r)
-		streamID := vars["id"]
+	r.HandleFunc(
+		"/stream/{id}",
+		func(w http.ResponseWriter, r *http.Request) {
+			vars := mux.Vars(r)
+			streamID := vars["id"]
 
-		startSample, _ := strconv.ParseInt(r.URL.Query().Get("start"), 10, 64)
-		endSample, _ := strconv.ParseInt(r.URL.Query().Get("end"), 10, 64)
+			startSample, _ := strconv.ParseInt(
+				r.URL.Query().Get("start"),
+				10,
+				64,
+			)
+			endSample, _ := strconv.ParseInt(r.URL.Query().Get("end"), 10, 64)
 
-		stream, err := queries.GetStream(r.Context(), streamID)
-		if err != nil {
-			http.Error(w, "Stream not found", http.StatusNotFound)
-			return
-		}
+			stream, err := queries.GetStream(r.Context(), streamID)
+			if err != nil {
+				http.Error(w, "Stream not found", http.StatusNotFound)
+				return
+			}
 
-		if startSample == 0 || endSample == 0 {
-			startSample = 0
-			endSample = 10000 * 48000 // 10000 seconds of audio
-		}
+			if startSample == 0 || endSample == 0 {
+				startSample = 0
+				endSample = 10000 * 48000 // 10000 seconds of audio
+			}
 
-		// startSample = startSample
-		// endSample = endSample
+			// startSample = startSample
+			// endSample = endSample
 
-		oggData, err := ogg.GenerateOggOpusBlob(
-			mainLogger,
-			queries,
-			streamID,
-			startSample+int64(stream.SampleIdxOffset),
-			endSample+int64(stream.SampleIdxOffset),
-		)
-		if err != nil {
-			http.Error(w, "Failed to generate OGG file", http.StatusInternalServerError)
-			return
-		}
+			oggData, err := audio.GenerateOggOpusBlob(
+				mainLogger,
+				queries,
+				streamID,
+				startSample+stream.SampleIdxOffset,
+				endSample+stream.SampleIdxOffset,
+			)
+			if err != nil {
+				http.Error(
+					w,
+					"Failed to generate OGG file",
+					http.StatusInternalServerError,
+				)
+				return
+			}
 
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s_%d_%d.ogg\"", streamID, startSample, endSample))
-		w.Header().Set("Content-Type", "audio/ogg")
-		w.Header().Set("Content-Length", strconv.Itoa(len(oggData)))
-		w.Write(oggData)
-	})
+			w.Header().
+				Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s_%d_%d.ogg\"", streamID, startSample, endSample))
+			w.Header().Set("Content-Type", "audio/ogg")
+			w.Header().Set("Content-Length", strconv.Itoa(len(oggData)))
+			w.Write(oggData)
+		},
+	)
 
 	port := viper.GetInt("http_port")
 	mainLogger.Info(fmt.Sprintf("Starting HTTP server on port %d", port))
@@ -301,7 +365,7 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 //go:embed schema.sql
 var ddl string
 
-func InitDB(logger *log.Logger) (*db.Queries, error) {
+func InitDB() (*db.Queries, error) {
 	ctx := context.Background()
 	sqldb, err := sql.Open("sqlite3", "jamie.db")
 	if err != nil {
@@ -317,10 +381,10 @@ func InitDB(logger *log.Logger) (*db.Queries, error) {
 	return queries, nil
 }
 
-func runGenerateAudio(cmd *cobra.Command, args []string) {
+func runGenerateAudio(_ *cobra.Command, _ []string) {
 	mainLogger, _, _, sqlLogger := createLoggers()
 
-	queries, err := InitDB(sqlLogger)
+	queries, err := InitDB()
 	if err != nil {
 		mainLogger.Fatal("initialize database", "error", err.Error())
 	}
@@ -466,10 +530,10 @@ func runGenerateAudio(cmd *cobra.Command, args []string) {
 	fmt.Printf("Audio file generated: %s\n", outputFileName)
 }
 
-func runGenerateOgg(cmd *cobra.Command, args []string) {
+func runGenerateOgg(_ *cobra.Command, args []string) {
 	mainLogger, _, _, sqlLogger := createLoggers()
 
-	queries, err := InitDB(sqlLogger)
+	queries, err := InitDB()
 	if err != nil {
 		mainLogger.Fatal("initialize database", "error", err.Error())
 	}
@@ -502,10 +566,10 @@ func runGenerateOgg(cmd *cobra.Command, args []string) {
 	fmt.Printf("OGG file generated: %s\n", outputFileName)
 }
 
-func runListStreams(cmd *cobra.Command, args []string) {
+func runListStreams(_ *cobra.Command, _ []string) {
 	mainLogger, _, _, sqlLogger := createLoggers()
 
-	queries, err := InitDB(sqlLogger)
+	queries, err := InitDB()
 	if err != nil {
 		mainLogger.Fatal("initialize database", "error", err.Error())
 	}
@@ -521,7 +585,16 @@ func runListStreams(cmd *cobra.Command, args []string) {
 	}
 
 	table := tablewriter.NewWriter(os.Stdout)
-	table.SetHeader([]string{"ID", "Created At", "Channel", "Speaker", "Duration", "Transcriptions"})
+	table.SetHeader(
+		[]string{
+			"ID",
+			"Created At",
+			"Channel",
+			"Speaker",
+			"Duration",
+			"Transcriptions",
+		},
+	)
 	table.SetBorder(false)
 	table.SetCenterSeparator("|")
 	table.SetColumnSeparator("|")
@@ -530,14 +603,18 @@ func runListStreams(cmd *cobra.Command, args []string) {
 	table.SetAutoFormatHeaders(true)
 
 	for _, stream := range streams {
-		createdAt := etc.JulianDayToTime(stream.CreatedAt).Format("2006-01-02 15:04:05")
-		duration := fmt.Sprintf("%.2f s", float64(stream.Duration)/48000.0) // Convert samples to seconds
+		createdAt := etc.JulianDayToTime(stream.CreatedAt).
+			Format("2006-01-02 15:04:05")
+		duration := fmt.Sprintf(
+			"%.2f s",
+			float64(stream.Duration)/48000.0,
+		) // Convert samples to seconds
 
 		table.Append([]string{
 			stream.ID,
 			createdAt,
-			stream.DiscordChannel,
-			stream.Username,
+			stream.DiscordChannel.String,
+			stream.Username.String,
 			duration,
 			fmt.Sprintf("%d", stream.TranscriptionCount),
 		})
@@ -552,7 +629,7 @@ func generateOggOpusBlob(
 	streamID string,
 	startSample, endSample int64,
 ) ([]byte, error) {
-	return ogg.GenerateOggOpusBlob(
+	return audio.GenerateOggOpusBlob(
 		logger,
 		queries,
 		streamID,
@@ -561,10 +638,10 @@ func generateOggOpusBlob(
 	)
 }
 
-func runSummarizeTranscript(cmd *cobra.Command, args []string) {
+func runSummarizeTranscript(_ *cobra.Command, _ []string) {
 	mainLogger, _, _, sqlLogger := createLoggers()
 
-	queries, err := InitDB(sqlLogger)
+	queries, err := InitDB()
 	if err != nil {
 		mainLogger.Fatal("initialize database", "error", err.Error())
 	}
@@ -634,7 +711,7 @@ func main() {
 	}
 }
 
-func runDiscord(cmd *cobra.Command, args []string) {
+func runDiscord(cmd *cobra.Command, _ []string) {
 	mainLogger, discordLogger, deepgramLogger, sqlLogger := createLoggers()
 
 	discordToken := viper.GetString("discord_token")
@@ -657,7 +734,7 @@ func runDiscord(cmd *cobra.Command, args []string) {
 		)
 	}
 
-	queries, err := InitDB(sqlLogger)
+	queries, err := InitDB()
 	if err != nil {
 		mainLogger.Fatal("initialize database", "error", err.Error())
 	}
@@ -678,7 +755,11 @@ func runDiscord(cmd *cobra.Command, args []string) {
 	// Create Discord session
 	discord, err := discordgo.New("Bot " + discordToken)
 	if err != nil {
-		mainLogger.Fatal("error creating Discord session", "error", err.Error())
+		mainLogger.Fatal(
+			"error creating Discord session",
+			"error",
+			err.Error(),
+		)
 	}
 
 	// Wrap the discord session with our DiscordSession struct
