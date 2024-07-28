@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
-	"html/template"
 	"jamie/db"
 	"jamie/etc"
 	"jamie/llm"
@@ -210,29 +209,7 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 			return
 		}
 
-		type PacketViewModel struct {
-			SampleIdx         int64
-			RelativeSampleIdx int64
-			Timestamp         string
-			Duration          string
-		}
-
-		type RecognitionViewModel struct {
-			SampleIdx         int64
-			RelativeSampleIdx int64
-			Timestamp         string
-			Duration          string
-			Text              string
-		}
-
-		type DebugViewModel struct {
-			Stream       db.Stream
-			Packets      []PacketViewModel
-			Recognitions []RecognitionViewModel
-			EndSample    int64
-		}
-
-		viewModel := DebugViewModel{
+		viewModel := templates.DebugViewModel{
 			Stream: stream,
 		}
 
@@ -240,7 +217,7 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 
 		for _, packet := range packets {
 			duration := time.Duration(packet.SampleIdx-stream.SampleIdxOffset) * time.Second / 48000
-			viewModel.Packets = append(viewModel.Packets, PacketViewModel{
+			viewModel.Packets = append(viewModel.Packets, templates.PacketViewModel{
 				SampleIdx:         packet.SampleIdx,
 				RelativeSampleIdx: packet.SampleIdx - stream.SampleIdxOffset,
 				Timestamp:         createdTime.Add(duration).Format(time.RFC3339Nano),
@@ -250,7 +227,7 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 
 		for _, recognition := range recognitions {
 			duration := time.Duration(recognition.SampleIdx-stream.SampleIdxOffset) * time.Second / 48000
-			viewModel.Recognitions = append(viewModel.Recognitions, RecognitionViewModel{
+			viewModel.Recognitions = append(viewModel.Recognitions, templates.RecognitionViewModel{
 				SampleIdx:         recognition.SampleIdx,
 				RelativeSampleIdx: recognition.SampleIdx - stream.SampleIdxOffset,
 				Timestamp:         createdTime.Add(duration).Format(time.RFC3339Nano),
