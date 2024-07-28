@@ -8,44 +8,12 @@ import (
 )
 
 templ layout(title string) {
-	<html>
+	<html lang="en">
 		<head>
+			<meta charset="UTF-8">
+			<meta name="viewport" content="width=device-width, initial-scale=1.0">
 			<title>{ title }</title>
-			<style>
-				table {
-					border-collapse: collapse;
-					width: 100%;
-					margin-bottom: 20px;
-				}
-				th, td {
-					border: 1px solid black;
-					padding: 8px;
-					text-align: left;
-				}
-				th {
-					background-color: #f2f2f2;
-				}
-				svg rect {
-					transition: opacity 0.3s;
-				}
-				svg rect:hover {
-					opacity: 0.8 !important;
-				}
-				svg text {
-					pointer-events: none;
-					overflow: hidden;
-					text-overflow: ellipsis;
-					white-space: nowrap;
-					opacity: 0;
-					transition: opacity 0.3s;
-				}
-				svg g:hover text {
-					opacity: 1;
-				}
-				svg g:hover rect {
-					opacity: 0.8;
-				}
-			</style>
+			<script src="https://cdn.tailwindcss.com"></script>
 		</head>
 		<body>
 			{ children... }
