@@ -1,6 +1,7 @@
 package discordbot
 
 import (
+	"context"
 	"io"
 	"os/exec"
 

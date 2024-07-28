@@ -1,6 +1,7 @@
 package templates
 
 import (
+	"fmt"
 	"jamie/db"
 	"jamie/etc"
 	"time"
@@ -9,7 +10,7 @@ import (
 templ layout(title string) {
 	<html>
 		<head>
-			<title>{title}</title>
+			<title>{ title }</title>
 			<style>
 				table {
 					border-collapse: collapse;
@@ -27,7 +28,7 @@ templ layout(title string) {
 			</style>
 		</head>
 		<body>
-			{children...}
+			{ children... }
 		</body>
 	</html>
 }
@@ -47,20 +48,19 @@ templ Index(streams []db.GetAllStreamsWithDetailsRow, transcriptions []db.GetRec
 			</tr>
 			for _, stream := range streams {
 				<tr>
-					<td>{stream.ID}</td>
-					<td>{formatTime(stream.CreatedAt)}</td>
-					<td>{stream.DiscordChannel}</td>
-					<td>{stream.Username}</td>
-					<td>{formatDuration(stream.Duration)} samples</td>
-					<td>{formatInt(stream.TranscriptionCount)}</td>
+					<td>{ stream.ID }</td>
+					<td>{ formatTime(stream.CreatedAt) }</td>
+					<td>{ stream.DiscordChannel }</td>
+					<td>{ stream.Username }</td>
+					<td>{ formatDuration(stream.Duration) } samples</td>
+					<td>{ formatInt(stream.TranscriptionCount) }</td>
 					<td>
-						<a href={templ.SafeURL("/stream/" + stream.ID)}>Generate OGG</a> | 
-						<a href={templ.SafeURL("/stream/" + stream.ID + "/debug")}>Debug View</a>
+						<a href={ templ.SafeURL("/stream/" + stream.ID) }>Generate OGG</a> | 
+						<a href={ templ.SafeURL("/stream/" + stream.ID + "/debug") }>Debug View</a>
 					</td>
 				</tr>
 			}
 		</table>
-
 		<h2>Recent Transcriptions</h2>
 		<table>
 			<tr>
@@ -73,14 +73,13 @@ templ Index(streams []db.GetAllStreamsWithDetailsRow, transcriptions []db.GetRec
 			</tr>
 			for _, t := range transcriptions {
 				<tr>
-					<td>{t.Emoji}</td>
-					<td>{t.DiscordUsername}</td>
-					<td>{t.Text}</td>
-					<td>{formatTime(t.CreatedAt)}</td>
-					<td>{formatDuration(t.SampleLen)}</td>
+					<td>{ t.Emoji }</td>
+					<td>{ t.DiscordUsername }</td>
+					<td>{ t.Text }</td>
+					<td>{ formatTime(t.CreatedAt) }</td>
+					<td>{ formatDuration(t.SampleLen) }</td>
 					<td>
-						<audio controls src={templ.SafeURL("/stream/" + t.Stream + "?start=" + formatInt(t.SampleIdx) + "&end=" + formatInt(t.SampleIdx + t.SampleLen))}></audio>
-						<a href={templ.SafeURL("/stream/" + t.Stream + "?start=" + formatInt(t.SampleIdx) + "&end=" + formatInt(t.SampleIdx + t.SampleLen))} download={templ.SafeURL("audio_" + t.Stream + "_" + formatInt(t.SampleIdx) + ".ogg")}>Download</a>
+						<audio controls src={ "/stream/" + t.Stream + "?start=" + formatInt(t.SampleIdx) + "&end=" + formatInt(t.SampleIdx+t.SampleLen) }></audio>
 					</td>
 				</tr>
 			}

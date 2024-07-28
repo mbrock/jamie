@@ -33,7 +33,6 @@ func (e *ElevenLabsSpeechGenerator) TextToSpeechStreaming(
 	}
 
 	err := client.TextToSpeechStream(
-		ctx,
 		writer,
 		"pKLLpypGseGMUjkb5fEZ",
 		ttsReq,

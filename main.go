@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
+	"html/template"
 	"jamie/db"
 	"jamie/etc"
 	"jamie/llm"
@@ -20,7 +21,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/a-h/templ"
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/huh"

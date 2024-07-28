@@ -1,6 +1,9 @@
+export CGO_CFLAGS=-g -O2 -Wno-return-local-addr -w
+
 # Build the main application
 build: db/query.sql.go db/db.go db/models.go
-	go build -gcflags="all=-N -l" -o jamie main.go
+	templ generate
+	go build -o jamie main.go
 
 db/query.sql.go db/db.go db/models.go: schema.sql query.sql sqlc.yaml
 	sqlc generate
