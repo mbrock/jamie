@@ -45,23 +45,6 @@ templ Debug(viewModel DebugViewModel) {
 		<svg width="100%" height="100" style="border: 1px solid #ccc;">
 			@timelineSVG(viewModel)
 		</svg>
-		<h2>Packets</h2>
-		<table>
-			<tr>
-				<th>Sample Index</th>
-				<th>Relative Sample Index</th>
-				<th>Duration</th>
-				<th>Timestamp</th>
-			</tr>
-			for _, packet := range viewModel.Packets {
-				<tr>
-					<td>{ fmt.Sprintf("%d", packet.SampleIdx) }</td>
-					<td>{ fmt.Sprintf("%d", packet.RelativeSampleIdx) }</td>
-					<td>{ packet.Duration }</td>
-					<td>{ packet.Timestamp }</td>
-				</tr>
-			}
-		</table>
 		<h2>Recognitions</h2>
 		<table>
 			<tr>
