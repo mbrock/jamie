@@ -5,13 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"io"
 	"jamie/db"
 	"jamie/etc"
 	"jamie/stt"
-	"os/exec"
 	"sync"
-	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"layeh.com/gopus"
