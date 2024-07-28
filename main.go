@@ -228,6 +228,7 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 						<th>Username</th>
 						<th>Text</th>
 						<th>Created At</th>
+						<th>Audio</th>
 					</tr>
 					{{range .Transcriptions}}
 					<tr>
@@ -235,6 +236,7 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 						<td>{{.DiscordUsername}}</td>
 						<td>{{.Text}}</td>
 						<td>{{.CreatedAt}}</td>
+						<td><a href="/stream/{{.Stream}}">OGG</a></td>
 					</tr>
 					{{end}}
 				</table>
