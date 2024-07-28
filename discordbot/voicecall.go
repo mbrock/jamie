@@ -419,40 +419,38 @@ func (bot *Bot) handleVoiceStateUpdate(
 	}
 }
 
-func (bot *Bot) speakInChannel(
-	ctx context.Context,
-	channelID string,
-	text string,
-) error {
-	bot.log.Info(
-		"Starting speakInChannel",
-		"channelID",
-		channelID,
-		"text",
-		text,
-	)
+func (bot *Bot) speakInChannel(ctx context.Context, channelID string, text string) error {
+	bot.log.Info("Starting speakInChannel", "channelID", channelID, "text", text)
+	defer bot.log.Info("Finished speakInChannel", "channelID", channelID)
 
-	// Set the speaking flag
-	bot.speakingMu.Lock()
-	bot.isSpeaking = true
-	bot.speakingMu.Unlock()
-	defer func() {
-		bot.speakingMu.Lock()
-		bot.isSpeaking = false
-		bot.speakingMu.Unlock()
-		bot.log.Info("Finished speakInChannel", "channelID", channelID)
-	}()
+	bot.setSpeakingFlag(true)
+	defer bot.setSpeakingFlag(false)
 
 	voiceChannel := bot.voiceCall
-
-	// Start speaking
 	if err := voiceChannel.Conn.Speaking(true); err != nil {
 		return fmt.Errorf("failed to set speaking state: %w", err)
 	}
 	defer voiceChannel.Conn.Speaking(false)
 
+	mp3Chan, errChan := bot.startTextToSpeechConversion(ctx, text)
+	int16Chan, err := bot.setupAudioProcessingPipeline(ctx, mp3Chan)
+	if err != nil {
+		return err
+	}
+
+	return bot.streamAudioToDiscord(ctx, int16Chan, errChan, voiceChannel)
+}
+
+func (bot *Bot) setSpeakingFlag(speaking bool) {
+	bot.speakingMu.Lock()
+	defer bot.speakingMu.Unlock()
+	bot.isSpeaking = speaking
+}
+
+func (bot *Bot) startTextToSpeechConversion(ctx context.Context, text string) (<-chan []byte, <-chan error) {
 	mp3Chan := make(chan []byte)
 	errChan := make(chan error, 1)
+
 	go func() {
 		defer close(mp3Chan)
 		bot.log.Debug("Starting text-to-speech conversion")
@@ -463,14 +461,20 @@ func (bot *Bot) speakInChannel(
 		bot.log.Debug("Finished text-to-speech conversion")
 	}()
 
+	return mp3Chan, errChan
+}
+
+func (bot *Bot) setupAudioProcessingPipeline(ctx context.Context, mp3Chan <-chan []byte) (<-chan []int16, error) {
 	bufferLength := 960 * 2 * 2 // 960 samples * 2 bytes per sample * 2 channels
 	pcmChan, err := streamMp3ToPCM(ctx, mp3Chan, bufferLength)
 	if err != nil {
-		return fmt.Errorf("failed to start audio conversion: %w", err)
+		return nil, fmt.Errorf("failed to start audio conversion: %w", err)
 	}
 
-	int16Chan := streamPCMToInt16(ctx, pcmChan)
+	return streamPCMToInt16(ctx, pcmChan), nil
+}
 
+func (bot *Bot) streamAudioToDiscord(ctx context.Context, int16Chan <-chan []int16, errChan <-chan error, voiceChannel *VoiceCall) error {
 	encoder, err := gopus.NewEncoder(48000, 2, gopus.Audio)
 	if err != nil {
 		return fmt.Errorf("failed to create Opus encoder: %w", err)
@@ -482,26 +486,30 @@ func (bot *Bot) speakInChannel(
 			return ctx.Err()
 		case err := <-errChan:
 			return err
-
 		case pcmData, ok := <-int16Chan:
 			if !ok {
 				bot.log.Info("Speech completed normally")
 				return nil
 			}
-
-			// Encode the frame to Opus
-			opusData, err := encoder.Encode(pcmData, 960, 128000)
-			if err != nil {
-				bot.log.Error("Failed to encode PCM to Opus", "error", err)
-				continue
-			}
-
-			select {
-			case <-ctx.Done():
-				return ctx.Err()
-			case voiceChannel.Conn.OpusSend <- opusData:
+			if err := bot.encodeAndSendFrame(ctx, encoder, pcmData, voiceChannel); err != nil {
+				return err
 			}
 		}
+	}
+}
+
+func (bot *Bot) encodeAndSendFrame(ctx context.Context, encoder *gopus.Encoder, pcmData []int16, voiceChannel *VoiceCall) error {
+	opusData, err := encoder.Encode(pcmData, 960, 128000)
+	if err != nil {
+		bot.log.Error("Failed to encode PCM to Opus", "error", err)
+		return nil // Continue with the next frame
+	}
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case voiceChannel.Conn.OpusSend <- opusData:
+		return nil
 	}
 }
 
