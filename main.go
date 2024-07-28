@@ -9,6 +9,7 @@ import (
 	"jamie/etc"
 	"jamie/llm"
 	"jamie/ogg"
+	"jamie/templates"
 	"jamie/tts"
 	"net/http"
 	"os"
@@ -17,9 +18,9 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
-	"text/template"
 	"time"
 
+	"github.com/a-h/templ"
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/huh"
@@ -160,112 +161,14 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 			return
 		}
 
-		type TemplateData struct {
-			Streams        []db.GetAllStreamsWithDetailsRow
-			Transcriptions []db.GetRecentRecognitionsRow
-		}
-
 		transcriptions, err := queries.GetRecentRecognitions(r.Context(), 100)
 		if err != nil {
 			http.Error(w, "Failed to fetch transcriptions", http.StatusInternalServerError)
 			return
 		}
 
-		data := TemplateData{
-			Streams:        streams,
-			Transcriptions: transcriptions,
-		}
-
-		funcMap := template.FuncMap{
-			"add": func(a, b int64) int64 {
-				return a + b
-			},
-			"formatTime": func(julianDay float64) string {
-				return etc.JulianDayToTime(julianDay).Format("2006-01-02 15:04:05")
-			},
-			"formatDuration": func(samples int64) string {
-				duration := time.Duration(samples) * time.Second / 48000
-				return duration.Round(time.Second).String()
-			},
-		}
-
-		tmpl := template.Must(template.New("streams").Funcs(funcMap).Parse(`
-		<html>
-			<head>
-				<title>Streams</title>
-				<style>
-					table {
-						border-collapse: collapse;
-						width: 100%;
-						margin-bottom: 20px;
-					}
-					th, td {
-						border: 1px solid black;
-						padding: 8px;
-						text-align: left;
-					}
-					th {
-						background-color: #f2f2f2;
-					}
-				</style>
-			</head>
-			<body>
-				<h1>Streams</h1>
-				<table>
-					<tr>
-						<th>ID</th>
-						<th>Created At</th>
-						<th>Channel</th>
-						<th>Speaker</th>
-						<th>Duration</th>
-						<th>Transcriptions</th>
-						<th>Action</th>
-					</tr>
-					{{range .Streams}}
-					<tr>
-						<td>{{.ID}}</td>
-						<td>{{.CreatedAt}}</td>
-						<td>{{.DiscordChannel}}</td>
-						<td>{{.Username}}</td>
-						<td>{{.Duration}} samples</td>
-						<td>{{.TranscriptionCount}}</td>
-						<td>
-							<a href="/stream/{{.ID}}">Generate OGG</a> | 
-							<a href="/stream/{{.ID}}/debug">Debug View</a>
-						</td>
-					</tr>
-					{{end}}
-				</table>
-
-				<h2>Recent Transcriptions</h2>
-				<table>
-					<tr>
-						<th>Emoji</th>
-						<th>Username</th>
-						<th>Text</th>
-						<th>Created At</th>
-						<th>Duration</th>
-						<th>Audio</th>
-					</tr>
-					{{range .Transcriptions}}
-					<tr>
-						<td>{{.Emoji}}</td>
-						<td>{{.DiscordUsername}}</td>
-						<td>{{.Text}}</td>
-						<td>{{formatTime .CreatedAt}}</td>
-						<td>{{formatDuration .SampleLen}}</td>
-						<td>
-							<audio controls src="/stream/{{.Stream}}?start={{.SampleIdx}}&end={{add .SampleIdx .SampleLen}}"></audio>
-							<a href="/stream/{{.Stream}}?start={{.SampleIdx}}&end={{add .SampleIdx .SampleLen}}" download="audio_{{.Stream}}_{{.SampleIdx}}.ogg">Download</a>
-						</td>
-					</tr>
-					{{end}}
-				</table>
-			</body>
-		</html>
-		`))
-
-		err = tmpl.Execute(w, data)
+		component := templates.Index(streams, transcriptions)
+		err = component.Render(r.Context(), w)
 		if err != nil {
 			http.Error(w, "Failed to render template", http.StatusInternalServerError)
 			return

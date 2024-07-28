@@ -1,0 +1,102 @@
+package templates
+
+import (
+	"jamie/db"
+	"jamie/etc"
+	"time"
+)
+
+templ layout(title string) {
+	<html>
+		<head>
+			<title>{title}</title>
+			<style>
+				table {
+					border-collapse: collapse;
+					width: 100%;
+					margin-bottom: 20px;
+				}
+				th, td {
+					border: 1px solid black;
+					padding: 8px;
+					text-align: left;
+				}
+				th {
+					background-color: #f2f2f2;
+				}
+			</style>
+		</head>
+		<body>
+			{children...}
+		</body>
+	</html>
+}
+
+templ Index(streams []db.GetAllStreamsWithDetailsRow, transcriptions []db.GetRecentRecognitionsRow) {
+	@layout("Streams") {
+		<h1>Streams</h1>
+		<table>
+			<tr>
+				<th>ID</th>
+				<th>Created At</th>
+				<th>Channel</th>
+				<th>Speaker</th>
+				<th>Duration</th>
+				<th>Transcriptions</th>
+				<th>Action</th>
+			</tr>
+			for _, stream := range streams {
+				<tr>
+					<td>{stream.ID}</td>
+					<td>{formatTime(stream.CreatedAt)}</td>
+					<td>{stream.DiscordChannel}</td>
+					<td>{stream.Username}</td>
+					<td>{formatDuration(stream.Duration)} samples</td>
+					<td>{formatInt(stream.TranscriptionCount)}</td>
+					<td>
+						<a href={templ.SafeURL("/stream/" + stream.ID)}>Generate OGG</a> | 
+						<a href={templ.SafeURL("/stream/" + stream.ID + "/debug")}>Debug View</a>
+					</td>
+				</tr>
+			}
+		</table>
+
+		<h2>Recent Transcriptions</h2>
+		<table>
+			<tr>
+				<th>Emoji</th>
+				<th>Username</th>
+				<th>Text</th>
+				<th>Created At</th>
+				<th>Duration</th>
+				<th>Audio</th>
+			</tr>
+			for _, t := range transcriptions {
+				<tr>
+					<td>{t.Emoji}</td>
+					<td>{t.DiscordUsername}</td>
+					<td>{t.Text}</td>
+					<td>{formatTime(t.CreatedAt)}</td>
+					<td>{formatDuration(t.SampleLen)}</td>
+					<td>
+						<audio controls src={templ.SafeURL("/stream/" + t.Stream + "?start=" + formatInt(t.SampleIdx) + "&end=" + formatInt(t.SampleIdx + t.SampleLen))}></audio>
+						<a href={templ.SafeURL("/stream/" + t.Stream + "?start=" + formatInt(t.SampleIdx) + "&end=" + formatInt(t.SampleIdx + t.SampleLen))} download={templ.SafeURL("audio_" + t.Stream + "_" + formatInt(t.SampleIdx) + ".ogg")}>Download</a>
+					</td>
+				</tr>
+			}
+		</table>
+	}
+}
+
+func formatTime(julianDay float64) string {
+	return etc.JulianDayToTime(julianDay).Format("2006-01-02 15:04:05")
+}
+
+func formatDuration(samples int64) string {
+	duration := time.Duration(samples) * time.Second / 48000
+	return duration.Round(time.Second).String()
+}
+
+func formatInt(i int64) string {
+	return fmt.Sprintf("%d", i)
+}
