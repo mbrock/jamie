@@ -160,6 +160,22 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 			return
 		}
 
+		type TemplateData struct {
+			Streams        []db.GetAllStreamsWithDetailsRow
+			Transcriptions []db.GetRecentRecognitionsRow
+		}
+
+		transcriptions, err := queries.GetRecentRecognitions(r.Context(), 100)
+		if err != nil {
+			http.Error(w, "Failed to fetch transcriptions", http.StatusInternalServerError)
+			return
+		}
+
+		data := TemplateData{
+			Streams:        streams,
+			Transcriptions: transcriptions,
+		}
+
 		tmpl := template.Must(template.New("streams").Parse(`
 		<html>
 			<head>
@@ -168,6 +184,7 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 					table {
 						border-collapse: collapse;
 						width: 100%;
+						margin-bottom: 20px;
 					}
 					th, td {
 						border: 1px solid black;
@@ -191,7 +208,7 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 						<th>Transcriptions</th>
 						<th>Action</th>
 					</tr>
-					{{range .}}
+					{{range .Streams}}
 					<tr>
 						<td>{{.ID}}</td>
 						<td>{{.CreatedAt}}</td>
@@ -203,11 +220,29 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 					</tr>
 					{{end}}
 				</table>
+
+				<h2>Recent Transcriptions</h2>
+				<table>
+					<tr>
+						<th>Emoji</th>
+						<th>Username</th>
+						<th>Text</th>
+						<th>Created At</th>
+					</tr>
+					{{range .Transcriptions}}
+					<tr>
+						<td>{{.Emoji}}</td>
+						<td>{{.DiscordUsername}}</td>
+						<td>{{.Text}}</td>
+						<td>{{.CreatedAt}}</td>
+					</tr>
+					{{end}}
+				</table>
 			</body>
 		</html>
 		`))
 
-		err = tmpl.Execute(w, streams)
+		err = tmpl.Execute(w, data)
 		if err != nil {
 			http.Error(w, "Failed to render template", http.StatusInternalServerError)
 			return
