@@ -11,6 +11,7 @@ import (
 	"jamie/stt"
 	"os/exec"
 	"sync"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"layeh.com/gopus"
@@ -408,6 +409,8 @@ func (bot *Bot) speakInChannel(
 	channelID string,
 	text string,
 ) error {
+	bot.log.Info("Starting speakInChannel", "channelID", channelID, "text", text)
+
 	// Set the speaking flag
 	bot.speakingMu.Lock()
 	bot.isSpeaking = true
@@ -416,12 +419,8 @@ func (bot *Bot) speakInChannel(
 		bot.speakingMu.Lock()
 		bot.isSpeaking = false
 		bot.speakingMu.Unlock()
+		bot.log.Info("Finished speakInChannel", "channelID", channelID)
 	}()
-
-	// // Check if enough time has passed since the last valid transcription
-	// if time.Since(bot.lastValidTranscription) < 3*time.Second {
-	// 	time.Sleep(3*time.Second - time.Since(bot.lastValidTranscription))
-	// }
 
 	// Find the voice channel associated with the text channel
 	channel, err := bot.discord.Channel(channelID)
@@ -446,18 +445,7 @@ func (bot *Bot) speakInChannel(
 		return fmt.Errorf("no active voice channel found")
 	}
 
-	bot.mu.Lock()
-	// Join the voice channel if not already connected
-	if bot.voiceCall == nil ||
-		bot.voiceCall.Conn.ChannelID != voiceChannelID {
-		err := bot.joinVoiceCall(channel.GuildID, voiceChannelID)
-		if err != nil {
-			bot.mu.Unlock()
-			return fmt.Errorf("failed to join voice channel: %w", err)
-		}
-	}
 	voiceChannel := bot.voiceCall
-	bot.mu.Unlock()
 
 	// Start speaking
 	if err := voiceChannel.Conn.Speaking(true); err != nil {
@@ -465,11 +453,9 @@ func (bot *Bot) speakInChannel(
 	}
 	defer voiceChannel.Conn.Speaking(false)
 
-	// Create pipes for FFmpeg input and output
 	ffmpegIn, ffmpegInWriter := io.Pipe()
 	ffmpegOutReader, ffmpegOut := io.Pipe()
 
-	// Start FFmpeg command
 	ffmpegCmd := exec.Command("ffmpeg",
 		"-i", "pipe:0",
 		"-f", "s16le",
@@ -490,130 +476,76 @@ func (bot *Bot) speakInChannel(
 		return fmt.Errorf("failed to start FFmpeg: %w", err)
 	}
 
-	// Start the text-to-speech generation in a goroutine
 	go func() {
+		bot.log.Debug("Starting text-to-speech conversion")
 		if err := bot.TextToSpeech(text, ffmpegInWriter); err != nil {
-			bot.log.Error("failed to generate speech", "error", err)
+			bot.log.Error("Failed to generate speech", "error", err)
 		}
+		bot.log.Debug("Finished text-to-speech conversion")
 		if err := ffmpegInWriter.Close(); err != nil {
-			bot.log.Error("failed to close mp3 writer", "error", err)
+			bot.log.Error("Failed to close mp3 writer", "error", err)
 		}
 	}()
 
-	speakingDone := make(chan struct{})
-
 	// Run audio encoding and sending in a goroutine
 	go func() {
-		// Create an Opus encoder
 		encoder, err := gopus.NewEncoder(48000, 2, gopus.Audio)
 		if err != nil {
 			bot.log.Error("Failed to create Opus encoder", "error", err)
 			return
 		}
 
-		// Buffer to store 1 second of audio (48000 samples * 2 channels * 2 bytes per sample)
-		audioBuffer := make([]byte, 48000*2*2)
-		bufferIndex := 0
-
-		defer func() {
-			speakingDone <- struct{}{}
-		}()
-
 		// Read and encode audio data in chunks
-		buffer := make(
-			[]byte,
-			960*2*2,
-		) // 20ms of audio at 48kHz, 2 channels, 2 bytes per sample
+		buffer := make([]byte, 960*2*2) // 20ms of audio at 48kHz, 2 channels, 2 bytes per sample
 		for {
-			select {
-			case <-bot.cancelSpeech:
-				bot.log.Info("Speech cancelled due to new transcription")
-				return
-			default:
-				n, err := io.ReadFull(ffmpegOutReader, buffer)
-				if err == io.EOF && n == 0 {
-					break
-				}
-				if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
-					bot.log.Error("Failed to read audio data", "error", err)
-					return
-				}
-
-				// Add the read data to the audioBuffer
-				copy(audioBuffer[bufferIndex:], buffer[:n])
-				bufferIndex += n
-
-				// If we have at least 1 second of audio, start processing
-				if bufferIndex >= len(audioBuffer) {
-					// Process the entire audioBuffer
-					for i := 0; i < len(audioBuffer); i += 960 * 2 * 2 {
-						end := i + 960*2*2
-						if end > len(audioBuffer) {
-							end = len(audioBuffer)
-						}
-						chunk := audioBuffer[i:end]
-
-						// Convert byte buffer to int16 slice
-						pcmBuffer := make([]int16, len(chunk)/2)
-						for j := 0; j < len(chunk); j += 2 {
-							pcmBuffer[j/2] = int16(
-								chunk[j],
-							) | int16(
-								chunk[j+1],
-							)<<8
-						}
-
-						// If we got a partial read, pad with silence
-						if len(pcmBuffer) < 960*2 {
-							pcmBuffer = append(
-								pcmBuffer,
-								make([]int16, 960*2-len(pcmBuffer))...)
-						}
-
-						// Encode the frame to Opus
-						opusData, err := encoder.Encode(pcmBuffer, 960, 32000)
-						if err != nil {
-							bot.log.Error("Failed to encode Opus", "error", err)
-							return
-						}
-
-						select {
-						case <-bot.cancelSpeech:
-							bot.log.Info("Speech cancelled while sending Opus data")
-							return
-						case voiceChannel.Conn.OpusSend <- opusData:
-							// Opus data sent successfully
-						}
-					}
-
-					// Reset the buffer index
-					bufferIndex = 0
-				}
-
-				if err == io.EOF || err == io.ErrUnexpectedEOF {
-					return
-				}
+			n, err := io.ReadFull(ffmpegOutReader, buffer)
+			if err == io.EOF && n == 0 {
+				bot.log.Debug("Reached end of FFmpeg output")
+				break
 			}
-		}
-	}()
 
-	// Wait for FFmpeg to finish or for cancellation
-	select {
-	case <-bot.cancelSpeech:
-		bot.log.Info("Speech cancelled due to new transcription")
-		ffmpegCmd.Process.Kill()
-	case <-speakingDone:
-		// Wait for FFmpeg to finish
-		err = ffmpegCmd.Wait()
-		if err != nil {
-			return fmt.Errorf("FFmpeg error: %w", err)
+			if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
+				bot.log.Error("Failed to read audio data", "error", err)
+				return
+			}
+
+			// Convert byte buffer to int16 slice
+			pcmBuffer := make([]int16, n/2)
+			for i := 0; i < n; i += 2 {
+				pcmBuffer[i/2] = int16(buffer[i]) | int16(buffer[i+1])<<8
+			}
+
+			// If we got a partial read, pad with silence
+			if len(pcmBuffer) < 960*2 {
+				bot.log.Debug("Padding partial read with silence", "originalLength", len(pcmBuffer))
+				pcmBuffer = append(pcmBuffer, make([]int16, 960*2-len(pcmBuffer))...)
+			}
+
+			// Encode the frame to Opus
+			opusData, err := encoder.Encode(pcmBuffer, 960, 128000)
+			if err != nil {
+				bot.log.Error("Failed to encode Opus", "error", err)
+				return
+			}
+
+			voiceChannel.Conn.OpusSend <- opusData
 		}
+
+	}()
+	// Wait for FFmpeg to finish
+	err = ffmpegCmd.Wait()
+	if err != nil {
+		bot.log.Error("FFmpeg error", "error", err)
+		return fmt.Errorf("FFmpeg error: %w", err)
 	}
 
-	bot.log.Debug("ffmpeg", "status", "finished")
+	// // Wait for FFmpeg to finish or for cancellation
+	time.Sleep(2 * time.Second)
+
+	bot.log.Info("Speech completed normally")
 
 	if err := ffmpegOut.Close(); err != nil {
-		bot.log.Error("failed to close ffmpeg stdout", "error", err)
+		bot.log.Error("Failed to close ffmpeg stdout", "error", err)
 	}
 
 	return nil

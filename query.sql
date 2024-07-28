@@ -96,7 +96,7 @@ ORDER BY s.created_at DESC
 LIMIT ?;
 
 -- name: GetTranscriptionsForStream :many
-SELECT s.emoji, r.text, r.created_at, r.sample_idx, r.stream,
+SELECT s.emoji, r.text, r.created_at, r.sample_idx, r.sample_len, r.stream,
        COALESCE(LEAD(r.created_at) OVER (ORDER BY r.created_at), julianday('now')) AS end_time
 FROM recognitions r
 JOIN speakers s ON r.stream = s.stream

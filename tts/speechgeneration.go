@@ -32,7 +32,8 @@ func (e *ElevenLabsSpeechGenerator) TextToSpeechStreaming(
 
 	err := elevenlabs.TextToSpeechStream(
 		writer,
-		"NFG5qt843uXKj4pFvR7C",
+		// "NFG5qt843uXKj4pFvR7C",
+		"pKLLpypGseGMUjkb5fEZ",
 		ttsReq,
 	)
 	if err != nil {

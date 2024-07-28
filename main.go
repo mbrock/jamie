@@ -440,7 +440,7 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 					const packet{{.SampleIdx}} = document.createElement('div');
 					packet{{.SampleIdx}}.className = 'packet';
 					packet{{.SampleIdx}}.style.left = (({{.SampleIdx}} - startSample) / sampleRange * 100) + '%';
-					packet{{.SampleIdx}}.style.width = '2px';
+					packet{{.SampleIdx}}.style.width = '1px';
 					timeline.appendChild(packet{{.SampleIdx}});
 					{{end}}
 
@@ -448,7 +448,7 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 					const recognition{{.SampleIdx}} = document.createElement('div');
 					recognition{{.SampleIdx}}.className = 'recognition';
 					recognition{{.SampleIdx}}.style.left = (({{.SampleIdx}} - startSample) / sampleRange * 100) + '%';
-					recognition{{.SampleIdx}}.style.width = '4px';
+					recognition{{.SampleIdx}}.style.width = '{{.Duration}}px'
 					timeline.appendChild(recognition{{.SampleIdx}});
 					{{end}}
 				</script>

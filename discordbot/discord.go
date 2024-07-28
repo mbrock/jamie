@@ -400,8 +400,8 @@ func (bot *Bot) processTalkCommand(
 	response, err := bot.languageModel.ChatCompletion(
 		ctx,
 		(&llm.ChatCompletionRequest{
-			SystemPrompt: "You're Jamie, podcast assistant. You're in a voice call with unreliable transcriptions presented to you from the podcast hosts Daniel and Mikael. You don't talk too much, usually.",
-			MaxTokens:    100,
+			SystemPrompt: "You're Jamie, podcast assistant. You're in a studio with the hosts Daniel and Mikael. You can pull things up, look things up, etc. You only say one sentence at a time, or one question, or a confused expression. Let's go! But you also have to notice when you're stuck in a loop. Then remain calm and think about something soothing.",
+			MaxTokens:    140,
 			Temperature:  1.0,
 		}).WithUserMessage(contextBuilder.String()),
 	)
@@ -455,6 +455,7 @@ func (bot *Bot) TextToSpeech(text string, writer io.Writer) error {
 		)
 		return fmt.Errorf("failed to generate speech: %w", err)
 	}
+	bot.log.Info("Speech completed")
 
 	return nil
 }
