@@ -3,8 +3,6 @@ package templates
 import (
 	"fmt"
 	"jamie/db"
-	"jamie/etc"
-	"time"
 )
 
 type PacketViewModel struct {
@@ -40,10 +38,8 @@ templ Debug(viewModel DebugViewModel) {
 			<tr><th>Created At</th><td>{ fmt.Sprintf("%f", viewModel.Stream.CreatedAt) }</td></tr>
 			<tr><th>Ended At</th><td>{ fmt.Sprintf("%f", viewModel.Stream.EndedAt.Float64) }</td></tr>
 		</table>
-
 		<h2>Timeline</h2>
 		<div class="timeline" id="timeline"></div>
-
 		<h2>Packets</h2>
 		<table>
 			<tr>
@@ -61,7 +57,6 @@ templ Debug(viewModel DebugViewModel) {
 				</tr>
 			}
 		</table>
-
 		<h2>Recognitions</h2>
 		<table>
 			<tr>
@@ -81,7 +76,6 @@ templ Debug(viewModel DebugViewModel) {
 				</tr>
 			}
 		</table>
-
 		<script>
 			const timeline = document.getElementById('timeline');
 			const timelineWidth = timeline.offsetWidth;
