@@ -8,7 +8,10 @@ import (
 	"layeh.com/gopus"
 )
 
-func streamMp3ToPCM(ctx context.Context, mp3Input <-chan []byte) (<-chan []byte, error) {
+func streamMp3ToPCM(
+	ctx context.Context,
+	mp3Input <-chan []byte,
+) (<-chan []byte, error) {
 	pcmOutput := make(chan []byte)
 
 	ffmpegIn, ffmpegInWriter := io.Pipe()
@@ -81,7 +84,11 @@ func streamMp3ToPCM(ctx context.Context, mp3Input <-chan []byte) (<-chan []byte,
 	return pcmOutput, nil
 }
 
-func streamPCMToOpus(ctx context.Context, pcmInput <-chan []byte, encoder *gopus.Encoder) <-chan []byte {
+func streamPCMToOpus(
+	ctx context.Context,
+	pcmInput <-chan []byte,
+	encoder *gopus.Encoder,
+) <-chan []byte {
 	opusOutput := make(chan []byte)
 
 	go func() {
@@ -98,12 +105,18 @@ func streamPCMToOpus(ctx context.Context, pcmInput <-chan []byte, encoder *gopus
 				// Convert byte buffer to int16 slice
 				pcmBuffer := make([]int16, len(pcmData)/2)
 				for i := 0; i < len(pcmData); i += 2 {
-					pcmBuffer[i/2] = int16(pcmData[i]) | int16(pcmData[i+1])<<8
+					pcmBuffer[i/2] = int16(
+						pcmData[i],
+					) | int16(
+						pcmData[i+1],
+					)<<8
 				}
 
 				// If we got a partial read, pad with silence
 				if len(pcmBuffer) < 960*2 {
-					pcmBuffer = append(pcmBuffer, make([]int16, 960*2-len(pcmBuffer))...)
+					pcmBuffer = append(
+						pcmBuffer,
+						make([]int16, 960*2-len(pcmBuffer))...)
 				}
 
 				// Encode the frame to Opus
