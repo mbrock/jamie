@@ -286,29 +286,17 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 			return
 		}
 
-		type TemplateData struct {
-			Stream       db.Stream
-			Packets      []db.GetPacketsForStreamInSampleRangeRow
-			Recognitions []db.GetTranscriptionsForStreamRow
-		}
-
-		data := TemplateData{
-			Stream:       stream,
-			Packets:      packets,
-			Recognitions: recognitions,
-		}
-
 		type PacketViewModel struct {
-			SampleIdx          int64
-			RelativeSampleIdx  int64
-			Timestamp          string
+			SampleIdx         int64
+			RelativeSampleIdx int64
+			Timestamp         string
 		}
 
 		type RecognitionViewModel struct {
-			SampleIdx          int64
-			RelativeSampleIdx  int64
-			Timestamp          string
-			Text               string
+			SampleIdx         int64
+			RelativeSampleIdx int64
+			Timestamp         string
+			Text              string
 		}
 
 		type DebugViewModel struct {
