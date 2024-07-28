@@ -8,11 +8,12 @@ import (
 )
 
 type SpeechGenerator interface {
-	TextToSpeechStreaming(text string, writer io.Writer) error
+	TextToSpeechStreaming(ctx context.Context, text string, writer io.Writer) error
 }
 
 type ElevenLabsSpeechGenerator struct {
 	apiKey string
+	client *http.Client
 }
 
 func NewElevenLabsSpeechGenerator(apiKey string) *ElevenLabsSpeechGenerator {
@@ -20,6 +21,7 @@ func NewElevenLabsSpeechGenerator(apiKey string) *ElevenLabsSpeechGenerator {
 }
 
 func (e *ElevenLabsSpeechGenerator) TextToSpeechStreaming(
+	ctx context.Context,
 	text string,
 	writer io.Writer,
 ) error {
