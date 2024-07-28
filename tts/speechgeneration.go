@@ -1,6 +1,7 @@
 package tts
 
 import (
+	"context"
 	"fmt"
 	"io"
 
@@ -13,7 +14,6 @@ type SpeechGenerator interface {
 
 type ElevenLabsSpeechGenerator struct {
 	apiKey string
-	client *http.Client
 }
 
 func NewElevenLabsSpeechGenerator(apiKey string) *ElevenLabsSpeechGenerator {
@@ -46,9 +46,10 @@ func (e *ElevenLabsSpeechGenerator) TextToSpeechStreaming(
 	case <-ctx.Done():
 		return ctx.Err()
 	case err := <-errChan:
-	if err != nil {
-		return fmt.Errorf("failed to generate speech: %w", err)
-	}
+		if err != nil {
+			return fmt.Errorf("failed to generate speech: %w", err)
+		}
 
-	return nil
+		return nil
+	}
 }
