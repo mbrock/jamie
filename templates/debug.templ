@@ -36,12 +36,17 @@ templ Debug(viewModel DebugViewModel) {
 			svg text {
 				font-family: Arial, sans-serif;
 				font-size: 10px;
+				opacity: 0;
+				transition: opacity 0.2s;
 			}
 			svg rect {
 				transition: opacity 0.2s;
 			}
 			svg rect:hover {
 				opacity: 0.7;
+			}
+			svg g:hover text {
+				opacity: 1;
 			}
 		</style>
 		<h1 class="text-3xl font-bold mb-6">Debug View - Stream { viewModel.Stream.ID }</h1>
