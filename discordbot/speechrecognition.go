@@ -74,6 +74,7 @@ func (bot *Bot) speechRecognitionLoop(
 func (bot *Bot) processPendingRecognitionResult(
 	streamID string,
 	drafts <-chan stt.Result,
+	initialSampleIndex int64,
 ) {
 	var result stt.Result
 	for draft := range drafts {
@@ -167,12 +168,15 @@ func (bot *Bot) processPendingRecognitionResult(
 	} else {
 		recognitionID := etc.Gensym()
 
+		// Adjust the sample index by adding the initial sample index
+		adjustedSampleIdx := initialSampleIndex + int64(result.Start * 48000)
+
 		err := bot.db.SaveRecognition(
 			context.Background(),
 			db.SaveRecognitionParams{
 				ID:         recognitionID,
 				Stream:     streamID,
-				SampleIdx:  int64(result.Start * 48000),
+				SampleIdx:  adjustedSampleIdx,
 				SampleLen:  int64(result.Duration * 48000),
 				Text:       result.Text,
 				Confidence: result.Confidence,
