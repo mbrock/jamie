@@ -419,8 +419,18 @@ func (bot *Bot) handleVoiceStateUpdate(
 	}
 }
 
-func (bot *Bot) speakInChannel(ctx context.Context, channelID string, text string) error {
-	bot.log.Info("Starting speakInChannel", "channelID", channelID, "text", text)
+func (bot *Bot) speakInChannel(
+	ctx context.Context,
+	channelID string,
+	text string,
+) error {
+	bot.log.Info(
+		"Starting speakInChannel",
+		"channelID",
+		channelID,
+		"text",
+		text,
+	)
 	defer bot.log.Info("Finished speakInChannel", "channelID", channelID)
 
 	bot.setSpeakingFlag(true)
@@ -432,13 +442,18 @@ func (bot *Bot) speakInChannel(ctx context.Context, channelID string, text strin
 	}
 	defer voiceChannel.Conn.Speaking(false)
 
-	mp3Chan, errChan := bot.startTextToSpeechConversion(ctx, text)
-	int16Chan, err := bot.setupAudioProcessingPipeline(ctx, mp3Chan)
+	mpeg, errChan := bot.textToSpeechMpegStream(ctx, text)
+	int16Chan, err := bot.decodeMpeg20msPCM(ctx, mpeg)
 	if err != nil {
 		return err
 	}
 
-	return bot.streamAudioToDiscord(ctx, int16Chan, errChan, voiceChannel)
+	return bot.streamPcmToDiscordAsOpusPackets(
+		ctx,
+		int16Chan,
+		errChan,
+		voiceChannel,
+	)
 }
 
 func (bot *Bot) setSpeakingFlag(speaking bool) {
@@ -447,7 +462,10 @@ func (bot *Bot) setSpeakingFlag(speaking bool) {
 	bot.isSpeaking = speaking
 }
 
-func (bot *Bot) startTextToSpeechConversion(ctx context.Context, text string) (<-chan []byte, <-chan error) {
+func (bot *Bot) textToSpeechMpegStream(
+	ctx context.Context,
+	text string,
+) (<-chan []byte, <-chan error) {
 	mp3Chan := make(chan []byte)
 	errChan := make(chan error, 1)
 
@@ -464,7 +482,10 @@ func (bot *Bot) startTextToSpeechConversion(ctx context.Context, text string) (<
 	return mp3Chan, errChan
 }
 
-func (bot *Bot) setupAudioProcessingPipeline(ctx context.Context, mp3Chan <-chan []byte) (<-chan []int16, error) {
+func (bot *Bot) decodeMpeg20msPCM(
+	ctx context.Context,
+	mp3Chan <-chan []byte,
+) (<-chan []int16, error) {
 	bufferLength := 960 * 2 * 2 // 960 samples * 2 bytes per sample * 2 channels
 	pcmChan, err := streamMp3ToPCM(ctx, mp3Chan, bufferLength)
 	if err != nil {
@@ -474,7 +495,12 @@ func (bot *Bot) setupAudioProcessingPipeline(ctx context.Context, mp3Chan <-chan
 	return streamPCMToInt16(ctx, pcmChan), nil
 }
 
-func (bot *Bot) streamAudioToDiscord(ctx context.Context, int16Chan <-chan []int16, errChan <-chan error, voiceChannel *VoiceCall) error {
+func (bot *Bot) streamPcmToDiscordAsOpusPackets(
+	ctx context.Context,
+	pcmChan <-chan []int16,
+	errChan <-chan error,
+	voiceChannel *VoiceCall,
+) error {
 	encoder, err := gopus.NewEncoder(48000, 2, gopus.Audio)
 	if err != nil {
 		return fmt.Errorf("failed to create Opus encoder: %w", err)
@@ -486,7 +512,7 @@ func (bot *Bot) streamAudioToDiscord(ctx context.Context, int16Chan <-chan []int
 			return ctx.Err()
 		case err := <-errChan:
 			return err
-		case pcmData, ok := <-int16Chan:
+		case pcmData, ok := <-pcmChan:
 			if !ok {
 				bot.log.Info("Speech completed normally")
 				return nil
@@ -498,7 +524,12 @@ func (bot *Bot) streamAudioToDiscord(ctx context.Context, int16Chan <-chan []int
 	}
 }
 
-func (bot *Bot) encodeAndSendFrame(ctx context.Context, encoder *gopus.Encoder, pcmData []int16, voiceChannel *VoiceCall) error {
+func (bot *Bot) encodeAndSendFrame(
+	ctx context.Context,
+	encoder *gopus.Encoder,
+	pcmData []int16,
+	voiceChannel *VoiceCall,
+) error {
 	opusData, err := encoder.Encode(pcmData, 960, 128000)
 	if err != nil {
 		bot.log.Error("Failed to encode PCM to Opus", "error", err)
