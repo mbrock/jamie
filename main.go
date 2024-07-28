@@ -260,6 +260,15 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 		}
 	})
 
+	// Helper function to convert samples to duration
+	samplesToDuration := func(samples int64) string {
+		duration := time.Duration(samples) * time.Second / 48000
+		hours := int(duration.Hours())
+		minutes := int(duration.Minutes()) % 60
+		seconds := int(duration.Seconds()) % 60
+		return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
+	}
+
 	r.HandleFunc("/stream/{id}/debug", func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		streamID := vars["id"]
