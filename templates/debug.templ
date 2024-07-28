@@ -165,14 +165,9 @@ func drawRecognitionRect(viewModel DebugViewModel, startIdx, endIdx int64, text 
 	width := fmt.Sprintf("%.2f%%", float64(endIdx-startIdx)/float64(viewModel.EndSample-viewModel.Stream.SampleIdxOffset)*100)
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
 		_, err = io.WriteString(w, fmt.Sprintf(`<g>
-			<defs>
-				<clipPath id="clip-%s">
-					<rect x="%s" y="50" width="%s" height="45"/>
-				</clipPath>
-			</defs>
 			<rect x="%s" y="50" width="%s" height="45" fill="green" opacity="0.5"/>
-			<text x="%s" y="70" font-size="10" fill="black" clip-path="url(#clip-%s)">%s</text>
-		</g>`, x, x, width, x, width, x, x, text))
+			<text x="%s" y="70" font-size="10" fill="black">%s</text>
+		</g>`, x, width, x, text))
 		return err
 	})
 }
