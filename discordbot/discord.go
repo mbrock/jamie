@@ -305,13 +305,28 @@ func (bot *Bot) handleTalkCommand(
 			return
 		}
 
-		err = bot.speakInChannel(m.ChannelID, response)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		go func() {
+			select {
+			case <-bot.cancelSpeech:
+				cancel()
+			case <-ctx.Done():
+			}
+		}()
+
+		err = bot.speakInChannel(ctx, m.ChannelID, response)
 		if err != nil {
-			bot.log.Error("Failed to speak response", "error", err)
-			bot.sendAndSaveMessage(
-				m.ChannelID,
-				fmt.Sprintf("Failed to speak the response: %v", err),
-			)
+			if err == context.Canceled {
+				bot.log.Info("Speech was cancelled")
+			} else {
+				bot.log.Error("Failed to speak response", "error", err)
+				bot.sendAndSaveMessage(
+					m.ChannelID,
+					fmt.Sprintf("Failed to speak the response: %v", err),
+				)
+			}
 		}
 
 		bot.sendAndSaveMessage(m.ChannelID, response)
@@ -444,9 +459,9 @@ func (bot *Bot) GenerateOggOpusBlob(
 	)
 }
 
-func (bot *Bot) TextToSpeech(text string, writer io.Writer) error {
+func (bot *Bot) TextToSpeech(ctx context.Context, text string, writer io.Writer) error {
 	bot.log.Info("speaking", "text", text)
-	err := bot.speechGenerator.TextToSpeechStreaming(text, writer)
+	err := bot.speechGenerator.TextToSpeechStreaming(ctx, text, writer)
 	if err != nil {
 		bot.log.Error(
 			"Failed to generate speech",

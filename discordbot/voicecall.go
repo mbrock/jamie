@@ -402,10 +402,7 @@ func (bot *Bot) handleVoiceStateUpdate(
 	}
 }
 
-func (bot *Bot) speakInChannel(
-	channelID string,
-	text string,
-) error {
+func (bot *Bot) speakInChannel(ctx context.Context, channelID string, text string) error {
 	bot.log.Info("Starting speakInChannel", "channelID", channelID, "text", text)
 
 	// Set the speaking flag
@@ -428,16 +425,18 @@ func (bot *Bot) speakInChannel(
 	defer voiceChannel.Conn.Speaking(false)
 
 	mp3Chan := make(chan []byte)
+	errChan := make(chan error, 1)
 	go func() {
 		defer close(mp3Chan)
 		bot.log.Debug("Starting text-to-speech conversion")
-		if err := bot.TextToSpeech(text, channelWriter{mp3Chan}); err != nil {
+		if err := bot.TextToSpeech(ctx, text, channelWriter{mp3Chan}); err != nil {
 			bot.log.Error("Failed to generate speech", "error", err)
+			errChan <- err
 		}
 		bot.log.Debug("Finished text-to-speech conversion")
 	}()
 
-	pcmChan, err := streamMp3ToPCM(mp3Chan)
+	pcmChan, err := streamMp3ToPCM(ctx, mp3Chan)
 	if err != nil {
 		return fmt.Errorf("failed to start audio conversion: %w", err)
 	}
@@ -447,15 +446,26 @@ func (bot *Bot) speakInChannel(
 		return fmt.Errorf("failed to create Opus encoder: %w", err)
 	}
 
-	opusChan := streamPCMToOpus(pcmChan, encoder)
+	opusChan := streamPCMToOpus(ctx, pcmChan, encoder)
 
-	for opusData := range opusChan {
-		voiceChannel.Conn.OpusSend <- opusData
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case err := <-errChan:
+			return err
+		case opusData, ok := <-opusChan:
+			if !ok {
+				bot.log.Info("Speech completed normally")
+				return nil
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case voiceChannel.Conn.OpusSend <- opusData:
+			}
+		}
 	}
-
-	bot.log.Info("Speech completed normally")
-
-	return nil
 }
 
 type channelWriter struct {
