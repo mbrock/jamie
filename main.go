@@ -298,18 +298,49 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 			Recognitions: recognitions,
 		}
 
-		funcMap := template.FuncMap{
-			"subtract": func(a, b int64) int64 {
-				return a - b
-			},
-			"sampleIndexToTime": func(sampleIndex int64, createdAt float64) string {
-				createdTime := etc.JulianDayToTime(createdAt)
-				duration := time.Duration(sampleIndex-stream.SampleIdxOffset) * time.Second / 48000
-				return createdTime.Add(duration).Format(time.RFC3339Nano)
-			},
+		type PacketViewModel struct {
+			SampleIdx          int64
+			RelativeSampleIdx  int64
+			Timestamp          string
 		}
 
-		tmpl = tmpl.Funcs(funcMap)
+		type RecognitionViewModel struct {
+			SampleIdx          int64
+			RelativeSampleIdx  int64
+			Timestamp          string
+			Text               string
+		}
+
+		type DebugViewModel struct {
+			Stream       db.Stream
+			Packets      []PacketViewModel
+			Recognitions []RecognitionViewModel
+		}
+
+		viewModel := DebugViewModel{
+			Stream: stream,
+		}
+
+		createdTime := etc.JulianDayToTime(stream.CreatedAt)
+
+		for _, packet := range packets {
+			duration := time.Duration(packet.SampleIdx-stream.SampleIdxOffset) * time.Second / 48000
+			viewModel.Packets = append(viewModel.Packets, PacketViewModel{
+				SampleIdx:         packet.SampleIdx,
+				RelativeSampleIdx: packet.SampleIdx - stream.SampleIdxOffset,
+				Timestamp:         createdTime.Add(duration).Format(time.RFC3339Nano),
+			})
+		}
+
+		for _, recognition := range recognitions {
+			duration := time.Duration(recognition.SampleIdx-stream.SampleIdxOffset) * time.Second / 48000
+			viewModel.Recognitions = append(viewModel.Recognitions, RecognitionViewModel{
+				SampleIdx:         recognition.SampleIdx,
+				RelativeSampleIdx: recognition.SampleIdx - stream.SampleIdxOffset,
+				Timestamp:         createdTime.Add(duration).Format(time.RFC3339Nano),
+				Text:              recognition.Text,
+			})
+		}
 
 		tmpl := template.Must(template.New("debug").Parse(`
 		<html>
@@ -350,8 +381,8 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 					{{range .Packets}}
 					<tr>
 						<td>{{.SampleIdx}}</td>
-						<td>{{subtract .SampleIdx $.Stream.SampleIdxOffset}}</td>
-						<td>{{sampleIndexToTime .SampleIdx $.Stream.CreatedAt}}</td>
+						<td>{{.RelativeSampleIdx}}</td>
+						<td>{{.Timestamp}}</td>
 					</tr>
 					{{end}}
 				</table>
@@ -367,8 +398,8 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 					{{range .Recognitions}}
 					<tr>
 						<td>{{.SampleIdx}}</td>
-						<td>{{subtract .SampleIdx $.Stream.SampleIdxOffset}}</td>
-						<td>{{sampleIndexToTime .SampleIdx $.Stream.CreatedAt}}</td>
+						<td>{{.RelativeSampleIdx}}</td>
+						<td>{{.Timestamp}}</td>
 						<td>{{.Text}}</td>
 					</tr>
 					{{end}}
@@ -378,7 +409,7 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 					const timeline = document.getElementById('timeline');
 					const timelineWidth = timeline.offsetWidth;
 					const startSample = {{.Stream.SampleIdxOffset}};
-					const endSample = {{if .Packets}}{{(index .Packets (subtract (len .Packets) 1)).SampleIdx}}{{else}}{{.Stream.SampleIdxOffset}}{{end}};
+					const endSample = {{if .Packets}}{{(index .Packets (len .Packets | add -1)).SampleIdx}}{{else}}{{.Stream.SampleIdxOffset}}{{end}};
 					const sampleRange = endSample - startSample;
 
 					{{range .Packets}}
@@ -401,7 +432,7 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 		</html>
 		`))
 
-		err = tmpl.Execute(w, data)
+		err = tmpl.Execute(w, viewModel)
 		if err != nil {
 			http.Error(w, "Failed to render template", http.StatusInternalServerError)
 			return
