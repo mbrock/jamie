@@ -447,26 +447,9 @@ func (bot *Bot) speakInChannel(
 		return fmt.Errorf("failed to create Opus encoder: %w", err)
 	}
 
-	for pcmData := range pcmChan {
-		// Convert byte buffer to int16 slice
-		pcmBuffer := make([]int16, len(pcmData)/2)
-		for i := 0; i < len(pcmData); i += 2 {
-			pcmBuffer[i/2] = int16(pcmData[i]) | int16(pcmData[i+1])<<8
-		}
+	opusChan := streamPCMToOpus(pcmChan, encoder)
 
-		// If we got a partial read, pad with silence
-		if len(pcmBuffer) < 960*2 {
-			bot.log.Debug("Padding partial read with silence", "originalLength", len(pcmBuffer))
-			pcmBuffer = append(pcmBuffer, make([]int16, 960*2-len(pcmBuffer))...)
-		}
-
-		// Encode the frame to Opus
-		opusData, err := encoder.Encode(pcmBuffer, 960, 128000)
-		if err != nil {
-			bot.log.Error("Failed to encode Opus", "error", err)
-			continue
-		}
-
+	for opusData := range opusChan {
 		voiceChannel.Conn.OpusSend <- opusData
 	}
 
