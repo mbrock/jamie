@@ -39,7 +39,9 @@ templ Debug(viewModel DebugViewModel) {
 			<tr><th>Ended At</th><td>{ fmt.Sprintf("%f", viewModel.Stream.EndedAt.Float64) }</td></tr>
 		</table>
 		<h2>Timeline</h2>
-		<div class="timeline" id="timeline"></div>
+		<svg width="100%" height="100" style="border: 1px solid #ccc;">
+			@timelineSVG(viewModel)
+		</svg>
 		<h2>Packets</h2>
 		<table>
 			<tr>
@@ -76,28 +78,36 @@ templ Debug(viewModel DebugViewModel) {
 				</tr>
 			}
 		</table>
-		<script>
-			const timeline = document.getElementById('timeline');
-			const timelineWidth = timeline.offsetWidth;
-			const startSample = { viewModel.Stream.SampleIdxOffset };
-			const endSample = { viewModel.EndSample };
-			const sampleRange = endSample - startSample;
+	}
+}
 
-			for (const packet of { templ.JSON(viewModel.Packets) }) {
-				const packetElement = document.createElement('div');
-				packetElement.className = 'packet';
-				packetElement.style.left = ((packet.SampleIdx - startSample) / sampleRange * 100) + '%';
-				packetElement.style.width = '1px';
-				timeline.appendChild(packetElement);
-			}
+templ timelineSVG(viewModel DebugViewModel) {
+	@timelinePackets(viewModel)
+	@timelineRecognitions(viewModel)
+}
 
-			for (const recognition of { templ.JSON(viewModel.Recognitions) }) {
-				const recognitionElement = document.createElement('div');
-				recognitionElement.className = 'recognition';
-				recognitionElement.style.left = ((recognition.SampleIdx - startSample) / sampleRange * 100) + '%';
-				recognitionElement.style.width = recognition.Duration + 'px';
-				timeline.appendChild(recognitionElement);
-			}
-		</script>
+templ timelinePackets(viewModel DebugViewModel) {
+	for _, packet := range viewModel.Packets {
+		<line 
+			x1={ fmt.Sprintf("%.2f%%", float64(packet.SampleIdx - viewModel.Stream.SampleIdxOffset) / float64(viewModel.EndSample - viewModel.Stream.SampleIdxOffset) * 100) }
+			y1="0" 
+			x2={ fmt.Sprintf("%.2f%%", float64(packet.SampleIdx - viewModel.Stream.SampleIdxOffset) / float64(viewModel.EndSample - viewModel.Stream.SampleIdxOffset) * 100) }
+			y2="50" 
+			stroke="blue" 
+			stroke-width="1"
+		/>
+	}
+}
+
+templ timelineRecognitions(viewModel DebugViewModel) {
+	for _, recognition := range viewModel.Recognitions {
+		<rect 
+			x={ fmt.Sprintf("%.2f%%", float64(recognition.SampleIdx - viewModel.Stream.SampleIdxOffset) / float64(viewModel.EndSample - viewModel.Stream.SampleIdxOffset) * 100) }
+			y="50" 
+			width={ fmt.Sprintf("%.2f%%", float64(recognition.SampleLen) / float64(viewModel.EndSample - viewModel.Stream.SampleIdxOffset) * 100) }
+			height="50" 
+			fill="green" 
+			opacity="0.5"
+		/>
 	}
 }
