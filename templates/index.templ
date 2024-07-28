@@ -15,63 +15,77 @@ templ layout(title string) {
 			<title>{ title }</title>
 			<script src="https://cdn.tailwindcss.com"></script>
 		</head>
-		<body>
-			{ children... }
+		<body class="bg-gray-100 p-6">
+			<div class="container mx-auto">
+				{ children... }
+			</div>
 		</body>
 	</html>
 }
 
 templ Index(streams []db.GetAllStreamsWithDetailsRow, transcriptions []db.GetRecentRecognitionsRow) {
 	@layout("Streams") {
-		<h1>Streams</h1>
-		<table>
-			<tr>
-				<th>ID</th>
-				<th>Created At</th>
-				<th>Channel</th>
-				<th>Speaker</th>
-				<th>Duration</th>
-				<th>Transcriptions</th>
-				<th>Action</th>
-			</tr>
-			for _, stream := range streams {
-				<tr>
-					<td>{ stream.ID }</td>
-					<td>{ formatTime(stream.CreatedAt) }</td>
-					<td>{ stream.DiscordChannel }</td>
-					<td>{ stream.Username }</td>
-					<td>{ formatDuration(stream.Duration) } samples</td>
-					<td>{ formatInt(stream.TranscriptionCount) }</td>
-					<td>
-						<a href={ templ.SafeURL("/stream/" + stream.ID) }>Generate OGG</a> | 
-						<a href={ templ.SafeURL("/stream/" + stream.ID + "/debug") }>Debug View</a>
-					</td>
-				</tr>
-			}
-		</table>
-		<h2>Recent Transcriptions</h2>
-		<table>
-			<tr>
-				<th>Emoji</th>
-				<th>Username</th>
-				<th>Text</th>
-				<th>Created At</th>
-				<th>Duration</th>
-				<th>Audio</th>
-			</tr>
-			for _, t := range transcriptions {
-				<tr>
-					<td>{ t.Emoji }</td>
-					<td>{ t.DiscordUsername }</td>
-					<td>{ t.Text }</td>
-					<td>{ formatTime(t.CreatedAt) }</td>
-					<td>{ formatDuration(t.SampleLen) }</td>
-					<td>
-						<audio controls src={ "/stream/" + t.Stream + "?start=" + formatInt(t.SampleIdx) + "&end=" + formatInt(t.SampleIdx+t.SampleLen) }></audio>
-					</td>
-				</tr>
-			}
-		</table>
+		<h1 class="text-3xl font-bold mb-6">Streams</h1>
+		<div class="overflow-x-auto">
+			<table class="w-full bg-white shadow-md rounded-lg overflow-hidden">
+				<thead class="bg-gray-200">
+					<tr>
+						<th class="px-4 py-2">ID</th>
+						<th class="px-4 py-2">Created At</th>
+						<th class="px-4 py-2">Channel</th>
+						<th class="px-4 py-2">Speaker</th>
+						<th class="px-4 py-2">Duration</th>
+						<th class="px-4 py-2">Transcriptions</th>
+						<th class="px-4 py-2">Action</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, stream := range streams {
+						<tr class="border-b hover:bg-gray-50">
+							<td class="px-4 py-2">{ stream.ID }</td>
+							<td class="px-4 py-2">{ formatTime(stream.CreatedAt) }</td>
+							<td class="px-4 py-2">{ stream.DiscordChannel }</td>
+							<td class="px-4 py-2">{ stream.Username }</td>
+							<td class="px-4 py-2">{ formatDuration(stream.Duration) } samples</td>
+							<td class="px-4 py-2">{ formatInt(stream.TranscriptionCount) }</td>
+							<td class="px-4 py-2">
+								<a href={ templ.SafeURL("/stream/" + stream.ID) } class="text-blue-500 hover:underline mr-2">Generate OGG</a>
+								<a href={ templ.SafeURL("/stream/" + stream.ID + "/debug") } class="text-blue-500 hover:underline">Debug View</a>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+		<h2 class="text-2xl font-bold mt-8 mb-4">Recent Transcriptions</h2>
+		<div class="overflow-x-auto">
+			<table class="w-full bg-white shadow-md rounded-lg overflow-hidden">
+				<thead class="bg-gray-200">
+					<tr>
+						<th class="px-4 py-2">Emoji</th>
+						<th class="px-4 py-2">Username</th>
+						<th class="px-4 py-2">Text</th>
+						<th class="px-4 py-2">Created At</th>
+						<th class="px-4 py-2">Duration</th>
+						<th class="px-4 py-2">Audio</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, t := range transcriptions {
+						<tr class="border-b hover:bg-gray-50">
+							<td class="px-4 py-2">{ t.Emoji }</td>
+							<td class="px-4 py-2">{ t.DiscordUsername }</td>
+							<td class="px-4 py-2">{ t.Text }</td>
+							<td class="px-4 py-2">{ formatTime(t.CreatedAt) }</td>
+							<td class="px-4 py-2">{ formatDuration(t.SampleLen) }</td>
+							<td class="px-4 py-2">
+								<audio controls src={ "/stream/" + t.Stream + "?start=" + formatInt(t.SampleIdx) + "&end=" + formatInt(t.SampleIdx+t.SampleLen) } class="w-full"></audio>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
 	}
 }
 

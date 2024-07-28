@@ -32,38 +32,50 @@ type DebugViewModel struct {
 
 templ Debug(viewModel DebugViewModel) {
 	@layout("Debug View - Stream " + viewModel.Stream.ID) {
-		<h1>Debug View - Stream { viewModel.Stream.ID }</h1>
-		<h2>Stream Details</h2>
-		<table>
-			<tr><th>ID</th><td>{ viewModel.Stream.ID }</td></tr>
-			<tr><th>Packet Seq Offset</th><td>{ fmt.Sprintf("%d", viewModel.Stream.PacketSeqOffset) }</td></tr>
-			<tr><th>Sample Idx Offset</th><td>{ fmt.Sprintf("%d", viewModel.Stream.SampleIdxOffset) }</td></tr>
-			<tr><th>Created At</th><td>{ fmt.Sprintf("%f", viewModel.Stream.CreatedAt) }</td></tr>
-			<tr><th>Ended At</th><td>{ fmt.Sprintf("%f", viewModel.Stream.EndedAt.Float64) }</td></tr>
-		</table>
-		<h2>Timeline</h2>
-		<svg width="100%" height="100" style="border: 1px solid #ccc;">
-			@timelineSVG(viewModel)
-		</svg>
-		<h2>Recognitions</h2>
-		<table>
-			<tr>
-				<th>Sample Index</th>
-				<th>Relative Sample Index</th>
-				<th>Duration</th>
-				<th>Timestamp</th>
-				<th>Text</th>
-			</tr>
-			for _, recognition := range viewModel.Recognitions {
-				<tr>
-					<td>{ fmt.Sprintf("%d", recognition.SampleIdx) }</td>
-					<td>{ fmt.Sprintf("%d", recognition.RelativeSampleIdx) }</td>
-					<td>{ recognition.Duration }</td>
-					<td>{ recognition.Timestamp }</td>
-					<td>{ recognition.Text }</td>
-				</tr>
-			}
-		</table>
+		<h1 class="text-3xl font-bold mb-6">Debug View - Stream { viewModel.Stream.ID }</h1>
+		<h2 class="text-2xl font-bold mt-8 mb-4">Stream Details</h2>
+		<div class="overflow-x-auto">
+			<table class="w-full bg-white shadow-md rounded-lg overflow-hidden">
+				<tbody>
+					<tr class="border-b"><th class="px-4 py-2 bg-gray-200 text-left">ID</th><td class="px-4 py-2">{ viewModel.Stream.ID }</td></tr>
+					<tr class="border-b"><th class="px-4 py-2 bg-gray-200 text-left">Packet Seq Offset</th><td class="px-4 py-2">{ fmt.Sprintf("%d", viewModel.Stream.PacketSeqOffset) }</td></tr>
+					<tr class="border-b"><th class="px-4 py-2 bg-gray-200 text-left">Sample Idx Offset</th><td class="px-4 py-2">{ fmt.Sprintf("%d", viewModel.Stream.SampleIdxOffset) }</td></tr>
+					<tr class="border-b"><th class="px-4 py-2 bg-gray-200 text-left">Created At</th><td class="px-4 py-2">{ fmt.Sprintf("%f", viewModel.Stream.CreatedAt) }</td></tr>
+					<tr><th class="px-4 py-2 bg-gray-200 text-left">Ended At</th><td class="px-4 py-2">{ fmt.Sprintf("%f", viewModel.Stream.EndedAt.Float64) }</td></tr>
+				</tbody>
+			</table>
+		</div>
+		<h2 class="text-2xl font-bold mt-8 mb-4">Timeline</h2>
+		<div class="border border-gray-300 p-2 rounded-lg">
+			<svg width="100%" height="100">
+				@timelineSVG(viewModel)
+			</svg>
+		</div>
+		<h2 class="text-2xl font-bold mt-8 mb-4">Recognitions</h2>
+		<div class="overflow-x-auto">
+			<table class="w-full bg-white shadow-md rounded-lg overflow-hidden">
+				<thead class="bg-gray-200">
+					<tr>
+						<th class="px-4 py-2">Sample Index</th>
+						<th class="px-4 py-2">Relative Sample Index</th>
+						<th class="px-4 py-2">Duration</th>
+						<th class="px-4 py-2">Timestamp</th>
+						<th class="px-4 py-2">Text</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, recognition := range viewModel.Recognitions {
+						<tr class="border-b hover:bg-gray-50">
+							<td class="px-4 py-2">{ fmt.Sprintf("%d", recognition.SampleIdx) }</td>
+							<td class="px-4 py-2">{ fmt.Sprintf("%d", recognition.RelativeSampleIdx) }</td>
+							<td class="px-4 py-2">{ recognition.Duration }</td>
+							<td class="px-4 py-2">{ recognition.Timestamp }</td>
+							<td class="px-4 py-2">{ recognition.Text }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
 	}
 }
 
