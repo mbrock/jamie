@@ -84,15 +84,16 @@ func streamMp3ToPCM(
 	return pcmOutput, nil
 }
 
-func streamPCMToOpus(
+func streamPCMToInt16(
 	ctx context.Context,
 	pcmInput <-chan []byte,
-	encoder *gopus.Encoder,
-) <-chan []byte {
-	opusOutput := make(chan []byte)
+) <-chan []int16 {
+	int16Output := make(chan []int16)
 
 	go func() {
-		defer close(opusOutput)
+		defer close(int16Output)
+
+		buffer := make([]int16, 0, 960*2)
 
 		for {
 			select {
@@ -103,37 +104,22 @@ func streamPCMToOpus(
 					return
 				}
 				// Convert byte buffer to int16 slice
-				pcmBuffer := make([]int16, len(pcmData)/2)
 				for i := 0; i < len(pcmData); i += 2 {
-					pcmBuffer[i/2] = int16(
-						pcmData[i],
-					) | int16(
-						pcmData[i+1],
-					)<<8
-				}
+					sample := int16(pcmData[i]) | int16(pcmData[i+1])<<8
+					buffer = append(buffer, sample)
 
-				// If we got a partial read, pad with silence
-				if len(pcmBuffer) < 960*2 {
-					pcmBuffer = append(
-						pcmBuffer,
-						make([]int16, 960*2-len(pcmBuffer))...)
-				}
-
-				// Encode the frame to Opus
-				opusData, err := encoder.Encode(pcmBuffer, 960, 128000)
-				if err != nil {
-					// Handle error (you might want to log this)
-					continue
-				}
-
-				select {
-				case <-ctx.Done():
-					return
-				case opusOutput <- opusData:
+					if len(buffer) == 960*2 {
+						select {
+						case <-ctx.Done():
+							return
+						case int16Output <- buffer:
+							buffer = make([]int16, 0, 960*2)
+						}
+					}
 				}
 			}
 		}
 	}()
 
-	return opusOutput
+	return int16Output
 }

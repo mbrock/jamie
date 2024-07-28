@@ -441,12 +441,12 @@ func (bot *Bot) speakInChannel(ctx context.Context, channelID string, text strin
 		return fmt.Errorf("failed to start audio conversion: %w", err)
 	}
 
+	int16Chan := streamPCMToInt16(ctx, pcmChan)
+
 	encoder, err := gopus.NewEncoder(48000, 2, gopus.Audio)
 	if err != nil {
 		return fmt.Errorf("failed to create Opus encoder: %w", err)
 	}
-
-	opusChan := streamPCMToOpus(ctx, pcmChan, encoder)
 
 	for {
 		select {
@@ -454,11 +454,19 @@ func (bot *Bot) speakInChannel(ctx context.Context, channelID string, text strin
 			return ctx.Err()
 		case err := <-errChan:
 			return err
-		case opusData, ok := <-opusChan:
+		case pcmData, ok := <-int16Chan:
 			if !ok {
 				bot.log.Info("Speech completed normally")
 				return nil
 			}
+			
+			// Encode the frame to Opus
+			opusData, err := encoder.Encode(pcmData, 960, 128000)
+			if err != nil {
+				bot.log.Error("Failed to encode PCM to Opus", "error", err)
+				continue
+			}
+
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
