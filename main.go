@@ -303,6 +303,7 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 			Stream       db.Stream
 			Packets      []PacketViewModel
 			Recognitions []RecognitionViewModel
+			EndSample    int64
 		}
 
 		viewModel := DebugViewModel{
@@ -328,6 +329,12 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 				Timestamp:         createdTime.Add(duration).Format(time.RFC3339Nano),
 				Text:              recognition.Text,
 			})
+		}
+
+		if len(viewModel.Packets) > 0 {
+			viewModel.EndSample = viewModel.Packets[len(viewModel.Packets)-1].SampleIdx
+		} else {
+			viewModel.EndSample = stream.SampleIdxOffset
 		}
 
 		tmpl := template.Must(template.New("debug").Parse(`
@@ -397,7 +404,7 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 					const timeline = document.getElementById('timeline');
 					const timelineWidth = timeline.offsetWidth;
 					const startSample = {{.Stream.SampleIdxOffset}};
-					const endSample = {{if .Packets}}{{(index .Packets (len .Packets | add -1)).SampleIdx}}{{else}}{{.Stream.SampleIdxOffset}}{{end}};
+					const endSample = {{.EndSample}};
 					const sampleRange = endSample - startSample;
 
 					{{range .Packets}}
