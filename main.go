@@ -222,7 +222,10 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 						<td>{{.Username}}</td>
 						<td>{{.Duration}} samples</td>
 						<td>{{.TranscriptionCount}}</td>
-						<td><a href="/stream/{{.ID}}">Generate OGG</a></td>
+						<td>
+							<a href="/stream/{{.ID}}">Generate OGG</a> | 
+							<a href="/stream/{{.ID}}/debug">Debug View</a>
+						</td>
 					</tr>
 					{{end}}
 				</table>
@@ -249,6 +252,154 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 			</body>
 		</html>
 		`))
+
+		err = tmpl.Execute(w, data)
+		if err != nil {
+			http.Error(w, "Failed to render template", http.StatusInternalServerError)
+			return
+		}
+	})
+
+	r.HandleFunc("/stream/{id}/debug", func(w http.ResponseWriter, r *http.Request) {
+		vars := mux.Vars(r)
+		streamID := vars["id"]
+
+		stream, err := queries.GetStream(r.Context(), streamID)
+		if err != nil {
+			http.Error(w, "Stream not found", http.StatusNotFound)
+			return
+		}
+
+		packets, err := queries.GetPacketsForStreamInSampleRange(r.Context(), db.GetPacketsForStreamInSampleRangeParams{
+			Stream: streamID,
+			SampleIdx: stream.SampleIdxOffset,
+			SampleIdx_2: stream.SampleIdxOffset + 1000000000, // Arbitrary large number to get all packets
+		})
+		if err != nil {
+			http.Error(w, "Failed to fetch packets", http.StatusInternalServerError)
+			return
+		}
+
+		recognitions, err := queries.GetTranscriptionsForStream(r.Context(), streamID)
+		if err != nil {
+			http.Error(w, "Failed to fetch recognitions", http.StatusInternalServerError)
+			return
+		}
+
+		type TemplateData struct {
+			Stream       db.Stream
+			Packets      []db.GetPacketsForStreamInSampleRangeRow
+			Recognitions []db.GetTranscriptionsForStreamRow
+		}
+
+		data := TemplateData{
+			Stream:       stream,
+			Packets:      packets,
+			Recognitions: recognitions,
+		}
+
+		tmpl := template.Must(template.New("debug").Parse(`
+		<html>
+			<head>
+				<title>Debug View - Stream {{.Stream.ID}}</title>
+				<style>
+					body { font-family: Arial, sans-serif; }
+					table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
+					th, td { border: 1px solid black; padding: 8px; text-align: left; }
+					th { background-color: #f2f2f2; }
+					.timeline { position: relative; height: 200px; border: 1px solid #ccc; margin-bottom: 20px; }
+					.packet, .recognition { position: absolute; height: 20px; }
+					.packet { background-color: blue; opacity: 0.5; }
+					.recognition { background-color: green; opacity: 0.5; top: 30px; }
+				</style>
+			</head>
+			<body>
+				<h1>Debug View - Stream {{.Stream.ID}}</h1>
+				<h2>Stream Details</h2>
+				<table>
+					<tr><th>ID</th><td>{{.Stream.ID}}</td></tr>
+					<tr><th>Packet Seq Offset</th><td>{{.Stream.PacketSeqOffset}}</td></tr>
+					<tr><th>Sample Idx Offset</th><td>{{.Stream.SampleIdxOffset}}</td></tr>
+					<tr><th>Created At</th><td>{{.Stream.CreatedAt}}</td></tr>
+					<tr><th>Ended At</th><td>{{.Stream.EndedAt}}</td></tr>
+				</table>
+
+				<h2>Timeline</h2>
+				<div class="timeline" id="timeline"></div>
+
+				<h2>Packets</h2>
+				<table>
+					<tr>
+						<th>Sample Index</th>
+						<th>Relative Sample Index</th>
+						<th>Timestamp</th>
+					</tr>
+					{{range .Packets}}
+					<tr>
+						<td>{{.SampleIdx}}</td>
+						<td>{{subtract .SampleIdx $.Stream.SampleIdxOffset}}</td>
+						<td>{{sampleIndexToTime .SampleIdx $.Stream.CreatedAt}}</td>
+					</tr>
+					{{end}}
+				</table>
+
+				<h2>Recognitions</h2>
+				<table>
+					<tr>
+						<th>Sample Index</th>
+						<th>Relative Sample Index</th>
+						<th>Timestamp</th>
+						<th>Text</th>
+					</tr>
+					{{range .Recognitions}}
+					<tr>
+						<td>{{.SampleIdx}}</td>
+						<td>{{subtract .SampleIdx $.Stream.SampleIdxOffset}}</td>
+						<td>{{sampleIndexToTime .SampleIdx $.Stream.CreatedAt}}</td>
+						<td>{{.Text}}</td>
+					</tr>
+					{{end}}
+				</table>
+
+				<script>
+					const timeline = document.getElementById('timeline');
+					const timelineWidth = timeline.offsetWidth;
+					const startSample = {{.Stream.SampleIdxOffset}};
+					const endSample = {{if .Packets}}{{(index .Packets (subtract (len .Packets) 1)).SampleIdx}}{{else}}{{.Stream.SampleIdxOffset}}{{end}};
+					const sampleRange = endSample - startSample;
+
+					{{range .Packets}}
+					const packet{{.SampleIdx}} = document.createElement('div');
+					packet{{.SampleIdx}}.className = 'packet';
+					packet{{.SampleIdx}}.style.left = (({{.SampleIdx}} - startSample) / sampleRange * 100) + '%';
+					packet{{.SampleIdx}}.style.width = '2px';
+					timeline.appendChild(packet{{.SampleIdx}});
+					{{end}}
+
+					{{range .Recognitions}}
+					const recognition{{.SampleIdx}} = document.createElement('div');
+					recognition{{.SampleIdx}}.className = 'recognition';
+					recognition{{.SampleIdx}}.style.left = (({{.SampleIdx}} - startSample) / sampleRange * 100) + '%';
+					recognition{{.SampleIdx}}.style.width = '4px';
+					timeline.appendChild(recognition{{.SampleIdx}});
+					{{end}}
+				</script>
+			</body>
+		</html>
+		`))
+
+		funcMap := template.FuncMap{
+			"subtract": func(a, b int64) int64 {
+				return a - b
+			},
+			"sampleIndexToTime": func(sampleIndex int64, createdAt float64) string {
+				createdTime := etc.JulianDayToTime(createdAt)
+				duration := time.Duration(sampleIndex-stream.SampleIdxOffset) * time.Second / 48000
+				return createdTime.Add(duration).Format(time.RFC3339Nano)
+			},
+		}
+
+		tmpl = tmpl.Funcs(funcMap)
 
 		err = tmpl.Execute(w, data)
 		if err != nil {
