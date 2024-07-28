@@ -1,7 +1,9 @@
 package templates
 
 import (
+	"context"
 	"fmt"
+	"io"
 	"jamie/db"
 )
 
@@ -103,7 +105,7 @@ func mergeConsecutivePackets(viewModel DebugViewModel) templ.Component {
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
 		startIdx := viewModel.Packets[0].SampleIdx
 		for i := 1; i < len(viewModel.Packets); i++ {
-			if viewModel.Packets[i].SampleIdx - viewModel.Packets[i-1].SampleIdx > 960 {
+			if viewModel.Packets[i].SampleIdx-viewModel.Packets[i-1].SampleIdx > 960 {
 				err = drawPacketRect(viewModel, startIdx, viewModel.Packets[i-1].SampleIdx).Render(ctx, w)
 				if err != nil {
 					return err
@@ -116,8 +118,8 @@ func mergeConsecutivePackets(viewModel DebugViewModel) templ.Component {
 }
 
 func drawPacketRect(viewModel DebugViewModel, startIdx, endIdx int64) templ.Component {
-	x := fmt.Sprintf("%.2f%%", float64(startIdx - viewModel.Stream.SampleIdxOffset) / float64(viewModel.EndSample - viewModel.Stream.SampleIdxOffset) * 100)
-	width := fmt.Sprintf("%.2f%%", float64(endIdx - startIdx) / float64(viewModel.EndSample - viewModel.Stream.SampleIdxOffset) * 100)
+	x := fmt.Sprintf("%.2f%%", float64(startIdx-viewModel.Stream.SampleIdxOffset)/float64(viewModel.EndSample-viewModel.Stream.SampleIdxOffset)*100)
+	width := fmt.Sprintf("%.2f%%", float64(endIdx-startIdx)/float64(viewModel.EndSample-viewModel.Stream.SampleIdxOffset)*100)
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
 		_, err = io.WriteString(w, fmt.Sprintf(`<rect x="%s" y="0" width="%s" height="45" fill="blue" opacity="0.5" />`, x, width))
 		return err
@@ -143,8 +145,8 @@ func mergeConsecutiveRecognitions(viewModel DebugViewModel) templ.Component {
 }
 
 func drawRecognitionRect(viewModel DebugViewModel, startIdx, endIdx int64) templ.Component {
-	x := fmt.Sprintf("%.2f%%", float64(startIdx - viewModel.Stream.SampleIdxOffset) / float64(viewModel.EndSample - viewModel.Stream.SampleIdxOffset) * 100)
-	width := fmt.Sprintf("%.2f%%", float64(endIdx - startIdx) / float64(viewModel.EndSample - viewModel.Stream.SampleIdxOffset) * 100)
+	x := fmt.Sprintf("%.2f%%", float64(startIdx-viewModel.Stream.SampleIdxOffset)/float64(viewModel.EndSample-viewModel.Stream.SampleIdxOffset)*100)
+	width := fmt.Sprintf("%.2f%%", float64(endIdx-startIdx)/float64(viewModel.EndSample-viewModel.Stream.SampleIdxOffset)*100)
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
 		_, err = io.WriteString(w, fmt.Sprintf(`<rect x="%s" y="50" width="%s" height="45" fill="green" opacity="0.5" />`, x, width))
 		return err
