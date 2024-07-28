@@ -3,6 +3,8 @@ package discordbot
 import (
 	"io"
 	"os/exec"
+
+	"layeh.com/gopus"
 )
 
 func streamMp3ToPCM(mp3Input <-chan []byte) (<-chan []byte, error) {
