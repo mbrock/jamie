@@ -130,10 +130,10 @@ func mergeConsecutivePackets(viewModel DebugViewModel) templ.Component {
 }
 
 func drawPacketRect(viewModel DebugViewModel, startIdx, endIdx int64) templ.Component {
-	x := fmt.Sprintf("%.2f%%", float64(startIdx-viewModel.Stream.SampleIdxOffset)/float64(viewModel.EndSample-viewModel.Stream.SampleIdxOffset)*100)
-	width := fmt.Sprintf("%.2f%%", float64(endIdx-startIdx)/float64(viewModel.EndSample-viewModel.Stream.SampleIdxOffset)*100)
+	x := float64(startIdx-viewModel.Stream.SampleIdxOffset) / float64(viewModel.EndSample-viewModel.Stream.SampleIdxOffset) * 100
+	width := float64(endIdx-startIdx) / float64(viewModel.EndSample-viewModel.Stream.SampleIdxOffset) * 100
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
-		_, err = io.WriteString(w, fmt.Sprintf(`<rect x="%s" y="0" width="%s" height="45" fill="blue" opacity="0.5" />`, x, width))
+		_, err = io.WriteString(w, fmt.Sprintf(`<rect x="%.2f%%" y="0" width="%.2f%%" height="45" fill="blue" opacity="0.5" />`, x, width))
 		return err
 	})
 }
@@ -161,12 +161,12 @@ func mergeConsecutiveRecognitions(viewModel DebugViewModel) templ.Component {
 }
 
 func drawRecognitionRect(viewModel DebugViewModel, startIdx, endIdx int64, text string) templ.Component {
-	x := fmt.Sprintf("%.2f%%", float64(startIdx-viewModel.Stream.SampleIdxOffset)/float64(viewModel.EndSample-viewModel.Stream.SampleIdxOffset)*100)
-	width := fmt.Sprintf("%.2f%%", float64(endIdx-startIdx)/float64(viewModel.EndSample-viewModel.Stream.SampleIdxOffset)*100)
+	x := float64(startIdx-viewModel.Stream.SampleIdxOffset) / float64(viewModel.EndSample-viewModel.Stream.SampleIdxOffset) * 100
+	width := float64(endIdx-startIdx) / float64(viewModel.EndSample-viewModel.Stream.SampleIdxOffset) * 100
 	return templ.ComponentFunc(func(ctx context.Context, w io.Writer) (err error) {
 		_, err = io.WriteString(w, fmt.Sprintf(`<g>
-			<rect x="%s" y="50" width="%s" height="45" fill="green" opacity="0.5"/>
-			<text x="%s" y="70" font-size="10" fill="black">%s</text>
+			<rect x="%.2f%%" y="50" width="%.2f%%" height="45" fill="green" opacity="0.5"/>
+			<text x="%.2f%%" y="70" font-size="10" fill="black">%s</text>
 		</g>`, x, width, x, text))
 		return err
 	})
