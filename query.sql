@@ -212,7 +212,7 @@ SET username = ?
 WHERE discord_id = ?;
 
 -- name: GetRecentRecognitions :many
-SELECT s.emoji, r.text, r.created_at, ds.username as discord_username, r.stream
+SELECT s.emoji, r.text, r.created_at, ds.username as discord_username, r.stream, r.sample_idx, r.sample_len
 FROM recognitions r
 JOIN speakers s ON r.stream = s.stream
 JOIN discord_speakers ds ON s.id = ds.speaker
