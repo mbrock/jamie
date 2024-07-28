@@ -299,12 +299,14 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 			SampleIdx         int64
 			RelativeSampleIdx int64
 			Timestamp         string
+			Duration          string
 		}
 
 		type RecognitionViewModel struct {
 			SampleIdx         int64
 			RelativeSampleIdx int64
 			Timestamp         string
+			Duration          string
 			Text              string
 		}
 
@@ -346,11 +348,6 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 			viewModel.EndSample = viewModel.Packets[len(viewModel.Packets)-1].SampleIdx
 		} else {
 			viewModel.EndSample = stream.SampleIdxOffset
-		}
-
-		// Helper function to convert samples to duration
-		funcMap := template.FuncMap{
-			"samplesToDuration": samplesToDuration,
 		}
 
 		tmpl := template.Must(template.New("debug").Parse(`
