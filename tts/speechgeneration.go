@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/haguro/elevenlabs-go"
 )
@@ -13,11 +14,12 @@ type SpeechGenerator interface {
 }
 
 type ElevenLabsSpeechGenerator struct {
-	apiKey string
+	client *elevenlabs.Client
 }
 
 func NewElevenLabsSpeechGenerator(apiKey string) *ElevenLabsSpeechGenerator {
-	return &ElevenLabsSpeechGenerator{apiKey: apiKey}
+	client := elevenlabs.NewClient(context.Background(), apiKey, 30*time.Second)
+	return &ElevenLabsSpeechGenerator{client: client}
 }
 
 func (e *ElevenLabsSpeechGenerator) TextToSpeechStreaming(
@@ -25,8 +27,6 @@ func (e *ElevenLabsSpeechGenerator) TextToSpeechStreaming(
 	text string,
 	writer io.Writer,
 ) error {
-	elevenlabs.SetAPIKey(e.apiKey)
-
 	ttsReq := elevenlabs.TextToSpeechRequest{
 		Text:    text,
 		ModelID: "eleven_turbo_v2_5",
@@ -34,7 +34,8 @@ func (e *ElevenLabsSpeechGenerator) TextToSpeechStreaming(
 
 	errChan := make(chan error, 1)
 	go func() {
-		err := elevenlabs.TextToSpeechStream(
+		err := e.client.TextToSpeechStream(
+			ctx,
 			writer,
 			"pKLLpypGseGMUjkb5fEZ",
 			ttsReq,
@@ -49,7 +50,6 @@ func (e *ElevenLabsSpeechGenerator) TextToSpeechStreaming(
 		if err != nil {
 			return fmt.Errorf("failed to generate speech: %w", err)
 		}
-
 		return nil
 	}
 }
