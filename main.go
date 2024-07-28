@@ -242,7 +242,7 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 						<td>{{.DiscordUsername}}</td>
 						<td>{{.Text}}</td>
 						<td>{{.CreatedAt}}</td>
-						<td><a href="/stream/{{.Stream}}?start={{.SampleIdx}}&end={{add .SampleIdx 48000}}">OGG</a></td>
+						<td><audio controls src="/stream/{{.Stream}}?start={{.SampleIdx}}&end={{add .SampleIdx 48000}}"></audio></td>
 					</tr>
 					{{end}}
 				</table>
