@@ -419,29 +419,6 @@ func (bot *Bot) speakInChannel(
 		bot.log.Info("Finished speakInChannel", "channelID", channelID)
 	}()
 
-	// Find the voice channel associated with the text channel
-	channel, err := bot.discord.Channel(channelID)
-	if err != nil {
-		return fmt.Errorf("failed to get channel: %w", err)
-	}
-
-	voiceStates, err := bot.discord.GuildVoiceStates(channel.GuildID)
-	if err != nil {
-		return fmt.Errorf("failed to get guild voice states: %w", err)
-	}
-
-	var voiceChannelID string
-	for _, vs := range voiceStates {
-		if vs.ChannelID != "" {
-			voiceChannelID = vs.ChannelID
-			break
-		}
-	}
-
-	if voiceChannelID == "" {
-		return fmt.Errorf("no active voice channel found")
-	}
-
 	voiceChannel := bot.voiceCall
 
 	// Start speaking
