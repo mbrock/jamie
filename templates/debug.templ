@@ -1,0 +1,109 @@
+package templates
+
+import (
+	"fmt"
+	"jamie/db"
+	"jamie/etc"
+	"time"
+)
+
+type PacketViewModel struct {
+	SampleIdx         int64
+	RelativeSampleIdx int64
+	Timestamp         string
+	Duration          string
+}
+
+type RecognitionViewModel struct {
+	SampleIdx         int64
+	RelativeSampleIdx int64
+	Timestamp         string
+	Duration          string
+	Text              string
+}
+
+type DebugViewModel struct {
+	Stream       db.Stream
+	Packets      []PacketViewModel
+	Recognitions []RecognitionViewModel
+	EndSample    int64
+}
+
+templ Debug(viewModel DebugViewModel) {
+	@layout("Debug View - Stream " + viewModel.Stream.ID) {
+		<h1>Debug View - Stream { viewModel.Stream.ID }</h1>
+		<h2>Stream Details</h2>
+		<table>
+			<tr><th>ID</th><td>{ viewModel.Stream.ID }</td></tr>
+			<tr><th>Packet Seq Offset</th><td>{ fmt.Sprintf("%d", viewModel.Stream.PacketSeqOffset) }</td></tr>
+			<tr><th>Sample Idx Offset</th><td>{ fmt.Sprintf("%d", viewModel.Stream.SampleIdxOffset) }</td></tr>
+			<tr><th>Created At</th><td>{ fmt.Sprintf("%f", viewModel.Stream.CreatedAt) }</td></tr>
+			<tr><th>Ended At</th><td>{ fmt.Sprintf("%f", viewModel.Stream.EndedAt.Float64) }</td></tr>
+		</table>
+
+		<h2>Timeline</h2>
+		<div class="timeline" id="timeline"></div>
+
+		<h2>Packets</h2>
+		<table>
+			<tr>
+				<th>Sample Index</th>
+				<th>Relative Sample Index</th>
+				<th>Duration</th>
+				<th>Timestamp</th>
+			</tr>
+			for _, packet := range viewModel.Packets {
+				<tr>
+					<td>{ fmt.Sprintf("%d", packet.SampleIdx) }</td>
+					<td>{ fmt.Sprintf("%d", packet.RelativeSampleIdx) }</td>
+					<td>{ packet.Duration }</td>
+					<td>{ packet.Timestamp }</td>
+				</tr>
+			}
+		</table>
+
+		<h2>Recognitions</h2>
+		<table>
+			<tr>
+				<th>Sample Index</th>
+				<th>Relative Sample Index</th>
+				<th>Duration</th>
+				<th>Timestamp</th>
+				<th>Text</th>
+			</tr>
+			for _, recognition := range viewModel.Recognitions {
+				<tr>
+					<td>{ fmt.Sprintf("%d", recognition.SampleIdx) }</td>
+					<td>{ fmt.Sprintf("%d", recognition.RelativeSampleIdx) }</td>
+					<td>{ recognition.Duration }</td>
+					<td>{ recognition.Timestamp }</td>
+					<td>{ recognition.Text }</td>
+				</tr>
+			}
+		</table>
+
+		<script>
+			const timeline = document.getElementById('timeline');
+			const timelineWidth = timeline.offsetWidth;
+			const startSample = { viewModel.Stream.SampleIdxOffset };
+			const endSample = { viewModel.EndSample };
+			const sampleRange = endSample - startSample;
+
+			for (const packet of { templ.JSON(viewModel.Packets) }) {
+				const packetElement = document.createElement('div');
+				packetElement.className = 'packet';
+				packetElement.style.left = ((packet.SampleIdx - startSample) / sampleRange * 100) + '%';
+				packetElement.style.width = '1px';
+				timeline.appendChild(packetElement);
+			}
+
+			for (const recognition of { templ.JSON(viewModel.Recognitions) }) {
+				const recognitionElement = document.createElement('div');
+				recognitionElement.className = 'recognition';
+				recognitionElement.style.left = ((recognition.SampleIdx - startSample) / sampleRange * 100) + '%';
+				recognitionElement.style.width = recognition.Duration + 'px';
+				timeline.appendChild(recognitionElement);
+			}
+		</script>
+	}
+}
