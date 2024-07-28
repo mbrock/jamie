@@ -318,6 +318,7 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 				SampleIdx:         packet.SampleIdx,
 				RelativeSampleIdx: packet.SampleIdx - stream.SampleIdxOffset,
 				Timestamp:         createdTime.Add(duration).Format(time.RFC3339Nano),
+				Duration:          samplesToDuration(packet.SampleIdx - stream.SampleIdxOffset),
 			})
 		}
 
@@ -327,6 +328,7 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 				SampleIdx:         recognition.SampleIdx,
 				RelativeSampleIdx: recognition.SampleIdx - stream.SampleIdxOffset,
 				Timestamp:         createdTime.Add(duration).Format(time.RFC3339Nano),
+				Duration:          samplesToDuration(recognition.SampleIdx - stream.SampleIdxOffset),
 				Text:              recognition.Text,
 			})
 		}
@@ -335,6 +337,11 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 			viewModel.EndSample = viewModel.Packets[len(viewModel.Packets)-1].SampleIdx
 		} else {
 			viewModel.EndSample = stream.SampleIdxOffset
+		}
+
+		// Helper function to convert samples to duration
+		funcMap := template.FuncMap{
+			"samplesToDuration": samplesToDuration,
 		}
 
 		tmpl := template.Must(template.New("debug").Parse(`
@@ -371,12 +378,14 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 					<tr>
 						<th>Sample Index</th>
 						<th>Relative Sample Index</th>
+						<th>Duration</th>
 						<th>Timestamp</th>
 					</tr>
 					{{range .Packets}}
 					<tr>
 						<td>{{.SampleIdx}}</td>
 						<td>{{.RelativeSampleIdx}}</td>
+						<td>{{.Duration}}</td>
 						<td>{{.Timestamp}}</td>
 					</tr>
 					{{end}}
@@ -387,6 +396,7 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 					<tr>
 						<th>Sample Index</th>
 						<th>Relative Sample Index</th>
+						<th>Duration</th>
 						<th>Timestamp</th>
 						<th>Text</th>
 					</tr>
@@ -394,6 +404,7 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 					<tr>
 						<td>{{.SampleIdx}}</td>
 						<td>{{.RelativeSampleIdx}}</td>
+						<td>{{.Duration}}</td>
 						<td>{{.Timestamp}}</td>
 						<td>{{.Text}}</td>
 					</tr>
