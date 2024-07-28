@@ -233,6 +233,7 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 				Timestamp:         createdTime.Add(duration).Format(time.RFC3339Nano),
 				Duration:          samplesToDuration(recognition.SampleIdx - stream.SampleIdxOffset),
 				Text:              recognition.Text,
+				SampleLen:         recognition.SampleLen,
 			})
 		}
 
