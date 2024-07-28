@@ -14,12 +14,11 @@ type SpeechGenerator interface {
 }
 
 type ElevenLabsSpeechGenerator struct {
-	client *elevenlabs.Client
+	apiKey string
 }
 
 func NewElevenLabsSpeechGenerator(apiKey string) *ElevenLabsSpeechGenerator {
-	client := elevenlabs.NewClient(context.Background(), apiKey, 30*time.Second)
-	return &ElevenLabsSpeechGenerator{client: client}
+	return &ElevenLabsSpeechGenerator{apiKey: apiKey}
 }
 
 func (e *ElevenLabsSpeechGenerator) TextToSpeechStreaming(
@@ -27,29 +26,20 @@ func (e *ElevenLabsSpeechGenerator) TextToSpeechStreaming(
 	text string,
 	writer io.Writer,
 ) error {
+	client := elevenlabs.NewClient(ctx, e.apiKey, 30*time.Second)
 	ttsReq := elevenlabs.TextToSpeechRequest{
 		Text:    text,
 		ModelID: "eleven_turbo_v2_5",
 	}
 
-	errChan := make(chan error, 1)
-	go func() {
-		err := e.client.TextToSpeechStream(
-			ctx,
-			writer,
-			"pKLLpypGseGMUjkb5fEZ",
-			ttsReq,
-		)
-		errChan <- err
-	}()
-
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case err := <-errChan:
-		if err != nil {
-			return fmt.Errorf("failed to generate speech: %w", err)
-		}
-		return nil
+	err := client.TextToSpeechStream(
+		ctx,
+		writer,
+		"pKLLpypGseGMUjkb5fEZ",
+		ttsReq,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to generate speech: %w", err)
 	}
+	return nil
 }
