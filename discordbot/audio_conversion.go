@@ -11,6 +11,7 @@ import (
 func streamMp3ToPCM(
 	ctx context.Context,
 	mp3Input <-chan []byte,
+	bufferLength int,
 ) (<-chan []byte, error) {
 	pcmOutput := make(chan []byte)
 
@@ -55,7 +56,7 @@ func streamMp3ToPCM(
 	go func() {
 		defer close(pcmOutput)
 		defer ffmpegOutReader.Close()
-		buffer := make([]byte, 960*2*2)
+		buffer := make([]byte, bufferLength)
 		for {
 			select {
 			case <-ctx.Done():
@@ -82,6 +83,60 @@ func streamMp3ToPCM(
 	}()
 
 	return pcmOutput, nil
+}
+
+func streamPCMToTimelineData(
+	ctx context.Context,
+	pcmInput <-chan []byte,
+	sampleRate int,
+	channels int,
+) <-chan TimelineData {
+	timelineOutput := make(chan TimelineData)
+
+	go func() {
+		defer close(timelineOutput)
+
+		var sampleIndex int64
+		bytesPerSample := 2 // 16-bit audio
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case pcmData, ok := <-pcmInput:
+				if !ok {
+					return
+				}
+
+				samplesInBuffer := len(pcmData) / (bytesPerSample * channels)
+				duration := float64(samplesInBuffer) / float64(sampleRate)
+
+				timelineData := TimelineData{
+					StartSample: sampleIndex,
+					EndSample:   sampleIndex + int64(samplesInBuffer),
+					Duration:    duration,
+					// You can add more fields here as needed, such as amplitude analysis
+				}
+
+				select {
+				case <-ctx.Done():
+					return
+				case timelineOutput <- timelineData:
+				}
+
+				sampleIndex += int64(samplesInBuffer)
+			}
+		}
+	}()
+
+	return timelineOutput
+}
+
+type TimelineData struct {
+	StartSample int64
+	EndSample   int64
+	Duration    float64
+	// Add more fields as needed, such as amplitude, frequency analysis, etc.
 }
 
 func streamPCMToInt16(

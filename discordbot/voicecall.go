@@ -436,11 +436,13 @@ func (bot *Bot) speakInChannel(ctx context.Context, channelID string, text strin
 		bot.log.Debug("Finished text-to-speech conversion")
 	}()
 
-	pcmChan, err := streamMp3ToPCM(ctx, mp3Chan)
+	bufferLength := 960 * 2 * 2 // 960 samples * 2 bytes per sample * 2 channels
+	pcmChan, err := streamMp3ToPCM(ctx, mp3Chan, bufferLength)
 	if err != nil {
 		return fmt.Errorf("failed to start audio conversion: %w", err)
 	}
 
+	timelineChan := streamPCMToTimelineData(ctx, pcmChan, 48000, 2)
 	int16Chan := streamPCMToInt16(ctx, pcmChan)
 
 	encoder, err := gopus.NewEncoder(48000, 2, gopus.Audio)
@@ -448,15 +450,24 @@ func (bot *Bot) speakInChannel(ctx context.Context, channelID string, text strin
 		return fmt.Errorf("failed to create Opus encoder: %w", err)
 	}
 
+	var timelineData []TimelineData
+
 	for {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case err := <-errChan:
 			return err
+		case data, ok := <-timelineChan:
+			if !ok {
+				continue
+			}
+			timelineData = append(timelineData, data)
 		case pcmData, ok := <-int16Chan:
 			if !ok {
 				bot.log.Info("Speech completed normally")
+				// Here you can process the collected timelineData
+				bot.processTimelineData(timelineData)
 				return nil
 			}
 			
@@ -474,6 +485,13 @@ func (bot *Bot) speakInChannel(ctx context.Context, channelID string, text strin
 			}
 		}
 	}
+}
+
+func (bot *Bot) processTimelineData(data []TimelineData) {
+	// Process the timeline data here
+	// For example, you could store it in the database or use it to update the UI
+	bot.log.Info("Processing timeline data", "dataPoints", len(data))
+	// Implement the logic to handle the timeline data as needed
 }
 
 type channelWriter struct {
