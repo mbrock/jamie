@@ -45,11 +45,11 @@ func (bot *Bot) addRecognizer(streamID string, recognizers *[]stt.SpeechRecogniz
 		return fmt.Errorf("failed to start %s speech recognition session: %w", language, err)
 	}
 
-	deepgramSession, ok := session.(*DeepgramSession)
+	deepgramSession, ok := session.(*stt.DeepgramSession)
 	if !ok {
 		return fmt.Errorf("unexpected session type")
 	}
-	deepgramSession.initialSampleIndex = stream.SampleIdxOffset
+	deepgramSession.InitialSampleIndex = int(stream.SampleIdxOffset)
 
 	*recognizers = append(*recognizers, deepgramSession)
 	go bot.speechRecognitionLoop(streamID, deepgramSession)
@@ -58,10 +58,10 @@ func (bot *Bot) addRecognizer(streamID string, recognizers *[]stt.SpeechRecogniz
 
 func (bot *Bot) speechRecognitionLoop(
 	streamID string,
-	session *DeepgramSession,
+	session *stt.DeepgramSession,
 ) {
 	for segmentDrafts := range session.Receive() {
-		bot.processPendingRecognitionResult(streamID, segmentDrafts, session.initialSampleIndex)
+		bot.processPendingRecognitionResult(streamID, segmentDrafts, int64(session.InitialSampleIndex))
 	}
 
 	bot.log.Info(
@@ -169,7 +169,7 @@ func (bot *Bot) processPendingRecognitionResult(
 		recognitionID := etc.Gensym()
 
 		// Adjust the sample index by adding the initial sample index
-		adjustedSampleIdx := initialSampleIndex + int64(result.Start * 48000)
+		adjustedSampleIdx := initialSampleIndex + int64(result.Start*48000)
 
 		err := bot.db.SaveRecognition(
 			context.Background(),

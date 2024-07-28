@@ -164,7 +164,7 @@ func (bot *Bot) processInboundAudioPacket(
 	}
 
 	for _, recognizer := range recognizers {
-		err = recognizer.SendAudio(packet.Opus)
+		err = recognizer.SendAudio(packet.Opus, int64(packet.Timestamp))
 		if err != nil {
 			bot.log.Error(
 				"Failed to send audio to speech recognition service",

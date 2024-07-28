@@ -275,15 +275,15 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 			endSample = 10000 * 48000 // 10000 seconds of audio
 		}
 
-		startSample = stream.SampleIdxOffset + startSample
-		endSample = stream.SampleIdxOffset + endSample
+		// startSample = startSample
+		// endSample = endSample
 
 		oggData, err := ogg.GenerateOggOpusBlob(
 			mainLogger,
 			queries,
 			streamID,
-			startSample,
-			endSample,
+			startSample+int64(stream.SampleIdxOffset),
+			endSample+int64(stream.SampleIdxOffset),
 		)
 		if err != nil {
 			http.Error(w, "Failed to generate OGG file", http.StatusInternalServerError)

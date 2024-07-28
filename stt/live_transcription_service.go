@@ -13,7 +13,7 @@ type Result struct {
 
 type SpeechRecognizer interface {
 	Stop() error
-	SendAudio(data []byte) error
+	SendAudio(data []byte, timestamp int64) error
 	Receive() <-chan chan Result
 }
 

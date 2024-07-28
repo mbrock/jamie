@@ -83,6 +83,7 @@ type DeepgramSession struct {
 	currentTranscriptCh chan Result
 	audioBuffer         chan []byte
 	isOpen              bool
+	InitialSampleIndex  int
 }
 
 func (s *DeepgramSession) Stop() error {
@@ -97,7 +98,11 @@ func (s *DeepgramSession) Close(ocr *api.CloseResponse) error {
 	return nil
 }
 
-func (s *DeepgramSession) SendAudio(data []byte) error {
+func (s *DeepgramSession) SendAudio(data []byte, timestamp int64) error {
+	if s.InitialSampleIndex == 0 {
+		s.InitialSampleIndex = int(timestamp)
+	}
+
 	select {
 	case s.audioBuffer <- data:
 		return nil
