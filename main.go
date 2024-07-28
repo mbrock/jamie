@@ -242,7 +242,7 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 						<td>{{.DiscordUsername}}</td>
 						<td>{{.Text}}</td>
 						<td>{{.CreatedAt}}</td>
-						<td><audio controls src="/stream/{{.Stream}}?start={{.SampleIdx}}&end={{add .SampleIdx 48000}}"></audio></td>
+						<td><audio controls src="/stream/{{.Stream}}?start={{.SampleIdx}}&end={{add .SampleIdx .SampleLen}}"></audio></td>
 					</tr>
 					{{end}}
 				</table>
@@ -264,15 +264,19 @@ func RunHTTPServer(cmd *cobra.Command, args []string) {
 		startSample, _ := strconv.ParseInt(r.URL.Query().Get("start"), 10, 64)
 		endSample, _ := strconv.ParseInt(r.URL.Query().Get("end"), 10, 64)
 
-		if startSample == 0 || endSample == 0 {
-			stream, err := queries.GetStream(r.Context(), streamID)
-			if err != nil {
-				http.Error(w, "Stream not found", http.StatusNotFound)
-				return
-			}
-			startSample = stream.SampleIdxOffset
-			endSample = stream.SampleIdxOffset + 10000*48000 // 10000 seconds of audio
+		stream, err := queries.GetStream(r.Context(), streamID)
+		if err != nil {
+			http.Error(w, "Stream not found", http.StatusNotFound)
+			return
 		}
+
+		if startSample == 0 || endSample == 0 {
+			startSample = 0
+			endSample = 10000 * 48000 // 10000 seconds of audio
+		}
+
+		startSample = stream.SampleIdxOffset + startSample
+		endSample = stream.SampleIdxOffset + endSample
 
 		oggData, err := ogg.GenerateOggOpusBlob(
 			mainLogger,
