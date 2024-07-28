@@ -400,9 +400,9 @@ func (bot *Bot) processTalkCommand(
 	response, err := bot.languageModel.ChatCompletion(
 		ctx,
 		(&llm.ChatCompletionRequest{
-			SystemPrompt: "What is going on? Answer with ONE sentence, or ask ONE question, or just emote in some way.",
+			SystemPrompt: "You're Jamie, podcast assistant. You're in a voice call with unreliable transcriptions presented to you from the podcast hosts Daniel and Mikael. You don't talk too much, usually.",
 			MaxTokens:    100,
-			Temperature:  0.73,
+			Temperature:  1.0,
 		}).WithUserMessage(contextBuilder.String()),
 	)
 
@@ -436,6 +436,7 @@ func (bot *Bot) GenerateOggOpusBlob(
 	startSample, endSample int,
 ) ([]byte, error) {
 	return ogg.GenerateOggOpusBlob(
+		bot.log,
 		bot.db,
 		streamID,
 		int64(startSample),

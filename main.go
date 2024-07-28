@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
-	"html/template"
 	"jamie/db"
 	"jamie/etc"
 	"jamie/llm"
@@ -18,22 +17,20 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"text/template"
 	"time"
-
-	"github.com/gorilla/mux"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
+	"github.com/gorilla/mux"
 	"github.com/olekukonko/tablewriter"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"jamie/db"
 	"jamie/discordbot"
-	"jamie/ogg"
 	"jamie/stt"
 )
 
@@ -143,10 +140,10 @@ var listStreamsCmd = &cobra.Command{
 var httpServerCmd = &cobra.Command{
 	Use:   "http",
 	Short: "Start the HTTP server",
-	Run:   runHTTPServer,
+	Run:   RunHTTPServer,
 }
 
-func runHTTPServer(cmd *cobra.Command, args []string) {
+func RunHTTPServer(cmd *cobra.Command, args []string) {
 	mainLogger, _, _, sqlLogger := createLoggers()
 
 	queries, err := InitDB(sqlLogger)
@@ -247,7 +244,10 @@ func runHTTPServer(cmd *cobra.Command, args []string) {
 
 	port := viper.GetInt("http_port")
 	mainLogger.Info(fmt.Sprintf("Starting HTTP server on port %d", port))
-	http.ListenAndServe(fmt.Sprintf(":%d", port), r)
+	err = http.ListenAndServe(fmt.Sprintf(":%d", port), r)
+	if err != nil {
+		mainLogger.Fatal("start HTTP server", "error", err.Error())
+	}
 }
 
 //go:embed schema.sql

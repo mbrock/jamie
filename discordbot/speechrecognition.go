@@ -89,11 +89,11 @@ func (bot *Bot) processPendingRecognitionResult(
 		// Update the last valid transcription time
 		bot.lastValidTranscription = time.Now()
 
-		// Signal to cancel any ongoing speech
-		select {
-		case bot.cancelSpeech <- struct{}{}:
-		default:
-		}
+		// // Signal to cancel any ongoing speech
+		// select {
+		// case bot.cancelSpeech <- struct{}{}:
+		// default:
+		// }
 
 		if bot.voiceCall != nil && bot.voiceCall.TalkMode {
 			bot.speakingMu.Lock()

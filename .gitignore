@@ -8,3 +8,6 @@ jamie
 *.sql.go
 /db/db.go
 /db/models.go
+/*.ogg
+/*.bak
+
