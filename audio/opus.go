@@ -4,11 +4,73 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"github.com/charmbracelet/log"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
 	"jamie/db"
 )
+
+type OggOpusWriter struct {
+	writer        *oggwriter.OggWriter
+	lastSampleIdx int64
+	log           *log.Logger
+}
+
+func NewOggOpusWriter(w io.Writer, log *log.Logger) (*OggOpusWriter, error) {
+	oggWriter, err := oggwriter.NewWith(w, 48000, 2)
+	if err != nil {
+		return nil, fmt.Errorf("create OGG writer: %w", err)
+	}
+	return &OggOpusWriter{
+		writer: oggWriter,
+		log:    log,
+	}, nil
+}
+
+func (w *OggOpusWriter) WritePacket(payload []byte, sampleIdx int64) error {
+	if w.lastSampleIdx != 0 {
+		gap := sampleIdx - w.lastSampleIdx
+		if gap > 960 {
+			if err := w.insertSilence(gap); err != nil {
+				return err
+			}
+		}
+	}
+
+	if err := w.writer.WriteRTP(&rtp.Packet{
+		Header: rtp.Header{
+			Timestamp: uint32(sampleIdx),
+		},
+		Payload: payload,
+	}); err != nil {
+		return fmt.Errorf("write Opus packet: %w", err)
+	}
+
+	w.lastSampleIdx = sampleIdx
+	return nil
+}
+
+func (w *OggOpusWriter) insertSilence(gap int64) error {
+	silentPacketsCount := gap / 960
+	w.log.Debug("Inserting silent packets", "count", silentPacketsCount, "gap", gap)
+	for j := int64(0); j < silentPacketsCount; j++ {
+		silentPacket := []byte{0xf8, 0xff, 0xfe}
+		if err := w.writer.WriteRTP(&rtp.Packet{
+			Header: rtp.Header{
+				Timestamp: uint32(w.lastSampleIdx + (j * 960)),
+			},
+			Payload: silentPacket,
+		}); err != nil {
+			return fmt.Errorf("write silent Opus packet: %w", err)
+		}
+	}
+	return nil
+}
+
+func (w *OggOpusWriter) Close() error {
+	return w.writer.Close()
+}
 
 func GenerateOggOpusBlob(
 	log *log.Logger,
@@ -33,56 +95,24 @@ func GenerateOggOpusBlob(
 	log.Debug("Fetched packets", "count", len(packets))
 
 	var oggBuffer bytes.Buffer
-
-	oggWriter, err := oggwriter.NewWith(&oggBuffer, 48000, 2)
+	writer, err := NewOggOpusWriter(&oggBuffer, log)
 	if err != nil {
 		log.Error("Failed to create OGG writer", "error", err)
-		return nil, fmt.Errorf("create OGG writer: %w", err)
+		return nil, err
 	}
-	log.Debug("Created OGG writer")
 
-	var lastSampleIdx int64
 	for i, packet := range packets {
-		if lastSampleIdx != 0 {
-			gap := packet.SampleIdx - lastSampleIdx
-			if gap > 960 { // 960 samples = 20ms at 48kHz
-				silentPacketsCount := gap / 960
-				log.Debug("Inserting silent packets", "count", silentPacketsCount, "gap", gap)
-				for j := int64(0); j < silentPacketsCount; j++ {
-					silentPacket := []byte{0xf8, 0xff, 0xfe}
-					if err := oggWriter.WriteRTP(&rtp.Packet{
-						Header: rtp.Header{
-							Timestamp: uint32(lastSampleIdx + (j * 960)),
-						},
-						Payload: silentPacket,
-					}); err != nil {
-						log.Error("Failed to write silent Opus packet", "error", err)
-						return nil, fmt.Errorf(
-							"write silent Opus packet: %w",
-							err,
-						)
-					}
-				}
-			}
-		}
-
-		if err := oggWriter.WriteRTP(&rtp.Packet{
-			Header: rtp.Header{
-				Timestamp: uint32(packet.SampleIdx),
-			},
-			Payload: packet.Payload,
-		}); err != nil {
+		if err := writer.WritePacket(packet.Payload, packet.SampleIdx); err != nil {
 			log.Error("Failed to write Opus packet", "error", err, "packetIndex", i)
-			return nil, fmt.Errorf("write Opus packet: %w", err)
+			return nil, err
 		}
 
-		lastSampleIdx = packet.SampleIdx
 		if i%100 == 0 {
 			log.Debug("Writing packets progress", "packetIndex", i, "totalPackets", len(packets))
 		}
 	}
 
-	if err := oggWriter.Close(); err != nil {
+	if err := writer.Close(); err != nil {
 		log.Error("Failed to close OGG writer", "error", err)
 		return nil, fmt.Errorf("close OGG writer: %w", err)
 	}
