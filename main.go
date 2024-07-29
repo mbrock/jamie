@@ -8,9 +8,7 @@ import (
 	"jamie/audio"
 	"jamie/db"
 	"jamie/etc"
-	"jamie/llm"
-	"jamie/templates"
-	"jamie/tts"
+	"jamie/html"
 	"net/http"
 	"os"
 	"os/signal"
@@ -30,13 +28,13 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"jamie/discordbot"
-	"jamie/stt"
+	"jamie/ai"
+	"jamie/discord"
 )
 
 var (
 	logger *log.Logger
-	bot    *discordbot.Bot
+	bot    *discord.Bot
 )
 
 func init() {
@@ -147,7 +145,7 @@ var httpServerCmd = &cobra.Command{
 }
 
 func RunHTTPServer(_ *cobra.Command, _ []string) {
-	mainLogger, _, _, sqlLogger := createLoggers()
+	mainLogger, _, _, _ := createLoggers()
 
 	queries, err := InitDB()
 	if err != nil {
@@ -177,7 +175,7 @@ func RunHTTPServer(_ *cobra.Command, _ []string) {
 			return
 		}
 
-		component := templates.Index(streams, transcriptions)
+		component := html.Index(streams, transcriptions)
 		err = component.Render(r.Context(), w)
 		if err != nil {
 			http.Error(
@@ -240,7 +238,7 @@ func RunHTTPServer(_ *cobra.Command, _ []string) {
 				return
 			}
 
-			viewModel := templates.DebugViewModel{
+			viewModel := html.DebugViewModel{
 				Stream: stream,
 			}
 
@@ -252,7 +250,7 @@ func RunHTTPServer(_ *cobra.Command, _ []string) {
 				) * time.Second / 48000
 				viewModel.Packets = append(
 					viewModel.Packets,
-					templates.PacketViewModel{
+					html.PacketViewModel{
 						SampleIdx:         packet.SampleIdx,
 						RelativeSampleIdx: packet.SampleIdx - stream.SampleIdxOffset,
 						Timestamp: createdTime.Add(duration).
@@ -270,7 +268,7 @@ func RunHTTPServer(_ *cobra.Command, _ []string) {
 				) * time.Second / 48000
 				viewModel.Recognitions = append(
 					viewModel.Recognitions,
-					templates.RecognitionViewModel{
+					html.RecognitionViewModel{
 						SampleIdx:         recognition.SampleIdx,
 						RelativeSampleIdx: recognition.SampleIdx - stream.SampleIdxOffset,
 						Timestamp: createdTime.Add(duration).
@@ -290,7 +288,7 @@ func RunHTTPServer(_ *cobra.Command, _ []string) {
 				viewModel.EndSample = stream.SampleIdxOffset
 			}
 
-			component := templates.Debug(viewModel)
+			component := html.Debug(viewModel)
 			err = component.Render(r.Context(), w)
 			if err != nil {
 				http.Error(
@@ -382,7 +380,7 @@ func InitDB() (*db.Queries, error) {
 }
 
 func runGenerateAudio(_ *cobra.Command, _ []string) {
-	mainLogger, _, _, sqlLogger := createLoggers()
+	mainLogger, _, _, _ := createLoggers()
 
 	queries, err := InitDB()
 	if err != nil {
@@ -531,7 +529,7 @@ func runGenerateAudio(_ *cobra.Command, _ []string) {
 }
 
 func runGenerateOgg(_ *cobra.Command, args []string) {
-	mainLogger, _, _, sqlLogger := createLoggers()
+	mainLogger, _, _, _ := createLoggers()
 
 	queries, err := InitDB()
 	if err != nil {
@@ -567,7 +565,7 @@ func runGenerateOgg(_ *cobra.Command, args []string) {
 }
 
 func runListStreams(_ *cobra.Command, _ []string) {
-	mainLogger, _, _, sqlLogger := createLoggers()
+	mainLogger, _, _, _ := createLoggers()
 
 	queries, err := InitDB()
 	if err != nil {
@@ -639,7 +637,7 @@ func generateOggOpusBlob(
 }
 
 func runSummarizeTranscript(_ *cobra.Command, _ []string) {
-	mainLogger, _, _, sqlLogger := createLoggers()
+	mainLogger, _, _, _ := createLoggers()
 
 	queries, err := InitDB()
 	if err != nil {
@@ -652,8 +650,8 @@ func runSummarizeTranscript(_ *cobra.Command, _ []string) {
 		mainLogger.Fatal("missing OPENAI_API_KEY or --openai-api-key=")
 	}
 
-	languageModel := llm.NewOpenAILanguageModel(openaiAPIKey)
-	summaryChan, err := llm.SummarizeTranscript(
+	languageModel := ai.NewOpenAILanguageModel(openaiAPIKey)
+	summaryChan, err := ai.SummarizeTranscript(
 		queries,
 		languageModel,
 		"",
@@ -712,7 +710,7 @@ func main() {
 }
 
 func runDiscord(cmd *cobra.Command, _ []string) {
-	mainLogger, discordLogger, deepgramLogger, sqlLogger := createLoggers()
+	mainLogger, discordLogger, deepgramLogger, _ := createLoggers()
 
 	discordToken := viper.GetString("discord_token")
 	deepgramAPIKey := viper.GetString("deepgram_api_key")
@@ -739,7 +737,7 @@ func runDiscord(cmd *cobra.Command, _ []string) {
 		mainLogger.Fatal("initialize database", "error", err.Error())
 	}
 
-	transcriptionService, err := stt.NewDeepgramClient(
+	transcriptionService, err := ai.NewDeepgramClient(
 		deepgramAPIKey,
 		deepgramLogger,
 	)
@@ -763,11 +761,11 @@ func runDiscord(cmd *cobra.Command, _ []string) {
 	}
 
 	// Wrap the discord session with our DiscordSession struct
-	discordWrapper := &discordbot.DiscordSession{Session: discord}
+	discordWrapper := &discord.DiscordSession{Session: discord}
 
-	speechGenerator := tts.NewElevenLabsSpeechGenerator(elevenlabsAPIKey)
-	languageModel := llm.NewOpenAILanguageModel(openaiAPIKey)
-	bot, err = discordbot.NewBot(
+	speechGenerator := ai.NewElevenLabsSpeechGenerator(elevenlabsAPIKey)
+	languageModel := ai.NewOpenAILanguageModel(openaiAPIKey)
+	bot, err = discord.NewBot(
 		discordWrapper,
 		transcriptionService,
 		speechGenerator,
@@ -823,7 +821,7 @@ func createLoggers() (mainLogger, discordLogger, deepgramLogger, sqlLogger *log.
 	logger.SetStyles(styles)
 
 	mainLogger = logger.With().WithPrefix("main")
-	discordLogger = logger.With().WithPrefix("chat")
+	discordLogger = logger.With().WithPrefix("discord")
 	deepgramLogger = logger.With().WithPrefix("hear")
 	sqlLogger = logger.With().WithPrefix("data")
 

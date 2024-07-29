@@ -1,4 +1,4 @@
-package stt
+package ai
 
 import (
 	"context"
@@ -29,7 +29,7 @@ func NewDeepgramClient(
 func (c *DeepgramClient) Start(
 	ctx context.Context,
 	language string,
-) (SpeechRecognizer, error) {
+) (SpeechRecognitionSession, error) {
 	cOptions := &interfaces.ClientOptions{
 		EnableKeepAlive: true,
 	}

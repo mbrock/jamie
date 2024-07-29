@@ -1,37 +1,37 @@
-package discordbot
+package discord
 
 import (
 	"context"
 	"database/sql"
 	"errors"
 	"fmt"
+	"jamie/ai"
 	"jamie/audio"
 	"jamie/db"
 	"jamie/etc"
-	"jamie/stt"
 	"sync"
 
 	"github.com/bwmarrin/discordgo"
 	"layeh.com/gopus"
 )
 
-type VoiceCall struct {
+type VoiceChat struct {
 	sync.RWMutex
 	Conn                *discordgo.VoiceConnection
 	TalkMode            bool
 	InboundAudioPackets chan *discordgo.Packet
-	streamIdCache       map[string]string // cacheKey -> streamID
+	streamIdCache       map[string]string
 	GuildID             string
 	ChannelID           string
-	Recognizers         map[string][]stt.SpeechRecognizer // streamID -> []SpeechRecognizer
+	Transcribers        map[string][]ai.SpeechRecognitionSession
 }
 
 func (bot *Bot) joinVoiceCall(guildID, channelID string) error {
 	bot.mu.Lock()
 	defer bot.mu.Unlock()
 
-	if bot.voiceCall != nil {
-		if err := bot.voiceCall.Conn.Disconnect(); err != nil {
+	if bot.voiceChat != nil {
+		if err := bot.voiceChat.Conn.Disconnect(); err != nil {
 			return fmt.Errorf(
 				"failed to disconnect from previous voice channel: %w",
 				err,
@@ -46,7 +46,7 @@ func (bot *Bot) joinVoiceCall(guildID, channelID string) error {
 
 	bot.log.Info("joined", "channel", channelID)
 
-	bot.voiceCall = &VoiceCall{
+	bot.voiceChat = &VoiceChat{
 		Conn:      vc,
 		GuildID:   guildID,
 		ChannelID: channelID,
@@ -59,10 +59,10 @@ func (bot *Bot) joinVoiceCall(guildID, channelID string) error {
 		), // 3 second audio buffer
 
 		streamIdCache: make(map[string]string),
-		Recognizers:   make(map[string][]stt.SpeechRecognizer),
+		Transcribers:  make(map[string][]ai.SpeechRecognitionSession),
 	}
 
-	bot.voiceCall.Conn.AddHandler(bot.handleVoiceSpeakingUpdate)
+	bot.voiceChat.Conn.AddHandler(bot.handleVoiceSpeakingUpdate)
 
 	go bot.acceptInboundAudioPackets()
 	go bot.processInboundAudioPackets()
@@ -95,29 +95,29 @@ func (bot *Bot) joinAllVoiceChannels(guildID string) error {
 }
 
 func (bot *Bot) acceptInboundAudioPackets() {
-	for packet := range bot.voiceCall.Conn.OpusRecv {
+	for packet := range bot.voiceChat.Conn.OpusRecv {
 		select {
-		case bot.voiceCall.InboundAudioPackets <- packet:
+		case bot.voiceChat.InboundAudioPackets <- packet:
 			// good
 		default:
 			bot.log.Warn(
 				"voice packet channel full, dropping packet",
 				"channelID",
-				bot.voiceCall.ChannelID,
+				bot.voiceChat.ChannelID,
 			)
 		}
 	}
 }
 
 func (bot *Bot) processInboundAudioPackets() {
-	for packet := range bot.voiceCall.InboundAudioPackets {
+	for packet := range bot.voiceChat.InboundAudioPackets {
 		err := bot.processInboundAudioPacket(packet)
 		if err != nil {
 			bot.log.Error(
 				"failed to process voice packet",
 				"error", err.Error(),
-				"guildID", bot.voiceCall.GuildID,
-				"channelID", bot.voiceCall.ChannelID,
+				"guildID", bot.voiceChat.GuildID,
+				"channelID", bot.voiceChat.ChannelID,
 			)
 		}
 	}
@@ -131,8 +131,8 @@ func (bot *Bot) processInboundAudioPacket(
 	if err != nil {
 		bot.log.Error("Failed to get or create voice stream",
 			"error", err,
-			"guildID", bot.voiceCall.GuildID,
-			"channelID", bot.voiceCall.ChannelID,
+			"guildID", bot.voiceChat.GuildID,
+			"channelID", bot.voiceChat.ChannelID,
 			"SSRC", packet.SSRC,
 		)
 		return fmt.Errorf(
@@ -143,7 +143,7 @@ func (bot *Bot) processInboundAudioPacket(
 
 	// Save the audio packet
 	err = bot.db.SavePacket(context.Background(), db.SavePacketParams{
-		ID:        etc.Gensym(),
+		ID:        etc.NewFreshID(),
 		Stream:    streamID,
 		PacketSeq: int64(packet.Sequence),
 		SampleIdx: int64(packet.Timestamp),
@@ -192,7 +192,7 @@ func (bot *Bot) handleVoiceSpeakingUpdate(
 	err := bot.db.UpsertVoiceState(
 		context.Background(),
 		db.UpsertVoiceStateParams{
-			ID:         etc.Gensym(),
+			ID:         etc.NewFreshID(),
 			Ssrc:       int64(v.SSRC),
 			UserID:     v.UserID,
 			IsSpeaking: v.Speaking,
@@ -213,8 +213,8 @@ func (bot *Bot) ensureVoiceStream(packet *discordgo.Packet) (string, error) {
 	cacheKey := fmt.Sprintf(
 		"%d:%s:%s",
 		packet.SSRC,
-		bot.voiceCall.GuildID,
-		bot.voiceCall.ChannelID,
+		bot.voiceChat.GuildID,
+		bot.voiceChat.ChannelID,
 	)
 
 	if streamID, ok := bot.getCachedVoiceStream(cacheKey); ok {
@@ -226,17 +226,17 @@ func (bot *Bot) ensureVoiceStream(packet *discordgo.Packet) (string, error) {
 		return "", err
 	}
 
-	bot.voiceCall.Lock()
-	bot.voiceCall.streamIdCache[cacheKey] = streamID
-	bot.voiceCall.Unlock()
+	bot.voiceChat.Lock()
+	bot.voiceChat.streamIdCache[cacheKey] = streamID
+	bot.voiceChat.Unlock()
 
 	return streamID, nil
 }
 
 func (bot *Bot) getCachedVoiceStream(cacheKey string) (string, bool) {
-	bot.voiceCall.RLock()
-	streamID, ok := bot.voiceCall.streamIdCache[cacheKey]
-	bot.voiceCall.RUnlock()
+	bot.voiceChat.RLock()
+	streamID, ok := bot.voiceChat.streamIdCache[cacheKey]
+	bot.voiceChat.RUnlock()
 	return streamID, ok
 }
 
@@ -285,8 +285,8 @@ func (bot *Bot) resolveStreamForPacket(
 	streamID, err := bot.db.GetStreamForDiscordChannelAndSpeaker(
 		context.Background(),
 		db.GetStreamForDiscordChannelAndSpeakerParams{
-			DiscordGuild:   bot.voiceCall.GuildID,
-			DiscordChannel: bot.voiceCall.ChannelID,
+			DiscordGuild:   bot.voiceChat.GuildID,
+			DiscordChannel: bot.voiceChat.ChannelID,
 			DiscordID:      discordID,
 		},
 	)
@@ -301,8 +301,8 @@ func (bot *Bot) createStreamForPacket(
 	packet *discordgo.Packet,
 	discordID, username string,
 ) (string, error) {
-	streamID := etc.Gensym()
-	speakerID := etc.Gensym()
+	streamID := etc.NewFreshID()
+	speakerID := etc.NewFreshID()
 
 	err := bot.db.CreateStream(
 		context.Background(),
@@ -319,9 +319,9 @@ func (bot *Bot) createStreamForPacket(
 	err = bot.db.CreateDiscordChannelStream(
 		context.Background(),
 		db.CreateDiscordChannelStreamParams{
-			ID:             etc.Gensym(),
-			DiscordGuild:   bot.voiceCall.GuildID,
-			DiscordChannel: bot.voiceCall.ChannelID,
+			ID:             etc.NewFreshID(),
+			DiscordGuild:   bot.voiceChat.GuildID,
+			DiscordChannel: bot.voiceChat.ChannelID,
 			Stream:         streamID,
 		},
 	)
@@ -347,7 +347,7 @@ func (bot *Bot) createStreamForPacket(
 	err = bot.db.CreateDiscordSpeaker(
 		context.Background(),
 		db.CreateDiscordSpeakerParams{
-			ID:        etc.Gensym(),
+			ID:        etc.NewFreshID(),
 			Speaker:   speakerID,
 			DiscordID: discordID,
 			Ssrc:      int64(packet.SSRC),
@@ -437,7 +437,7 @@ func (bot *Bot) speakInChannel(
 	bot.setSpeakingFlag(true)
 	defer bot.setSpeakingFlag(false)
 
-	voiceChannel := bot.voiceCall
+	voiceChannel := bot.voiceChat
 	if err := voiceChannel.Conn.Speaking(true); err != nil {
 		return fmt.Errorf("failed to set speaking state: %w", err)
 	}
@@ -492,7 +492,7 @@ func (bot *Bot) streamPcmToDiscordAsOpusPackets(
 	ctx context.Context,
 	pcmChan <-chan []int16,
 	errChan <-chan error,
-	voiceChannel *VoiceCall,
+	voiceChannel *VoiceChat,
 ) error {
 	encoder, err := gopus.NewEncoder(48000, 2, gopus.Audio)
 	if err != nil {
@@ -521,7 +521,7 @@ func (bot *Bot) encodeAndSendFrame(
 	ctx context.Context,
 	encoder *gopus.Encoder,
 	pcmData []int16,
-	voiceChannel *VoiceCall,
+	voiceChannel *VoiceChat,
 ) error {
 	opusData, err := encoder.Encode(pcmData, 960, 128000)
 	if err != nil {

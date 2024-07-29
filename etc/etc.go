@@ -1,9 +1,14 @@
 package etc
 
 import (
+	"github.com/nrednav/cuid2"
 	"math"
 	"time"
 )
+
+func NewFreshID() string {
+	return cuid2.Generate()
+}
 
 func JulianDayToTime(f float64) time.Time {
 	// Julian date starts at noon on January 1, 4713 BC

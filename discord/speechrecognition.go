@@ -1,51 +1,50 @@
-package discordbot
+package discord
 
 import (
 	"context"
 	"fmt"
+	"jamie/ai"
 	"jamie/db"
 	"jamie/etc"
-	"jamie/stt"
 	"strings"
 	"time"
 
 	"github.com/bwmarrin/discordgo"
 )
 
-func (bot *Bot) getRecognizersForStream(streamID string) ([]stt.SpeechRecognizer, error) {
+func (bot *Bot) getRecognizersForStream(streamID string) ([]ai.SpeechRecognitionSession, error) {
 	bot.mu.Lock()
 	defer bot.mu.Unlock()
 
-	recognizers, exists := bot.voiceCall.Recognizers[streamID]
+	recognizers, exists := bot.voiceChat.Transcribers[streamID]
 	if exists {
 		return recognizers, nil
 	}
 
-	recognizers = make([]stt.SpeechRecognizer, 0)
+	recognizers = make([]ai.SpeechRecognitionSession, 0)
 
 	if err := bot.addRecognizer(streamID, &recognizers, "en-US"); err != nil {
 		return nil, err
 	}
 
-	// Attempt to add Swedish recognizer, but continue if it fails
 	_ = bot.addRecognizer(streamID, &recognizers, "sv-SE")
 
-	bot.voiceCall.Recognizers[streamID] = recognizers
+	bot.voiceChat.Transcribers[streamID] = recognizers
 	return recognizers, nil
 }
 
-func (bot *Bot) addRecognizer(streamID string, recognizers *[]stt.SpeechRecognizer, language string) error {
+func (bot *Bot) addRecognizer(streamID string, recognizers *[]ai.SpeechRecognitionSession, language string) error {
 	stream, err := bot.db.GetStream(context.Background(), streamID)
 	if err != nil {
 		return fmt.Errorf("failed to get stream: %w", err)
 	}
 
-	session, err := bot.speechRecognition.Start(context.Background(), language)
+	session, err := bot.speechRecognitionService.Start(context.Background(), language)
 	if err != nil {
 		return fmt.Errorf("failed to start %s speech recognition session: %w", language, err)
 	}
 
-	deepgramSession, ok := session.(*stt.DeepgramSession)
+	deepgramSession, ok := session.(*ai.DeepgramSession)
 	if !ok {
 		return fmt.Errorf("unexpected session type")
 	}
@@ -58,7 +57,7 @@ func (bot *Bot) addRecognizer(streamID string, recognizers *[]stt.SpeechRecogniz
 
 func (bot *Bot) speechRecognitionLoop(
 	streamID string,
-	session *stt.DeepgramSession,
+	session *ai.DeepgramSession,
 ) {
 	for segmentDrafts := range session.Receive() {
 		bot.processPendingRecognitionResult(streamID, segmentDrafts, int64(session.InitialSampleIndex))
@@ -73,10 +72,10 @@ func (bot *Bot) speechRecognitionLoop(
 
 func (bot *Bot) processPendingRecognitionResult(
 	streamID string,
-	drafts <-chan stt.Result,
+	drafts <-chan ai.Result,
 	initialSampleIndex int64,
 ) {
-	var result stt.Result
+	var result ai.Result
 	for draft := range drafts {
 		result = draft
 	}
@@ -98,16 +97,9 @@ func (bot *Bot) processPendingRecognitionResult(
 			return
 		}
 
-		// Update the last valid transcription time
 		bot.lastValidTranscription = time.Now()
 
-		// // Signal to cancel any ongoing speech
-		// select {
-		// case bot.cancelSpeech <- struct{}{}:
-		// default:
-		// }
-
-		if bot.voiceCall != nil && bot.voiceCall.TalkMode {
+		if bot.voiceChat != nil && bot.voiceChat.TalkMode {
 			bot.speakingMu.Lock()
 			isSpeaking := bot.isSpeaking
 			bot.speakingMu.Unlock()
@@ -166,7 +158,7 @@ func (bot *Bot) processPendingRecognitionResult(
 			"confidence", result.Confidence,
 		)
 	} else {
-		recognitionID := etc.Gensym()
+		recognitionID := etc.NewFreshID()
 
 		// Adjust the sample index by adding the initial sample index
 		adjustedSampleIdx := initialSampleIndex + int64(result.Start*48000)

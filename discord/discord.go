@@ -1,16 +1,14 @@
-package discordbot
+package discord
 
 import (
 	"context"
 	"errors"
 	"fmt"
 	"io"
+	"jamie/ai"
 	discordbot2 "jamie/audio"
 	"jamie/db"
 	"jamie/etc"
-	"jamie/llm"
-	"jamie/stt"
-	"jamie/tts"
 	"sort"
 	"strings"
 	"sync"
@@ -29,15 +27,15 @@ type Bot struct {
 
 	discord Discord
 
-	languageModel llm.LanguageModel
+	languageModel ai.LanguageModel
 
-	speechRecognition stt.SpeechRecognition
-	speechRecognizers map[string]stt.SpeechRecognizer
-	speechGenerator   tts.SpeechGenerator
+	speechGenerationService   ai.SpeechGenerationService
+	speechRecognitionService  ai.SpeechRecognitionService
+	speechRecognitionSessions map[string]ai.SpeechRecognitionSession
 
 	commands map[string]CommandHandler
 
-	voiceCall *VoiceCall
+	voiceChat *VoiceChat
 
 	isSpeaking bool
 	speakingMu sync.Mutex
@@ -52,28 +50,28 @@ type Bot struct {
 
 func NewBot(
 	chat Discord,
-	speechRecognitionService stt.SpeechRecognition,
-	speechGenerationService tts.SpeechGenerator,
-	languageModelService llm.LanguageModel,
+	speechRecognitionService ai.SpeechRecognitionService,
+	speechGenerationService ai.SpeechGenerationService,
+	languageModelService ai.LanguageModel,
 	logger *log.Logger,
 	db *db.Queries,
 	guildID string,
 	talkMode bool,
 ) (*Bot, error) {
 	bot := &Bot{
-		db:                db,
-		log:               logger,
-		discord:           chat,
-		languageModel:     languageModelService,
-		commands:          make(map[string]CommandHandler),
-		speechRecognition: speechRecognitionService,
-		speechRecognizers: make(
-			map[string]stt.SpeechRecognizer,
+		db:                       db,
+		log:                      logger,
+		discord:                  chat,
+		languageModel:            languageModelService,
+		commands:                 make(map[string]CommandHandler),
+		speechRecognitionService: speechRecognitionService,
+		speechRecognitionSessions: make(
+			map[string]ai.SpeechRecognitionSession,
 		),
-		speechGenerator: speechGenerationService,
-		guildID:         guildID,
-		defaultTalkMode: talkMode,
-		cancelSpeech:    make(chan struct{}, 1),
+		speechGenerationService: speechGenerationService,
+		guildID:                 guildID,
+		defaultTalkMode:         talkMode,
+		cancelSpeech:            make(chan struct{}, 1),
 	}
 
 	bot.registerCommands()
@@ -103,7 +101,7 @@ func (bot *Bot) saveTextMessage(message *discordgo.Message) error {
 	return bot.db.SaveTextMessage(
 		context.Background(),
 		db.SaveTextMessageParams{
-			ID:               etc.Gensym(),
+			ID:               etc.NewFreshID(),
 			DiscordChannel:   message.ChannelID,
 			DiscordUser:      message.Author.ID,
 			DiscordMessageID: message.ID,
@@ -161,15 +159,15 @@ func (bot *Bot) handleMessageCreate(
 
 	commandName := args[0]
 	if commandName == "talk" {
-		if bot.voiceCall != nil {
-			if bot.voiceCall.TalkMode {
-				bot.voiceCall.TalkMode = false
+		if bot.voiceChat != nil {
+			if bot.voiceChat.TalkMode {
+				bot.voiceChat.TalkMode = false
 				bot.sendAndSaveMessage(
 					m.ChannelID,
 					"Talk mode deactivated.",
 				)
 			} else {
-				bot.voiceCall.TalkMode = true
+				bot.voiceChat.TalkMode = true
 				bot.sendAndSaveMessage(
 					m.ChannelID,
 					"Talk mode activated. Type !talk again to deactivate.",
@@ -415,7 +413,7 @@ func (bot *Bot) processTalkCommand(
 
 	response, err := bot.languageModel.ChatCompletion(
 		ctx,
-		(&llm.ChatCompletionRequest{
+		(&ai.ChatCompletionRequest{
 			SystemPrompt: "You're Jamie, podcast assistant. You're in a studio with the hosts Daniel and Mikael. You can pull things up, look things up, etc. You only say one sentence at a time, or one question, or a confused expression. Let's go! But you also have to notice when you're stuck in a loop. Then remain calm and think about something soothing.",
 			MaxTokens:    140,
 			Temperature:  1.0,
@@ -462,7 +460,7 @@ func (bot *Bot) GenerateOggOpusBlob(
 
 func (bot *Bot) TextToSpeech(ctx context.Context, text string, writer io.Writer) error {
 	bot.log.Info("speaking", "text", text)
-	err := bot.speechGenerator.TextToSpeechStreaming(ctx, text, writer)
+	err := bot.speechGenerationService.TextToSpeechStreaming(ctx, text, writer)
 	if err != nil {
 		bot.log.Error(
 			"Failed to generate speech",
