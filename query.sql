@@ -4,21 +4,21 @@ SELECT r.id, r.session_id, r.ssrc, r.sample_idx, r.sample_len, r.text, r.confide
 FROM recognitions r
 JOIN voice_state_events vs ON r.session_id = vs.session_id AND r.ssrc = vs.ssrc
 WHERE r.session_id = ?
-  AND r.created_at BETWEEN ? AND ?
+  AND r.created_at >= ? AND r.created_at <= ?
 ORDER BY r.created_at ASC;
 
 -- name: GetTextMessagesInTimeRange :many
 SELECT id, discord_channel, discord_user, discord_message_id, content, is_bot, created_at
 FROM text_messages
 WHERE discord_channel = ?
-  AND created_at BETWEEN ? AND ?
+  AND created_at >= ? AND created_at <= ?
 ORDER BY created_at ASC;
 
 -- name: GetAudioPacketsInTimeRange :many
 SELECT id, session_id, ssrc, packet_seq, sample_idx, payload, received_at
 FROM voice_packets
 WHERE session_id = ?
-  AND received_at BETWEEN ? AND ?
+  AND received_at >= ? AND received_at <= ?
 ORDER BY sample_idx ASC;
 
 -- name: GetVoiceSessionInfo :one
