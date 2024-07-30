@@ -94,17 +94,12 @@ func GenerateOggOpusBlob(
 	}
 	log.Debug("Fetched packets", "count", len(packets))
 
-	// Find the minimum sample index
+	// Use the first sample index as the minimum
 	var minSampleIdx int64
 	if len(packets) > 0 {
 		minSampleIdx = packets[0].SampleIdx
-		for _, packet := range packets {
-			if packet.SampleIdx < minSampleIdx {
-				minSampleIdx = packet.SampleIdx
-			}
-		}
 	}
-	log.Debug("Minimum sample index", "minSampleIdx", minSampleIdx)
+	log.Debug("First sample index", "minSampleIdx", minSampleIdx)
 
 	var oggBuffer bytes.Buffer
 	writer, err := NewOggOpusWriter(&oggBuffer, log)
