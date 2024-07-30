@@ -78,17 +78,17 @@ func (w *OggOpusWriter) Close() error {
 func GenerateOggOpusBlob(
 	log *log.Logger,
 	q *db.Queries,
-	streamID string,
-	startSample, endSample int64,
+	sessionID string,
+	startTime, endTime float64,
 ) ([]byte, error) {
-	log.Debug("Starting GenerateOggOpusBlob", "streamID", streamID, "startSample", startSample, "endSample", endSample)
+	log.Debug("Starting GenerateOggOpusBlob", "sessionID", sessionID, "startTime", startTime, "endTime", endTime)
 
-	packets, err := q.GetPacketsForStreamInSampleRange(
+	packets, err := q.GetAudioPacketsInTimeRange(
 		context.Background(),
-		db.GetPacketsForStreamInSampleRangeParams{
-			Stream:      streamID,
-			SampleIdx:   startSample,
-			SampleIdx_2: endSample,
+		db.GetAudioPacketsInTimeRangeParams{
+			SessionID:  sessionID,
+			ReceivedAt: startTime,
+			ReceivedAt_2: endTime,
 		},
 	)
 	if err != nil {
