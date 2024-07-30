@@ -1,3 +1,8 @@
+-- We use `sqlc` to generate database access functions from this schema
+-- and the queries defined in query.sql.
+--
+-- The db/models.go and db/query.sql.go contain the generated read-only code.
+
 CREATE TABLE IF NOT EXISTS streams (
     id TEXT PRIMARY KEY,
     packet_seq_offset INTEGER NOT NULL,
