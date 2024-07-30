@@ -31,6 +31,9 @@ func NewOggOpusWriter(w io.Writer, log *log.Logger) (*OggOpusWriter, error) {
 func (w *OggOpusWriter) WritePacket(payload []byte, sampleIdx int64) error {
 	if w.lastSampleIdx != 0 {
 		gap := sampleIdx - w.lastSampleIdx
+		if gap%960 != 0 {
+			return fmt.Errorf("invalid sample index gap: %d (should be multiple of 960)", gap)
+		}
 		if gap > 960 {
 			if err := w.insertSilence(gap); err != nil {
 				return err
