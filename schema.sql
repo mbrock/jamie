@@ -1,87 +1,50 @@
--- We use `sqlc` to generate database access functions from this schema
--- and the queries defined in query.sql.
---
--- The db/models.go and db/query.sql.go contain the generated read-only code.
-
-CREATE TABLE IF NOT EXISTS streams (
+-- Discord voice sessions
+CREATE TABLE IF NOT EXISTS voice_sessions (
     id TEXT PRIMARY KEY,
-    packet_seq_offset INTEGER NOT NULL,
-    sample_idx_offset INTEGER NOT NULL,
-    created_at REAL NOT NULL DEFAULT (julianday('now')),
+    guild_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    started_at REAL NOT NULL DEFAULT (julianday('now')),
     ended_at REAL
 );
 
-CREATE TABLE IF NOT EXISTS packets (
+-- Voice state events log
+CREATE TABLE IF NOT EXISTS voice_state_events (
     id TEXT PRIMARY KEY,
-    stream TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    username TEXT NOT NULL,
+    ssrc INTEGER NOT NULL,
+    is_speaking BOOLEAN NOT NULL,
+    event_time REAL NOT NULL DEFAULT (julianday('now')),
+    FOREIGN KEY (session_id) REFERENCES voice_sessions(id)
+);
+
+-- Audio packets
+CREATE TABLE IF NOT EXISTS voice_packets (
+    id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    ssrc INTEGER NOT NULL,
     packet_seq INTEGER NOT NULL,
     sample_idx INTEGER NOT NULL,
     payload BLOB NOT NULL,
     received_at REAL NOT NULL DEFAULT (julianday('now')),
-    FOREIGN KEY (stream) REFERENCES streams(id)
+    FOREIGN KEY (session_id) REFERENCES voice_sessions(id)
 );
 
-CREATE TABLE IF NOT EXISTS speakers (
-    id TEXT PRIMARY KEY,
-    stream TEXT NOT NULL,
-    emoji TEXT NOT NULL,
-    created_at REAL NOT NULL DEFAULT (julianday('now')),
-    FOREIGN KEY (stream) REFERENCES streams(id)
-);
-
-CREATE TABLE IF NOT EXISTS discord_speakers (
-    id TEXT PRIMARY KEY,
-    speaker TEXT NOT NULL,
-    discord_id TEXT NOT NULL,
-    ssrc INTEGER NOT NULL,
-    username TEXT NOT NULL,
-    created_at REAL NOT NULL DEFAULT (julianday('now')),
-    FOREIGN KEY (speaker) REFERENCES speakers(id)
-);
-
-CREATE TABLE IF NOT EXISTS discord_channel_streams (
-    id TEXT PRIMARY KEY,
-    stream TEXT NOT NULL,
-    discord_guild TEXT NOT NULL,
-    discord_channel TEXT NOT NULL,
-    created_at REAL NOT NULL DEFAULT (julianday('now')),
-    FOREIGN KEY (stream) REFERENCES streams(id)
-);
-
-CREATE TABLE IF NOT EXISTS attributions (
-    id TEXT PRIMARY KEY,
-    stream TEXT NOT NULL,
-    speaker TEXT NOT NULL,
-    created_at REAL NOT NULL DEFAULT (julianday('now')),
-    FOREIGN KEY (stream) REFERENCES streams(id),
-    FOREIGN KEY (speaker) REFERENCES speakers(id)
-);
-
+-- Speech recognition results
 CREATE TABLE IF NOT EXISTS recognitions (
     id TEXT PRIMARY KEY,
-    stream TEXT NOT NULL,
+    session_id TEXT NOT NULL,
+    ssrc INTEGER NOT NULL,
     sample_idx INTEGER NOT NULL,
     sample_len INTEGER NOT NULL,
     text TEXT NOT NULL,
     confidence REAL NOT NULL,
     created_at REAL NOT NULL DEFAULT (julianday('now')),
-    FOREIGN KEY (stream) REFERENCES streams(id)
+    FOREIGN KEY (session_id) REFERENCES voice_sessions(id)
 );
 
-CREATE TABLE IF NOT EXISTS speech_recognition_sessions (
-    stream TEXT PRIMARY KEY,
-    session_data TEXT NOT NULL,
-    created_at REAL NOT NULL DEFAULT (julianday('now')),
-    FOREIGN KEY (stream) REFERENCES streams(id)
-);
-
-CREATE TABLE IF NOT EXISTS system_prompts (
-    name TEXT PRIMARY KEY,
-    prompt TEXT NOT NULL,
-    created_at REAL NOT NULL DEFAULT (julianday('now')),
-    updated_at REAL NOT NULL DEFAULT (julianday('now'))
-);
-
+-- Text messages
 CREATE TABLE IF NOT EXISTS text_messages (
     id TEXT PRIMARY KEY,
     discord_channel TEXT NOT NULL,
@@ -92,10 +55,34 @@ CREATE TABLE IF NOT EXISTS text_messages (
     created_at REAL NOT NULL DEFAULT (julianday('now'))
 );
 
-CREATE TABLE IF NOT EXISTS voice_states (
-    id TEXT PRIMARY KEY,
-    ssrc INTEGER NOT NULL,
-    user_id TEXT NOT NULL,
-    is_speaking BOOLEAN NOT NULL,
+-- System prompts
+CREATE TABLE IF NOT EXISTS system_prompts (
+    name TEXT PRIMARY KEY,
+    prompt TEXT NOT NULL,
+    created_at REAL NOT NULL DEFAULT (julianday('now')),
     updated_at REAL NOT NULL DEFAULT (julianday('now'))
 );
+
+-- View for current voice state
+CREATE VIEW IF NOT EXISTS current_voice_state AS
+SELECT 
+    vse1.session_id,
+    vse1.user_id,
+    vse1.username,
+    vse1.ssrc,
+    vse1.is_speaking,
+    vse1.event_time
+FROM 
+    voice_state_events vse1
+INNER JOIN (
+    SELECT 
+        session_id,
+        user_id,
+        MAX(event_time) as max_event_time
+    FROM 
+        voice_state_events
+    GROUP BY 
+        session_id, user_id
+) vse2 ON vse1.session_id = vse2.session_id 
+    AND vse1.user_id = vse2.user_id 
+    AND vse1.event_time = vse2.max_event_time;
