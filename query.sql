@@ -1,9 +1,11 @@
 -- name: GetRecognitionsInTimeRange :many
-SELECT r.id, r.session_id, r.ssrc, r.sample_idx, r.sample_len, r.text, r.confidence, r.created_at,
+SELECT r.id, rs.voice_session_id, rs.ssrc, rs.start_sample_idx + (r.time_offset * 48000) AS sample_idx,
+       r.time_offset, r.text, r.confidence, r.created_at,
        vs.user_id, vs.username
 FROM recognitions r
-JOIN voice_state_events vs ON r.session_id = vs.session_id AND r.ssrc = vs.ssrc
-WHERE r.session_id = ?
+JOIN recognition_sessions rs ON r.recognition_session_id = rs.id
+JOIN voice_state_events vs ON rs.voice_session_id = vs.session_id AND rs.ssrc = vs.ssrc
+WHERE rs.voice_session_id = ?
   AND r.created_at >= ? AND r.created_at <= ?
 ORDER BY r.created_at ASC;
 
@@ -48,9 +50,13 @@ VALUES (?, ?, ?, ?, ?, ?);
 INSERT INTO voice_packets (id, session_id, ssrc, packet_seq, sample_idx, payload)
 VALUES (?, ?, ?, ?, ?, ?);
 
+-- name: CreateRecognitionSession :exec
+INSERT INTO recognition_sessions (id, voice_session_id, ssrc, start_sample_idx)
+VALUES (?, ?, ?, ?);
+
 -- name: InsertRecognition :exec
-INSERT INTO recognitions (id, session_id, ssrc, sample_idx, sample_len, text, confidence)
-VALUES (?, ?, ?, ?, ?, ?, ?);
+INSERT INTO recognitions (id, recognition_session_id, time_offset, text, confidence)
+VALUES (?, ?, ?, ?, ?);
 
 -- name: GetLatestVoiceSession :one
 SELECT id, guild_id, channel_id, started_at, ended_at

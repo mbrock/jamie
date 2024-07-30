@@ -31,17 +31,25 @@ CREATE TABLE IF NOT EXISTS voice_packets (
     FOREIGN KEY (session_id) REFERENCES voice_sessions(id)
 );
 
+-- Recognition sessions
+CREATE TABLE IF NOT EXISTS recognition_sessions (
+    id TEXT PRIMARY KEY,
+    voice_session_id TEXT NOT NULL,
+    ssrc INTEGER NOT NULL,
+    start_sample_idx INTEGER NOT NULL,
+    created_at REAL NOT NULL DEFAULT (julianday('now')),
+    FOREIGN KEY (voice_session_id) REFERENCES voice_sessions(id)
+);
+
 -- Speech recognition results
 CREATE TABLE IF NOT EXISTS recognitions (
     id TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL,
-    ssrc INTEGER NOT NULL,
-    sample_idx INTEGER NOT NULL,
-    sample_len INTEGER NOT NULL,
+    recognition_session_id TEXT NOT NULL,
+    time_offset REAL NOT NULL,
     text TEXT NOT NULL,
     confidence REAL NOT NULL,
     created_at REAL NOT NULL DEFAULT (julianday('now')),
-    FOREIGN KEY (session_id) REFERENCES voice_sessions(id)
+    FOREIGN KEY (recognition_session_id) REFERENCES recognition_sessions(id)
 );
 
 -- Text messages
