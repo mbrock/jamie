@@ -94,6 +94,18 @@ func GenerateOggOpusBlob(
 	}
 	log.Debug("Fetched packets", "count", len(packets))
 
+	// Find the minimum sample index
+	var minSampleIdx int64
+	if len(packets) > 0 {
+		minSampleIdx = packets[0].SampleIdx
+		for _, packet := range packets {
+			if packet.SampleIdx < minSampleIdx {
+				minSampleIdx = packet.SampleIdx
+			}
+		}
+	}
+	log.Debug("Minimum sample index", "minSampleIdx", minSampleIdx)
+
 	var oggBuffer bytes.Buffer
 	writer, err := NewOggOpusWriter(&oggBuffer, log)
 	if err != nil {
@@ -102,7 +114,8 @@ func GenerateOggOpusBlob(
 	}
 
 	for i, packet := range packets {
-		if err := writer.WritePacket(packet.Payload, packet.SampleIdx); err != nil {
+		normalizedSampleIdx := packet.SampleIdx - minSampleIdx
+		if err := writer.WritePacket(packet.Payload, normalizedSampleIdx); err != nil {
 			log.Error("Failed to write Opus packet", "error", err, "packetIndex", i)
 			return nil, err
 		}
