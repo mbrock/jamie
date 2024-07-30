@@ -1,25 +1,25 @@
--- name: GetRecognitionsInTimeRange :many
-SELECT r.id, rs.voice_session_id, rs.ssrc, rs.start_sample_idx + (r.time_offset * 48000) AS sample_idx,
-       r.time_offset, r.text, r.confidence, r.created_at,
-       vs.user_id, vs.username
-FROM recognitions r
+-- name: GetRecognitionResultsInTimeRange :many
+SELECT r.id, rs.voice_session_id, vs.ssrc, vs.first_sample_idx + (r.start_second * 48000) AS sample_idx,
+       r.start_second, r.end_second, r.text, r.confidence, r.created_at,
+       vs.user_id
+FROM recognition_results r
 JOIN recognition_sessions rs ON r.recognition_session_id = rs.id
-JOIN voice_state_events vs ON rs.voice_session_id = vs.session_id AND rs.ssrc = vs.ssrc
+JOIN voice_streams vs ON rs.voice_session_id = vs.session_id
 WHERE rs.voice_session_id = ?
   AND r.created_at >= ? AND r.created_at <= ?
 ORDER BY r.created_at ASC;
 
 -- name: GetTextMessagesInTimeRange :many
-SELECT id, discord_channel, discord_user, discord_message_id, content, is_bot, created_at
+SELECT id, discord_guild_id, discord_channel_id, discord_user_id, discord_message_id, content, created_at
 FROM text_messages
-WHERE discord_channel = ?
+WHERE discord_channel_id = ?
   AND created_at >= ? AND created_at <= ?
 ORDER BY created_at ASC;
 
 -- name: GetAudioPacketsInTimeRange :many
-SELECT id, session_id, ssrc, packet_seq, sample_idx, payload, received_at
+SELECT id, voice_stream_id, sequence, sample_idx, payload, received_at
 FROM voice_packets
-WHERE session_id = ?
+WHERE voice_stream_id = ?
   AND received_at >= ? AND received_at <= ?
 ORDER BY sample_idx ASC;
 
@@ -28,9 +28,9 @@ SELECT id, guild_id, channel_id, started_at, ended_at
 FROM voice_sessions
 WHERE id = ?;
 
--- name: GetCurrentVoiceState :many
-SELECT session_id, user_id, username, ssrc, is_speaking, event_time
-FROM current_voice_state
+-- name: GetCurrentVoiceStreams :many
+SELECT id, session_id, ssrc, user_id
+FROM voice_streams
 WHERE session_id = ?;
 
 -- name: CreateVoiceSession :exec
@@ -42,21 +42,21 @@ UPDATE voice_sessions
 SET ended_at = CURRENT_TIMESTAMP
 WHERE id = ? AND ended_at IS NULL;
 
--- name: InsertVoiceStateEvent :exec
-INSERT INTO voice_state_events (id, session_id, user_id, username, ssrc, is_speaking)
-VALUES (?, ?, ?, ?, ?, ?);
-
--- name: InsertVoicePacket :exec
-INSERT INTO voice_packets (id, session_id, ssrc, packet_seq, sample_idx, payload)
-VALUES (?, ?, ?, ?, ?, ?);
-
--- name: CreateRecognitionSession :exec
-INSERT INTO recognition_sessions (id, voice_session_id, ssrc, start_sample_idx)
+-- name: CreateVoiceStream :exec
+INSERT INTO voice_streams (id, session_id, ssrc, user_id)
 VALUES (?, ?, ?, ?);
 
--- name: InsertRecognition :exec
-INSERT INTO recognitions (id, recognition_session_id, time_offset, text, confidence)
+-- name: InsertVoicePacket :exec
+INSERT INTO voice_packets (id, voice_stream_id, sequence, sample_idx, payload)
 VALUES (?, ?, ?, ?, ?);
+
+-- name: CreateRecognitionSession :exec
+INSERT INTO recognition_sessions (id, voice_session_id, first_sample_idx)
+VALUES (?, ?, ?);
+
+-- name: InsertRecognitionResult :exec
+INSERT INTO recognition_results (id, recognition_session_id, start_second, end_second, text, confidence)
+VALUES (?, ?, ?, ?, ?, ?);
 
 -- name: GetLatestVoiceSession :one
 SELECT id, guild_id, channel_id, started_at, ended_at
@@ -66,7 +66,7 @@ ORDER BY started_at DESC
 LIMIT 1;
 
 -- name: SaveTextMessage :exec
-INSERT INTO text_messages (id, discord_channel, discord_user, discord_message_id, content, is_bot)
+INSERT INTO text_messages (id, discord_guild_id, discord_channel_id, discord_user_id, discord_message_id, content)
 VALUES (?, ?, ?, ?, ?, ?);
 
 -- name: GetSystemPrompt :one
