@@ -15,6 +15,149 @@ import (
 //go:embed db_init.sql
 var sqlFS embed.FS
 
+type Bot struct {
+	Discord *discordgo.Session
+	DBPool  *pgxpool.Pool
+}
+
+func (b *Bot) handleEvent(s *discordgo.Session, m *discordgo.Event) {
+	log.Info(
+		"message",
+		"op",
+		m.Operation,
+		"type",
+		m.Type,
+		"data",
+		m.Struct,
+	)
+}
+
+func (b *Bot) handleGuildCreate(s *discordgo.Session, m *discordgo.GuildCreate) {
+	log.Info("guild", "id", m.ID, "name", m.Name)
+	for _, channel := range m.Guild.Channels {
+		log.Info(
+			"channel",
+			"id",
+			channel.ID,
+			"name",
+			channel.Name,
+			"type",
+			channel.Type,
+		)
+	}
+	for _, voice := range m.Guild.VoiceStates {
+		log.Info("voice", "id", voice.UserID, "channel", voice.ChannelID)
+	}
+
+	cmd, err := s.ApplicationCommandCreate(
+		b.Discord.State.User.ID,
+		m.ID,
+		&discordgo.ApplicationCommand{
+			Name:        "jamie",
+			Description: "Summon Jamie to this channel",
+		},
+	)
+	if err != nil {
+		log.Error("command", "error", err)
+	}
+	log.Info("app command", "id", cmd.ID)
+}
+
+func (b *Bot) handleVoiceStateUpdate(s *discordgo.Session, m *discordgo.VoiceStateUpdate) {
+	log.Info("voice", "user", m.UserID, "channel", m.ChannelID)
+}
+
+func (b *Bot) handleVoiceServerUpdate(s *discordgo.Session, m *discordgo.VoiceServerUpdate) {
+	log.Info("voice", "server", m.Endpoint, "token", m.Token)
+}
+
+func (b *Bot) handleInteractionCreate(s *discordgo.Session, m *discordgo.InteractionCreate) {
+	log.Info(
+		"interaction",
+		"type",
+		m.ApplicationCommandData().CommandType,
+		"name",
+		m.ApplicationCommandData().Name,
+		"channel",
+		m.ChannelID,
+	)
+	s.InteractionRespond(
+		m.Interaction,
+		&discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: "Hello, world!",
+			},
+		},
+	)
+
+	vc, err := s.ChannelVoiceJoin(
+		m.GuildID,
+		m.ChannelID,
+		false,
+		false,
+	)
+	if err != nil {
+		log.Error("voice", "error", err)
+	}
+
+	vc.AddHandler(b.handleVoiceSpeakingUpdate)
+
+	go b.handleOpusPackets(vc)
+}
+
+func (b *Bot) handleVoiceSpeakingUpdate(_ *discordgo.VoiceConnection, m *discordgo.VoiceSpeakingUpdate) {
+	log.Info(
+		"speaking",
+		"user",
+		m.UserID,
+		"ssrc",
+		m.SSRC,
+		"speaking",
+		m.Speaking,
+	)
+
+	_, err := b.DBPool.Exec(context.Background(),
+		"INSERT INTO ssrc_mappings (guild_id, channel_id, user_id, ssrc) VALUES ($1, $2, $3, $4) ON CONFLICT (guild_id, channel_id, ssrc) DO UPDATE SET user_id = $3",
+		m.GuildID, m.ChannelID, m.UserID, m.SSRC)
+	if err != nil {
+		log.Error("Failed to insert/update SSRC mapping", "error", err)
+	}
+}
+
+func (b *Bot) handleOpusPackets(vc *discordgo.VoiceConnection) {
+	for pkt := range vc.OpusRecv {
+		log.Info(
+			"opus",
+			"token",
+			b.Discord.Identify.Token,
+			"session",
+			vc.SessionID,
+			"g",
+			vc.GuildID,
+			"c",
+			vc.ChannelID,
+			"ssrc",
+			pkt.SSRC,
+			"seq",
+			pkt.Sequence,
+			"ts",
+			pkt.Timestamp,
+			"n",
+			len(pkt.Opus),
+		)
+
+		// Insert opus packet into PostgreSQL
+		_, err := b.DBPool.Exec(context.Background(),
+			"INSERT INTO opus_packets (guild_id, channel_id, ssrc, sequence, timestamp, opus_data) VALUES ($1, $2, $3, $4, $5, $6)",
+			vc.GuildID, vc.ChannelID, pkt.SSRC, pkt.Sequence, pkt.Timestamp, pkt.Opus)
+
+		if err != nil {
+			log.Error("Failed to insert opus packet", "error", err)
+		}
+	}
+}
+
 func main() {
 	// Connect to PostgreSQL
 	dbpool, err := pgxpool.Connect(context.Background(), os.Getenv("DATABASE_URL"))
@@ -43,6 +186,17 @@ func main() {
 
 	discord.LogLevel = discordgo.LogInformational
 
+	bot := &Bot{
+		Discord: discord,
+		DBPool:  dbpool,
+	}
+
+	discord.AddHandler(bot.handleEvent)
+	discord.AddHandler(bot.handleGuildCreate)
+	discord.AddHandler(bot.handleVoiceStateUpdate)
+	discord.AddHandler(bot.handleVoiceServerUpdate)
+	discord.AddHandler(bot.handleInteractionCreate)
+
 	err = discord.Open()
 	if err != nil {
 		panic(err)
@@ -54,147 +208,6 @@ func main() {
 			log.Error("discord", "close", err)
 		}
 	}()
-
-	discord.AddHandler(func(s *discordgo.Session, m *discordgo.Event) {
-		log.Info(
-			"message",
-			"op",
-			m.Operation,
-			"type",
-			m.Type,
-			"data",
-			m.Struct,
-		)
-	})
-
-	discord.AddHandler(func(s *discordgo.Session, m *discordgo.GuildCreate) {
-		log.Info("guild", "id", m.ID, "name", m.Name)
-		for _, channel := range m.Guild.Channels {
-			log.Info(
-				"channel",
-				"id",
-				channel.ID,
-				"name",
-				channel.Name,
-				"type",
-				channel.Type,
-			)
-		}
-		for _, voice := range m.Guild.VoiceStates {
-			log.Info("voice", "id", voice.UserID, "channel", voice.ChannelID)
-		}
-
-		cmd, err := s.ApplicationCommandCreate(
-			discord.State.User.ID,
-			m.ID,
-			&discordgo.ApplicationCommand{
-				Name:        "jamie",
-				Description: "Summon Jamie to this channel",
-			},
-		)
-		if err != nil {
-			log.Error("command", "error", err)
-		}
-		log.Info("app command", "id", cmd.ID)
-	})
-
-	discord.AddHandler(
-		func(s *discordgo.Session, m *discordgo.VoiceStateUpdate) {
-			log.Info("voice", "user", m.UserID, "channel", m.ChannelID)
-		},
-	)
-
-	discord.AddHandler(
-		func(s *discordgo.Session, m *discordgo.VoiceServerUpdate) {
-			log.Info("voice", "server", m.Endpoint, "token", m.Token)
-		},
-	)
-
-	discord.AddHandler(
-		func(s *discordgo.Session, m *discordgo.InteractionCreate) {
-			log.Info(
-				"interaction",
-				"type",
-				m.ApplicationCommandData().CommandType,
-				"name",
-				m.ApplicationCommandData().Name,
-				"channel",
-				m.ChannelID,
-			)
-			s.InteractionRespond(
-				m.Interaction,
-				&discordgo.InteractionResponse{
-					Type: discordgo.InteractionResponseChannelMessageWithSource,
-					Data: &discordgo.InteractionResponseData{
-						Content: "Hello, world!",
-					},
-				},
-			)
-
-			vc, err := s.ChannelVoiceJoin(
-				m.GuildID,
-				m.ChannelID,
-				false,
-				false,
-			)
-			if err != nil {
-				log.Error("voice", "error", err)
-			}
-
-			vc.AddHandler(
-				func(_ *discordgo.VoiceConnection, m *discordgo.VoiceSpeakingUpdate) {
-					log.Info(
-						"speaking",
-						"user",
-						m.UserID,
-						"ssrc",
-						m.SSRC,
-						"speaking",
-						m.Speaking,
-					)
-
-					_, err := dbpool.Exec(context.Background(),
-						"INSERT INTO ssrc_mappings (guild_id, channel_id, user_id, ssrc) VALUES ($1, $2, $3, $4) ON CONFLICT (guild_id, channel_id, ssrc) DO UPDATE SET user_id = $3",
-						vc.GuildID, vc.ChannelID, m.UserID, m.SSRC)
-					if err != nil {
-						log.Error("Failed to insert/update SSRC mapping", "error", err)
-					}
-				},
-			)
-
-			for pkt := range vc.OpusRecv {
-				log.Info(
-					"opus",
-					"token",
-					discord.Identify.Token,
-					"session",
-					vc.SessionID,
-					"g",
-					vc.GuildID,
-					"c",
-					vc.ChannelID,
-					"ssrc",
-					pkt.SSRC,
-					"seq",
-					pkt.Sequence,
-					"ts",
-					pkt.Timestamp,
-					"n",
-					len(pkt.Opus),
-				)
-
-				// Insert opus packet into PostgreSQL
-				_, err := dbpool.Exec(context.Background(),
-					"INSERT INTO opus_packets (guild_id, channel_id, ssrc, sequence, timestamp, opus_data) VALUES ($1, $2, $3, $4, $5, $6)",
-					vc.GuildID, vc.ChannelID, pkt.SSRC, pkt.Sequence, pkt.Timestamp, pkt.Opus)
-
-				if err != nil {
-					log.Error("Failed to insert opus packet", "error", err)
-				}
-			}
-
-		},
-	)
 
 	log.Info("discord", "status", discord.State.User.Username)
 
