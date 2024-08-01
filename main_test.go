@@ -4,8 +4,10 @@ import (
 	"testing"
 )
 
-func TestMain(t *testing.T) {
-	// This is a placeholder test
-	// In a real scenario, you'd test the actual functionality of your main package
-	t.Log("Main package test executed")
+func TestGreet(t *testing.T) {
+	result := greet("node.town")
+	expected := "Hello, node.town!"
+	if result != expected {
+		t.Errorf("greet(\"node.town\") = %q, want %q", result, expected)
+	}
 }
