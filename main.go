@@ -330,8 +330,6 @@ var listenPacketsCmd = &cobra.Command{
 
 		var lastPrintTime time.Time
 		packetCount := 0
-		var elapsedTimes []time.Duration
-		var minElapsed, maxElapsed time.Duration
 
 		for {
 			notification, err := conn.Conn().
@@ -350,37 +348,11 @@ var listenPacketsCmd = &cobra.Command{
 
 			packetCount++
 			now := time.Now()
-			elapsed := now.Sub(lastPrintTime)
-			elapsedTimes = append(elapsedTimes, elapsed)
 
 			if lastPrintTime.IsZero() || now.Sub(lastPrintTime) >= time.Second {
-				var avgElapsed time.Duration
-				if len(elapsedTimes) > 0 {
-					sum := time.Duration(0)
-					minElapsed = elapsedTimes[0]
-					maxElapsed = elapsedTimes[0]
-					for _, t := range elapsedTimes {
-						sum += t
-						if t < minElapsed {
-							minElapsed = t
-						}
-						if t > maxElapsed {
-							maxElapsed = t
-						}
-					}
-					avgElapsed = sum / time.Duration(len(elapsedTimes))
-				}
-
-				log.Info("Opus packets received",
-					"count", packetCount,
-					"elapsed_ms", now.Sub(lastPrintTime).Milliseconds(),
-					"avg_ms", avgElapsed.Milliseconds(),
-					"min_ms", minElapsed.Milliseconds(),
-					"max_ms", maxElapsed.Milliseconds(),
-				)
+				log.Info("Opus packets received", "count", packetCount)
 				lastPrintTime = now
 				packetCount = 0
-				elapsedTimes = nil
 			}
 		}
 	},
