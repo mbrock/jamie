@@ -63,6 +63,32 @@ func (b *Bot) handleVoiceStateUpdate(
 	m *discordgo.VoiceStateUpdate,
 ) {
 	log.Info("voice", "user", m.UserID, "channel", m.ChannelID)
+
+	_, err := b.DBPool.Exec(
+		context.Background(),
+		`INSERT INTO voice_state_events (
+			guild_id, channel_id, user_id, session_id, 
+			deaf, mute, self_deaf, self_mute, 
+			self_stream, self_video, suppress, 
+			request_to_speak_timestamp
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+		m.GuildID,
+		m.ChannelID,
+		m.UserID,
+		m.SessionID,
+		m.Deaf,
+		m.Mute,
+		m.SelfDeaf,
+		m.SelfMute,
+		m.SelfStream,
+		m.SelfVideo,
+		m.Suppress,
+		m.RequestToSpeakTimestamp,
+	)
+
+	if err != nil {
+		log.Error("Failed to insert voice state event", "error", err)
+	}
 }
 
 func (b *Bot) handleVoiceServerUpdate(

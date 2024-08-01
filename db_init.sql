@@ -17,3 +17,20 @@ CREATE TABLE IF NOT EXISTS opus_packets (
     opus_data BYTEA,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS voice_state_events (
+    id SERIAL PRIMARY KEY,
+    guild_id TEXT,
+    channel_id TEXT,
+    user_id TEXT,
+    session_id TEXT,
+    deaf BOOLEAN,
+    mute BOOLEAN,
+    self_deaf BOOLEAN,
+    self_mute BOOLEAN,
+    self_stream BOOLEAN,
+    self_video BOOLEAN,
+    suppress BOOLEAN,
+    request_to_speak_timestamp TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
