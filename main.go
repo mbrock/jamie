@@ -50,6 +50,50 @@ func (b *Bot) handleGuildCreate(
 		log.Error("command", "error", err)
 	}
 	log.Info("app command", "id", cmd.ID)
+
+	// Find the most recently active voice channel
+	var latestChannel *discordgo.Channel
+	var latestTimestamp int64
+
+	for _, channel := range m.Guild.Channels {
+		if channel.Type == discordgo.ChannelTypeGuildVoice {
+			for _, voice := range m.Guild.VoiceStates {
+				if voice.ChannelID == channel.ID {
+					// Use the channel with the most recent activity
+					if voice.RequestToSpeakTimestamp != nil && voice.RequestToSpeakTimestamp.UnixNano() > latestTimestamp {
+						latestChannel = channel
+						latestTimestamp = voice.RequestToSpeakTimestamp.UnixNano()
+					}
+				}
+			}
+		}
+	}
+
+	// Join the latest active channel if found
+	if latestChannel != nil {
+		vc, err := s.ChannelVoiceJoin(m.ID, latestChannel.ID, false, false)
+		if err != nil {
+			log.Error("Failed to join voice channel", "guild", m.ID, "channel", latestChannel.ID, "error", err)
+		} else {
+			log.Info("Joined voice channel", "guild", m.ID, "channel", latestChannel.ID)
+			vc.AddHandler(b.handleVoiceSpeakingUpdate)
+			go b.handleOpusPackets(vc)
+
+			// Save the channel join information
+			_, err = b.DBPool.Exec(
+				context.Background(),
+				`INSERT INTO bot_voice_joins (guild_id, channel_id, session_id) VALUES ($1, $2, $3)`,
+				m.ID,
+				latestChannel.ID,
+				b.SessionID,
+			)
+			if err != nil {
+				log.Error("Failed to insert bot voice join", "error", err)
+			}
+		}
+	} else {
+		log.Info("No active voice channels found in guild", "guild", m.ID)
+	}
 }
 
 func (b *Bot) handleVoiceStateUpdate(
