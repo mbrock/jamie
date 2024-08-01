@@ -358,6 +358,81 @@ var listenPacketsCmd = &cobra.Command{
 	},
 }
 
+var packetInfoCmd = &cobra.Command{
+	Use:   "packetInfo",
+	Short: "Get information about opus packets",
+	Long:  `This command retrieves information about opus packets for a given SSRC within a specified time range.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		ssrc, _ := cmd.Flags().GetInt64("ssrc")
+		startTime, _ := cmd.Flags().GetString("start")
+		endTime, _ := cmd.Flags().GetString("end")
+
+		// Connect to PostgreSQL
+		dbpool, err := pgxpool.Connect(
+			context.Background(),
+			os.Getenv("DATABASE_URL"),
+		)
+		if err != nil {
+			log.Fatal("Unable to connect to database", "error", err)
+		}
+		defer dbpool.Close()
+
+		// Query the database
+		rows, err := dbpool.Query(context.Background(), `
+			SELECT id, sequence, timestamp, created_at
+			FROM opus_packets
+			WHERE ssrc = $1 AND created_at BETWEEN $2 AND $3
+			ORDER BY created_at
+		`, ssrc, startTime, endTime)
+		if err != nil {
+			log.Fatal("Error querying database", "error", err)
+		}
+		defer rows.Close()
+
+		var packetCount int
+		var firstTimestamp, lastTimestamp time.Time
+		for rows.Next() {
+			var id int
+			var sequence int
+			var timestamp int64
+			var createdAt time.Time
+			err := rows.Scan(&id, &sequence, &timestamp, &createdAt)
+			if err != nil {
+				log.Error("Error scanning row", "error", err)
+				continue
+			}
+
+			if packetCount == 0 {
+				firstTimestamp = createdAt
+			}
+			lastTimestamp = createdAt
+			packetCount++
+
+			log.Info("Packet info",
+				"id", id,
+				"sequence", sequence,
+				"timestamp", timestamp,
+				"created_at", createdAt,
+			)
+		}
+
+		log.Info("Summary",
+			"total_packets", packetCount,
+			"time_range", lastTimestamp.Sub(firstTimestamp),
+		)
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(listenCmd)
+	rootCmd.AddCommand(listenPacketsCmd)
+	rootCmd.AddCommand(packetInfoCmd)
+
+	packetInfoCmd.Flags().Int64P("ssrc", "s", 0, "SSRC to filter packets")
+	packetInfoCmd.Flags().StringP("start", "f", time.Now().Add(-10*time.Minute).Format(time.RFC3339), "Start time (RFC3339 format)")
+	packetInfoCmd.Flags().StringP("end", "t", time.Now().Format(time.RFC3339), "End time (RFC3339 format)")
+}
+
 func init() {
 	rootCmd.AddCommand(listenCmd)
 	rootCmd.AddCommand(listenPacketsCmd)
