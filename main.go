@@ -327,6 +327,9 @@ var listenPacketsCmd = &cobra.Command{
 
 		log.Info("Listening for new opus packets. Press CTRL-C to exit.")
 
+		var lastPrintTime time.Time
+		packetCount := 0
+
 		for {
 			notification, err := conn.Conn().
 				WaitForNotification(context.Background())
@@ -342,13 +345,18 @@ var listenPacketsCmd = &cobra.Command{
 				continue
 			}
 
-			log.Info("New opus packet",
-				"guild_id", packet["guild_id"],
-				"channel_id", packet["channel_id"],
-				"ssrc", packet["ssrc"],
-				"sequence", packet["sequence"],
-				"timestamp", packet["timestamp"],
-			)
+			packetCount++
+			now := time.Now()
+
+			if lastPrintTime.IsZero() || now.Sub(lastPrintTime) >= time.Second {
+				elapsedMs := now.Sub(lastPrintTime).Milliseconds()
+				log.Info("Opus packets received",
+					"count", packetCount,
+					"elapsed_ms", elapsedMs,
+				)
+				lastPrintTime = now
+				packetCount = 0
+			}
 		}
 	},
 }
