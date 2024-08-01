@@ -51,51 +51,26 @@ func (b *Bot) handleGuildCreate(
 	}
 	log.Info("app command", "id", cmd.ID)
 
-	// Find the most recently active voice channel
-	var latestChannel *discordgo.Channel
-	var latestTimestamp int64
+	// Check if we should join a voice channel in this guild
+	var channelID string
+	err = b.DBPool.QueryRow(context.Background(),
+		`SELECT channel_id
+		 FROM bot_voice_joins
+		 WHERE guild_id = $1 AND session_id = $2`,
+		m.ID, b.SessionID).Scan(&channelID)
 
-	for _, channel := range m.Guild.Channels {
-		if channel.Type == discordgo.ChannelTypeGuildVoice {
-			for _, voice := range m.Guild.VoiceStates {
-				if voice.ChannelID == channel.ID {
-					// Use the channel with the most recent activity
-					if voice.RequestToSpeakTimestamp != nil && voice.RequestToSpeakTimestamp.UnixNano() > latestTimestamp {
-						latestChannel = channel
-						latestTimestamp = voice.RequestToSpeakTimestamp.UnixNano()
-					}
-				}
-			}
-		}
-	}
-
-	// Join the latest active channel if found
-	if latestChannel != nil {
-		vc, err := s.ChannelVoiceJoin(m.ID, latestChannel.ID, false, false)
+	if err == nil && channelID != "" {
+		// We have a record of joining a channel in this guild, so let's join it
+		vc, err := s.ChannelVoiceJoin(m.ID, channelID, false, false)
 		if err != nil {
-			log.Error("Failed to join voice channel", "guild", m.ID, "channel", latestChannel.ID, "error", err)
+			log.Error("Failed to join voice channel", "guild", m.ID, "channel", channelID, "error", err)
 		} else {
-			log.Info("Joined voice channel", "guild", m.ID, "channel", latestChannel.ID)
+			log.Info("Rejoined voice channel", "guild", m.ID, "channel", channelID)
 			vc.AddHandler(b.handleVoiceSpeakingUpdate)
 			go b.handleOpusPackets(vc)
-
-			// Save or update the channel join information
-			_, err = b.DBPool.Exec(
-				context.Background(),
-				`INSERT INTO bot_voice_joins (guild_id, channel_id, session_id) 
-				 VALUES ($1, $2, $3)
-				 ON CONFLICT (guild_id, session_id) 
-				 DO UPDATE SET channel_id = $2, joined_at = CURRENT_TIMESTAMP`,
-				m.ID,
-				latestChannel.ID,
-				b.SessionID,
-			)
-			if err != nil {
-				log.Error("Failed to upsert bot voice join", "error", err)
-			}
 		}
-	} else {
-		log.Info("No active voice channels found in guild", "guild", m.ID)
+	} else if err != pgx.ErrNoRows {
+		log.Error("Failed to query bot voice joins", "error", err)
 	}
 }
 
@@ -311,41 +286,8 @@ var listenCmd = &cobra.Command{
 }
 
 func (b *Bot) rejoinChannels() {
-	rows, err := b.DBPool.Query(context.Background(),
-		`SELECT guild_id, channel_id
-		 FROM bot_voice_joins
-		 WHERE session_id = $1`,
-		b.SessionID)
-	
-	if err != nil {
-		log.Error("Failed to query bot voice joins", "error", err)
-		return
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var guildID, channelID string
-		err := rows.Scan(&guildID, &channelID)
-		if err != nil {
-			log.Error("Failed to scan bot voice join row", "error", err)
-			continue
-		}
-
-		vc, err := b.Discord.ChannelVoiceJoin(guildID, channelID, false, false)
-		if err != nil {
-			log.Error("Failed to rejoin voice channel", "guild", guildID, "channel", channelID, "error", err)
-			continue
-		}
-
-		vc.AddHandler(b.handleVoiceSpeakingUpdate)
-		go b.handleOpusPackets(vc)
-
-		log.Info("Rejoined voice channel", "guild", guildID, "channel", channelID)
-	}
-
-	if rows.Err() != nil {
-		log.Error("Error iterating over bot voice joins", "error", rows.Err())
-	}
+	// This function is now empty as joining is handled in handleGuildCreate
+	log.Info("Rejoining channels is now handled in handleGuildCreate")
 }
 
 func init() {
