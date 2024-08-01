@@ -34,3 +34,10 @@ CREATE TABLE IF NOT EXISTS voice_state_events (
     request_to_speak_timestamp TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS discord_sessions (
+    id SERIAL PRIMARY KEY,
+    bot_token TEXT,
+    user_id TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

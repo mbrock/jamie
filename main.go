@@ -217,6 +217,17 @@ func main() {
 
 	log.Info("discord", "status", discord.State.User.Username)
 
+	// Insert a record into the discord_sessions table
+	_, err = dbpool.Exec(
+		context.Background(),
+		`INSERT INTO discord_sessions (bot_token, user_id) VALUES ($1, $2)`,
+		os.Getenv("DISCORD_TOKEN"),
+		discord.State.User.ID,
+	)
+	if err != nil {
+		log.Error("Failed to insert discord session", "error", err)
+	}
+
 	// wait for CTRL-C
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt)
