@@ -73,3 +73,6 @@ INSERT ON opus_packets FOR EACH ROW EXECUTE FUNCTION notify_new_opus_packet();
 END IF;
 
 END $$;
+
+-- Create an index on the opus_packets table
+CREATE INDEX IF NOT EXISTS idx_opus_packets_ssrc_created_at ON opus_packets (ssrc, created_at);
