@@ -49,5 +49,6 @@ CREATE TABLE IF NOT EXISTS bot_voice_joins (
     guild_id TEXT NOT NULL,
     channel_id TEXT NOT NULL,
     session_id INTEGER REFERENCES discord_sessions(id),
-    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (guild_id, session_id)
 );

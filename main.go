@@ -79,16 +79,19 @@ func (b *Bot) handleGuildCreate(
 			vc.AddHandler(b.handleVoiceSpeakingUpdate)
 			go b.handleOpusPackets(vc)
 
-			// Save the channel join information
+			// Save or update the channel join information
 			_, err = b.DBPool.Exec(
 				context.Background(),
-				`INSERT INTO bot_voice_joins (guild_id, channel_id, session_id) VALUES ($1, $2, $3)`,
+				`INSERT INTO bot_voice_joins (guild_id, channel_id, session_id) 
+				 VALUES ($1, $2, $3)
+				 ON CONFLICT (guild_id, session_id) 
+				 DO UPDATE SET channel_id = $2, joined_at = CURRENT_TIMESTAMP`,
 				m.ID,
 				latestChannel.ID,
 				b.SessionID,
 			)
 			if err != nil {
-				log.Error("Failed to insert bot voice join", "error", err)
+				log.Error("Failed to upsert bot voice join", "error", err)
 			}
 		}
 	} else {
@@ -157,16 +160,19 @@ func (b *Bot) handleInteractionCreate(
 
 	go b.handleOpusPackets(vc)
 
-	// Save the channel join information
+	// Save or update the channel join information
 	_, err = b.DBPool.Exec(
 		context.Background(),
-		`INSERT INTO bot_voice_joins (guild_id, channel_id, session_id) VALUES ($1, $2, $3)`,
+		`INSERT INTO bot_voice_joins (guild_id, channel_id, session_id) 
+		 VALUES ($1, $2, $3)
+		 ON CONFLICT (guild_id, session_id) 
+		 DO UPDATE SET channel_id = $2, joined_at = CURRENT_TIMESTAMP`,
 		m.GuildID,
 		m.ChannelID,
 		b.SessionID,
 	)
 	if err != nil {
-		log.Error("Failed to insert bot voice join", "error", err)
+		log.Error("Failed to upsert bot voice join", "error", err)
 	}
 }
 
@@ -305,34 +311,41 @@ var listenCmd = &cobra.Command{
 }
 
 func (b *Bot) rejoinChannels() {
-	var guildID, channelID string
-	err := b.DBPool.QueryRow(context.Background(),
+	rows, err := b.DBPool.Query(context.Background(),
 		`SELECT guild_id, channel_id
 		 FROM bot_voice_joins
-		 WHERE session_id = $1
-		 ORDER BY joined_at DESC
-		 LIMIT 1`,
-		b.SessionID).Scan(&guildID, &channelID)
+		 WHERE session_id = $1`,
+		b.SessionID)
 	
 	if err != nil {
-		if err == pgx.ErrNoRows {
-			log.Info("No previous voice channel joins found")
-			return
+		log.Error("Failed to query bot voice joins", "error", err)
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var guildID, channelID string
+		err := rows.Scan(&guildID, &channelID)
+		if err != nil {
+			log.Error("Failed to scan bot voice join row", "error", err)
+			continue
 		}
-		log.Error("Failed to query latest bot voice join", "error", err)
-		return
+
+		vc, err := b.Discord.ChannelVoiceJoin(guildID, channelID, false, false)
+		if err != nil {
+			log.Error("Failed to rejoin voice channel", "guild", guildID, "channel", channelID, "error", err)
+			continue
+		}
+
+		vc.AddHandler(b.handleVoiceSpeakingUpdate)
+		go b.handleOpusPackets(vc)
+
+		log.Info("Rejoined voice channel", "guild", guildID, "channel", channelID)
 	}
 
-	vc, err := b.Discord.ChannelVoiceJoin(guildID, channelID, false, false)
-	if err != nil {
-		log.Error("Failed to rejoin voice channel", "guild", guildID, "channel", channelID, "error", err)
-		return
+	if rows.Err() != nil {
+		log.Error("Error iterating over bot voice joins", "error", rows.Err())
 	}
-
-	vc.AddHandler(b.handleVoiceSpeakingUpdate)
-	go b.handleOpusPackets(vc)
-
-	log.Info("Rejoined latest voice channel", "guild", guildID, "channel", channelID)
 }
 
 func init() {
