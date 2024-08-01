@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"time"
 
 	"encoding/json"
 
@@ -348,7 +349,8 @@ var listenPacketsCmd = &cobra.Command{
 			packetCount++
 			now := time.Now()
 
-			if lastPrintTime.IsZero() || now.Sub(lastPrintTime) >= time.Second {
+			if lastPrintTime.IsZero() ||
+				now.Sub(lastPrintTime) >= time.Second {
 				elapsedMs := now.Sub(lastPrintTime).Milliseconds()
 				log.Info("Opus packets received",
 					"count", packetCount,
