@@ -22,15 +22,7 @@ type Bot struct {
 }
 
 func (b *Bot) handleEvent(s *discordgo.Session, m *discordgo.Event) {
-	log.Info(
-		"message",
-		"op",
-		m.Operation,
-		"type",
-		m.Type,
-		"data",
-		m.Struct,
-	)
+	log.Info("message", "op", m.Operation, "type", m.Type)
 }
 
 func (b *Bot) handleGuildCreate(
@@ -76,7 +68,7 @@ func (b *Bot) handleVoiceStateUpdate(
 		m.GuildID,
 		m.ChannelID,
 		m.UserID,
-		m.SessionID,
+		b.SessionID,
 		m.Deaf,
 		m.Mute,
 		m.SelfDeaf,
