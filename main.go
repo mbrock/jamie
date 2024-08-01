@@ -13,6 +13,7 @@ import (
 	pgx "github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/spf13/cobra"
+	"encoding/json"
 )
 
 //go:embed db_init.sql
@@ -297,8 +298,62 @@ var listenCmd = &cobra.Command{
 	},
 }
 
+var listenPacketsCmd = &cobra.Command{
+	Use:   "listen-packets",
+	Short: "Listen for new opus packets",
+	Long:  `This command listens for new opus packets and prints information about each new packet.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		// Connect to PostgreSQL
+		dbpool, err := pgxpool.Connect(
+			context.Background(),
+			os.Getenv("DATABASE_URL"),
+		)
+		if err != nil {
+			log.Fatal("Unable to connect to database", "error", err)
+		}
+		defer dbpool.Close()
+
+		conn, err := dbpool.Acquire(context.Background())
+		if err != nil {
+			log.Fatal("Error acquiring connection", "error", err)
+		}
+		defer conn.Release()
+
+		_, err = conn.Exec(context.Background(), "LISTEN new_opus_packet")
+		if err != nil {
+			log.Fatal("Error listening to channel", "error", err)
+		}
+
+		log.Info("Listening for new opus packets. Press CTRL-C to exit.")
+
+		for {
+			notification, err := conn.Conn().WaitForNotification(context.Background())
+			if err != nil {
+				log.Error("Error waiting for notification", "error", err)
+				continue
+			}
+
+			var packet map[string]interface{}
+			err = json.Unmarshal([]byte(notification.Payload), &packet)
+			if err != nil {
+				log.Error("Error unmarshalling payload", "error", err)
+				continue
+			}
+
+			log.Info("New opus packet",
+				"guild_id", packet["guild_id"],
+				"channel_id", packet["channel_id"],
+				"ssrc", packet["ssrc"],
+				"sequence", packet["sequence"],
+				"timestamp", packet["timestamp"],
+			)
+		}
+	},
+}
+
 func init() {
 	rootCmd.AddCommand(listenCmd)
+	rootCmd.AddCommand(listenPacketsCmd)
 }
 
 func main() {
