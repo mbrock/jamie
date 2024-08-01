@@ -19,29 +19,15 @@ func main() {
 	}
 	defer dbpool.Close()
 
-	// Create tables if they don't exist
-	_, err = dbpool.Exec(context.Background(), `
-		CREATE TABLE IF NOT EXISTS ssrc_mappings (
-			guild_id TEXT,
-			channel_id TEXT,
-			user_id TEXT,
-			ssrc BIGINT,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-			PRIMARY KEY (guild_id, channel_id, ssrc)
-		);
-		CREATE TABLE IF NOT EXISTS opus_packets (
-			id SERIAL PRIMARY KEY,
-			guild_id TEXT,
-			channel_id TEXT,
-			ssrc BIGINT,
-			sequence INTEGER,
-			timestamp BIGINT,
-			opus_data BYTEA,
-			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-		);
-	`)
+	// Read and execute the SQL file to create tables
+	sqlFile, err := os.ReadFile("db_init.sql")
 	if err != nil {
-		log.Fatal("Failed to create tables", "error", err)
+		log.Fatal("Failed to read db_init.sql", "error", err)
+	}
+
+	_, err = dbpool.Exec(context.Background(), string(sqlFile))
+	if err != nil {
+		log.Fatal("Failed to execute db_init.sql", "error", err)
 	}
 
 	discord, err := discordgo.New(
