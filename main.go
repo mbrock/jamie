@@ -392,6 +392,9 @@ var packetInfoCmd = &cobra.Command{
 
 		var packetCount int
 		var firstTimestamp, lastTimestamp time.Time
+		var lastPacketTimestamp int64
+		var gapCount int
+
 		for rows.Next() {
 			var id int
 			var sequence int
@@ -405,14 +408,29 @@ var packetInfoCmd = &cobra.Command{
 
 			if packetCount == 0 {
 				firstTimestamp = createdAt
+				lastPacketTimestamp = timestamp
+			} else {
+				timestampDiff := timestamp - lastPacketTimestamp
+				if timestampDiff > 960 { // 960 represents 20ms in the Opus timestamp units
+					gapCount++
+					gapDuration := time.Duration(timestampDiff) * time.Millisecond / 48 // Convert to real time (Opus uses 48kHz)
+					log.Info("Audio gap detected",
+						"gap_duration", gapDuration,
+						"packet_id", id,
+						"created_at", createdAt,
+					)
+				}
 			}
+
 			lastTimestamp = createdAt
+			lastPacketTimestamp = timestamp
 			packetCount++
 		}
 
 		log.Info("Summary",
 			"total_packets", packetCount,
 			"time_range", lastTimestamp.Sub(firstTimestamp),
+			"gap_count", gapCount,
 		)
 	},
 }
