@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"embed"
 	"fmt"
 	"os"
 	"os/signal"
@@ -11,6 +12,9 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 )
 
+//go:embed db_init.sql
+var sqlFS embed.FS
+
 func main() {
 	// Connect to PostgreSQL
 	dbpool, err := pgxpool.Connect(context.Background(), os.Getenv("DATABASE_URL"))
@@ -19,15 +23,15 @@ func main() {
 	}
 	defer dbpool.Close()
 
-	// Read and execute the SQL file to create tables
-	sqlFile, err := os.ReadFile("db_init.sql")
+	// Read and execute the embedded SQL file to create tables
+	sqlFile, err := sqlFS.ReadFile("db_init.sql")
 	if err != nil {
-		log.Fatal("Failed to read db_init.sql", "error", err)
+		log.Fatal("Failed to read embedded db_init.sql", "error", err)
 	}
 
 	_, err = dbpool.Exec(context.Background(), string(sqlFile))
 	if err != nil {
-		log.Fatal("Failed to execute db_init.sql", "error", err)
+		log.Fatal("Failed to execute embedded db_init.sql", "error", err)
 	}
 
 	discord, err := discordgo.New(
