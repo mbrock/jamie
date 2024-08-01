@@ -305,37 +305,34 @@ var listenCmd = &cobra.Command{
 }
 
 func (b *Bot) rejoinChannels() {
-	rows, err := b.DBPool.Query(context.Background(),
-		`SELECT DISTINCT ON (guild_id, channel_id) guild_id, channel_id
+	var guildID, channelID string
+	err := b.DBPool.QueryRow(context.Background(),
+		`SELECT guild_id, channel_id
 		 FROM bot_voice_joins
 		 WHERE session_id = $1
-		 ORDER BY guild_id, channel_id, joined_at DESC`,
-		b.SessionID)
+		 ORDER BY joined_at DESC
+		 LIMIT 1`,
+		b.SessionID).Scan(&guildID, &channelID)
+	
 	if err != nil {
-		log.Error("Failed to query bot voice joins", "error", err)
+		if err == pgx.ErrNoRows {
+			log.Info("No previous voice channel joins found")
+			return
+		}
+		log.Error("Failed to query latest bot voice join", "error", err)
 		return
 	}
-	defer rows.Close()
 
-	for rows.Next() {
-		var guildID, channelID string
-		err := rows.Scan(&guildID, &channelID)
-		if err != nil {
-			log.Error("Failed to scan bot voice join row", "error", err)
-			continue
-		}
-
-		vc, err := b.Discord.ChannelVoiceJoin(guildID, channelID, false, false)
-		if err != nil {
-			log.Error("Failed to rejoin voice channel", "guild", guildID, "channel", channelID, "error", err)
-			continue
-		}
-
-		vc.AddHandler(b.handleVoiceSpeakingUpdate)
-		go b.handleOpusPackets(vc)
-
-		log.Info("Rejoined voice channel", "guild", guildID, "channel", channelID)
+	vc, err := b.Discord.ChannelVoiceJoin(guildID, channelID, false, false)
+	if err != nil {
+		log.Error("Failed to rejoin voice channel", "guild", guildID, "channel", channelID, "error", err)
+		return
 	}
+
+	vc.AddHandler(b.handleVoiceSpeakingUpdate)
+	go b.handleOpusPackets(vc)
+
+	log.Info("Rejoined latest voice channel", "guild", guildID, "channel", channelID)
 }
 
 func init() {
