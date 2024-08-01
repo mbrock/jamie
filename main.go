@@ -10,6 +10,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/spf13/cobra"
 )
 
 //go:embed db_init.sql
@@ -156,77 +157,99 @@ func (b *Bot) handleOpusPackets(vc *discordgo.VoiceConnection) {
 	}
 }
 
-func main() {
-	// Connect to PostgreSQL
-	dbpool, err := pgxpool.Connect(
-		context.Background(),
-		os.Getenv("DATABASE_URL"),
-	)
-	if err != nil {
-		log.Fatal("Unable to connect to database", "error", err)
-	}
-	defer dbpool.Close()
+var rootCmd = &cobra.Command{
+	Use:   "jamie",
+	Short: "Jamie is a Discord bot for voice channel interactions",
+	Long:  `Jamie is a Discord bot that can join voice channels and perform various operations.`,
+}
 
-	// Read and execute the embedded SQL file to create tables
-	sqlFile, err := sqlFS.ReadFile("db_init.sql")
-	if err != nil {
-		log.Fatal("Failed to read embedded db_init.sql", "error", err)
-	}
-
-	_, err = dbpool.Exec(context.Background(), string(sqlFile))
-	if err != nil {
-		log.Fatal("Failed to execute embedded db_init.sql", "error", err)
-	}
-
-	discord, err := discordgo.New(
-		fmt.Sprintf("Bot %s", os.Getenv("DISCORD_TOKEN")),
-	)
-	if err != nil {
-		panic(err)
-	}
-
-	discord.LogLevel = discordgo.LogInformational
-
-	bot := &Bot{
-		Discord: discord,
-		DBPool:  dbpool,
-	}
-
-	discord.AddHandler(bot.handleEvent)
-	discord.AddHandler(bot.handleGuildCreate)
-	discord.AddHandler(bot.handleVoiceStateUpdate)
-	discord.AddHandler(bot.handleVoiceServerUpdate)
-	discord.AddHandler(bot.handleInteractionCreate)
-
-	err = discord.Open()
-	if err != nil {
-		panic(err)
-	}
-
-	defer func() {
-		err := discord.Close()
+var listenCmd = &cobra.Command{
+	Use:   "listen",
+	Short: "Start listening in Discord voice channels",
+	Long:  `This command starts the Jamie bot and makes it listen in Discord voice channels.`,
+	Run: func(cmd *cobra.Command, args []string) {
+		// Connect to PostgreSQL
+		dbpool, err := pgxpool.Connect(
+			context.Background(),
+			os.Getenv("DATABASE_URL"),
+		)
 		if err != nil {
-			log.Error("discord", "close", err)
+			log.Fatal("Unable to connect to database", "error", err)
 		}
-	}()
+		defer dbpool.Close()
 
-	log.Info("discord", "status", discord.State.User.Username)
+		// Read and execute the embedded SQL file to create tables
+		sqlFile, err := sqlFS.ReadFile("db_init.sql")
+		if err != nil {
+			log.Fatal("Failed to read embedded db_init.sql", "error", err)
+		}
 
-	// Insert a record into the discord_sessions table
-	var sessionID int
-	err = dbpool.QueryRow(
-		context.Background(),
-		`INSERT INTO discord_sessions (bot_token, user_id) VALUES ($1, $2) RETURNING id`,
-		os.Getenv("DISCORD_TOKEN"),
-		discord.State.User.ID,
-	).Scan(&sessionID)
-	if err != nil {
-		log.Error("Failed to insert discord session", "error", err)
+		_, err = dbpool.Exec(context.Background(), string(sqlFile))
+		if err != nil {
+			log.Fatal("Failed to execute embedded db_init.sql", "error", err)
+		}
+
+		discord, err := discordgo.New(
+			fmt.Sprintf("Bot %s", os.Getenv("DISCORD_TOKEN")),
+		)
+		if err != nil {
+			log.Fatal("Error creating Discord session", "error", err)
+		}
+
+		discord.LogLevel = discordgo.LogInformational
+
+		bot := &Bot{
+			Discord: discord,
+			DBPool:  dbpool,
+		}
+
+		discord.AddHandler(bot.handleEvent)
+		discord.AddHandler(bot.handleGuildCreate)
+		discord.AddHandler(bot.handleVoiceStateUpdate)
+		discord.AddHandler(bot.handleVoiceServerUpdate)
+		discord.AddHandler(bot.handleInteractionCreate)
+
+		err = discord.Open()
+		if err != nil {
+			log.Fatal("Error opening Discord session", "error", err)
+		}
+
+		defer func() {
+			err := discord.Close()
+			if err != nil {
+				log.Error("discord", "close", err)
+			}
+		}()
+
+		log.Info("discord", "status", discord.State.User.Username)
+
+		// Insert a record into the discord_sessions table
+		var sessionID int
+		err = dbpool.QueryRow(
+			context.Background(),
+			`INSERT INTO discord_sessions (bot_token, user_id) VALUES ($1, $2) RETURNING id`,
+			os.Getenv("DISCORD_TOKEN"),
+			discord.State.User.ID,
+		).Scan(&sessionID)
+		if err != nil {
+			log.Error("Failed to insert discord session", "error", err)
+		}
+		bot.SessionID = sessionID
+
+		// wait for CTRL-C
+		log.Info("Jamie is now listening. Press CTRL-C to exit.")
+		sig := make(chan os.Signal, 1)
+		signal.Notify(sig, os.Interrupt)
+		<-sig
+	},
+}
+
+func init() {
+	rootCmd.AddCommand(listenCmd)
+}
+
+func main() {
+	if err := rootCmd.Execute(); err != nil {
+		log.Fatal("Error executing root command", "error", err)
 	}
-	bot.SessionID = sessionID
-
-	// wait for CTRL-C
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt)
-	<-sig
 }
