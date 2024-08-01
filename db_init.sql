@@ -54,14 +54,22 @@ CREATE TABLE IF NOT EXISTS bot_voice_joins (
 );
 
 -- Create a function to notify about new opus packets
-CREATE OR REPLACE FUNCTION notify_new_opus_packet() RETURNS TRIGGER AS $$
-BEGIN
-    PERFORM pg_notify('new_opus_packet', row_to_json(NEW)::text);
-    RETURN NEW;
+CREATE OR REPLACE FUNCTION notify_new_opus_packet() RETURNS TRIGGER AS $$ BEGIN PERFORM pg_notify('new_opus_packet', row_to_json(NEW)::text);
+
+RETURN NEW;
+
 END;
+
 $$ LANGUAGE plpgsql;
 
--- Create a trigger that calls this function after each insert
-CREATE TRIGGER opus_packet_inserted
-AFTER INSERT ON opus_packets
-FOR EACH ROW EXECUTE FUNCTION notify_new_opus_packet();
+DO $$ BEGIN IF NOT EXISTS (
+    SELECT 1
+    FROM pg_trigger
+    WHERE tgname = 'opus_packet_inserted'
+) THEN CREATE TRIGGER opus_packet_inserted
+AFTER
+INSERT ON opus_packets FOR EACH ROW EXECUTE FUNCTION notify_new_opus_packet();
+
+END IF;
+
+END $$;
