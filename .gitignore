@@ -10,5 +10,5 @@ jamie
 /db/models.go
 /*.ogg
 /*.bak
-
 *_templ.go
+/node_modules

@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"jamie/db"
+
 	"github.com/charmbracelet/log"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
-	"io"
-	"jamie/db"
 )
 
 type OggOpusWriter struct {
@@ -86,9 +87,9 @@ func GenerateOggOpusBlob(
 	packets, err := q.GetAudioPacketsInTimeRange(
 		context.Background(),
 		db.GetAudioPacketsInTimeRangeParams{
-			SessionID:  sessionID,
-			ReceivedAt: startTime,
-			ReceivedAt_2: endTime,
+			VoiceStreamID: sessionID,
+			ReceivedAt:    startTime,
+			ReceivedAt_2:  endTime,
 		},
 	)
 	if err != nil {

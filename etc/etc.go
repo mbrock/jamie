@@ -1,9 +1,10 @@
 package etc
 
 import (
-	"github.com/nrednav/cuid2"
 	"math"
 	"time"
+
+	"github.com/nrednav/cuid2"
 )
 
 func NewFreshID() string {
@@ -24,4 +25,15 @@ func JulianDayToTime(f float64) time.Time {
 	)
 
 	return t
+}
+
+func TimeToJulianDay(t time.Time) float64 {
+	// Julian date starts at noon on January 1, 4713 BC
+	const julianEpoch = 2440587.5 // Julian date for Unix epoch (January 1, 1970)
+
+	// Convert Unix timestamp to Julian day
+	unixTime := float64(t.Unix()) + float64(t.Nanosecond())/1e9
+	julianDay := (unixTime / 86400.0) + julianEpoch
+
+	return julianDay
 }

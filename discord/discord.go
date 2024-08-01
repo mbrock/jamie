@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"jamie/ai"
-	discordbot2 "jamie/audio"
 	"jamie/db"
 	"jamie/etc"
 	"sort"
@@ -102,11 +101,10 @@ func (bot *Bot) saveTextMessage(message *discordgo.Message) error {
 		context.Background(),
 		db.SaveTextMessageParams{
 			ID:               etc.NewFreshID(),
-			DiscordChannel:   message.ChannelID,
-			DiscordUser:      message.Author.ID,
+			DiscordChannelID: message.ChannelID,
+			DiscordUserID:    message.Author.ID,
 			DiscordMessageID: message.ID,
 			Content:          message.Content,
-			IsBot:            message.Author.Bot,
 		},
 	)
 }
@@ -338,20 +336,25 @@ func (bot *Bot) processTalkCommand(
 	m *discordgo.MessageCreate,
 	prompt string,
 ) (string, error) {
-	messages, err := bot.db.GetRecentTextMessages(
+	messages, err := bot.db.GetTextMessagesInTimeRange(
 		context.Background(),
-		db.GetRecentTextMessagesParams{
-			DiscordChannel: m.ChannelID,
-			Limit:          100,
+		db.GetTextMessagesInTimeRangeParams{
+			DiscordChannelID: m.ChannelID,
+			CreatedAt:        etc.TimeToJulianDay(m.Timestamp.Add(-12 * time.Hour)),
+			CreatedAt_2:      etc.TimeToJulianDay(m.Timestamp.Add(12 * time.Hour)),
 		},
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch today's messages: %w", err)
 	}
 
-	recognitions, err := bot.db.GetRecentRecognitions(
+	recognitions, err := bot.db.GetRecognitionResultsInTimeRange(
 		context.Background(),
-		100,
+		db.GetRecognitionResultsInTimeRangeParams{
+			VoiceSessionID: bot.voiceChat.Conn.SessionID,
+			CreatedAt:      etc.TimeToJulianDay(m.Timestamp.Add(-12 * time.Hour)),
+			CreatedAt_2:    etc.TimeToJulianDay(m.Timestamp.Add(12 * time.Hour)),
+		},
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch recent recognitions: %w", err)
@@ -368,9 +371,14 @@ func (bot *Bot) processTalkCommand(
 	}
 	var items []contextItem
 
+	myUserID, err := bot.discord.MyUserID()
+	if err != nil {
+		return "", fmt.Errorf("failed to get my user ID: %w", err)
+	}
+
 	for _, msg := range messages {
 		sender := "User"
-		if msg.IsBot {
+		if msg.DiscordUserID == myUserID {
 			sender = "Jamie"
 		}
 		items = append(items, contextItem{
@@ -383,7 +391,7 @@ func (bot *Bot) processTalkCommand(
 		items = append(items, contextItem{
 			content: fmt.Sprintf(
 				"%s: %s",
-				rec.DiscordUsername,
+				rec.DiscordUserID,
 				rec.Text,
 			),
 			createdAt: rec.CreatedAt,
@@ -414,9 +422,14 @@ func (bot *Bot) processTalkCommand(
 	response, err := bot.languageModel.ChatCompletion(
 		ctx,
 		(&ai.ChatCompletionRequest{
-			SystemPrompt: "You're Jamie, podcast assistant. You're in a studio with the hosts Daniel and Mikael. You can pull things up, look things up, etc. You only say one sentence at a time, or one question, or a confused expression. Let's go! But you also have to notice when you're stuck in a loop. Then remain calm and think about something soothing.",
-			MaxTokens:    140,
-			Temperature:  1.0,
+			SystemPrompt: `You're Jamie, podcast assistant. 
+			You're in a studio with the hosts Daniel and Mikael. 
+			You can pull things up, look things up, etc. 
+			You only say one sentence at a time, or one question, or a confused expression. 
+			Let's go! But you also have to notice when you're stuck in a loop. 
+			Then remain calm and think about something soothing.`,
+			MaxTokens:   140,
+			Temperature: 1.0,
 		}).WithUserMessage(contextBuilder.String()),
 	)
 
@@ -443,19 +456,6 @@ func (bot *Bot) processTalkCommand(
 
 	bot.log.Info("Final LLM response", "response", responseStr)
 	return responseStr, nil
-}
-
-func (bot *Bot) GenerateOggOpusBlob(
-	streamID string,
-	startSample, endSample int,
-) ([]byte, error) {
-	return discordbot2.GenerateOggOpusBlob(
-		bot.log,
-		bot.db,
-		streamID,
-		int64(startSample),
-		int64(endSample),
-	)
 }
 
 func (bot *Bot) TextToSpeech(ctx context.Context, text string, writer io.Writer) error {

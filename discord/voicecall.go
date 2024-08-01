@@ -44,7 +44,8 @@ func (bot *Bot) joinVoiceCall(guildID, channelID string) error {
 		return fmt.Errorf("failed to join voice channel: %w", err)
 	}
 
-	bot.log.Info("joined", "channel", channelID)
+	sessionID := vc.SessionID
+	bot.log.Info("joined", "channel", channelID, "session", sessionID)
 
 	bot.voiceChat = &VoiceChat{
 		Conn:      vc,
@@ -142,12 +143,12 @@ func (bot *Bot) processInboundAudioPacket(
 	}
 
 	// Save the audio packet
-	err = bot.db.SavePacket(context.Background(), db.SavePacketParams{
-		ID:        etc.NewFreshID(),
-		Stream:    streamID,
-		PacketSeq: int64(packet.Sequence),
-		SampleIdx: int64(packet.Timestamp),
-		Payload:   packet.Opus,
+	err = bot.db.InsertVoicePacket(context.Background(), db.InsertVoicePacketParams{
+		ID:            etc.NewFreshID(),
+		VoiceStreamID: streamID,
+		Sequence:      int64(packet.Sequence),
+		SampleIdx:     int64(packet.Timestamp),
+		Payload:       packet.Opus,
 	})
 	if err != nil {
 		bot.log.Error("Failed to save audio packet",
@@ -188,25 +189,6 @@ func (bot *Bot) handleVoiceSpeakingUpdate(
 		"userID", v.UserID,
 		"ssrc", v.SSRC,
 	)
-
-	err := bot.db.UpsertVoiceState(
-		context.Background(),
-		db.UpsertVoiceStateParams{
-			ID:         etc.NewFreshID(),
-			Ssrc:       int64(v.SSRC),
-			UserID:     v.UserID,
-			IsSpeaking: v.Speaking,
-		},
-	)
-
-	if err != nil {
-		bot.log.Error(
-			"failed to upsert voice state",
-			"error", err.Error(),
-			"ssrc", v.SSRC,
-			"userID", v.UserID,
-		)
-	}
 }
 
 func (bot *Bot) ensureVoiceStream(packet *discordgo.Packet) (string, error) {
@@ -268,33 +250,23 @@ func (bot *Bot) findOrSaveVoiceStream(
 func (bot *Bot) resolveStreamForPacket(
 	packet *discordgo.Packet,
 ) (string, string, string, error) {
-	voiceState, err := bot.db.GetVoiceState(
+	stream, err := bot.db.GetVoiceStreamForSsrc(
 		context.Background(),
-		db.GetVoiceStateParams{
-			Ssrc:   int64(packet.SSRC),
-			UserID: "",
+		db.GetVoiceStreamForSsrcParams{
+			Ssrc:           int64(packet.SSRC),
+			VoiceSessionID: bot.voiceChat.Conn.SessionID,
 		},
 	)
-	if err != nil {
-		return "", "", "", fmt.Errorf("failed to get voice state: %w", err)
+
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", "", nil
 	}
 
-	discordID := voiceState.UserID
-	username := bot.getUsernameFromID(discordID)
-
-	streamID, err := bot.db.GetStreamForDiscordChannelAndSpeaker(
-		context.Background(),
-		db.GetStreamForDiscordChannelAndSpeakerParams{
-			DiscordGuild:   bot.voiceChat.GuildID,
-			DiscordChannel: bot.voiceChat.ChannelID,
-			DiscordID:      discordID,
-		},
-	)
 	if err != nil {
-		return discordID, username, "", err
+		return "", "", "", fmt.Errorf("failed to get voice stream: %w", err)
 	}
 
-	return discordID, username, streamID, nil
+	return stream.DiscordUserID, bot.getUsernameFromID(stream.DiscordUserID), stream.ID, nil
 }
 
 func (bot *Bot) createStreamForPacket(
@@ -304,58 +276,18 @@ func (bot *Bot) createStreamForPacket(
 	streamID := etc.NewFreshID()
 	speakerID := etc.NewFreshID()
 
-	err := bot.db.CreateStream(
+	err := bot.db.CreateVoiceStream(
 		context.Background(),
-		db.CreateStreamParams{
-			ID:              streamID,
-			PacketSeqOffset: int64(packet.Sequence),
-			SampleIdxOffset: int64(packet.Timestamp),
+		db.CreateVoiceStreamParams{
+			ID:             streamID,
+			VoiceSessionID: bot.voiceChat.Conn.SessionID,
+			Ssrc:           int64(packet.SSRC),
+			DiscordUserID:  discordID,
 		},
 	)
+
 	if err != nil {
 		return "", fmt.Errorf("failed to create new stream: %w", err)
-	}
-
-	err = bot.db.CreateDiscordChannelStream(
-		context.Background(),
-		db.CreateDiscordChannelStreamParams{
-			ID:             etc.NewFreshID(),
-			DiscordGuild:   bot.voiceChat.GuildID,
-			DiscordChannel: bot.voiceChat.ChannelID,
-			Stream:         streamID,
-		},
-	)
-	if err != nil {
-		return "", fmt.Errorf(
-			"failed to create discord channel stream: %w",
-			err,
-		)
-	}
-
-	err = bot.db.CreateSpeaker(
-		context.Background(),
-		db.CreateSpeakerParams{
-			ID:     speakerID,
-			Stream: streamID,
-			Emoji:  "", // We're not using emoji anymore
-		},
-	)
-	if err != nil {
-		return "", fmt.Errorf("failed to create speaker: %w", err)
-	}
-
-	err = bot.db.CreateDiscordSpeaker(
-		context.Background(),
-		db.CreateDiscordSpeakerParams{
-			ID:        etc.NewFreshID(),
-			Speaker:   speakerID,
-			DiscordID: discordID,
-			Ssrc:      int64(packet.SSRC),
-			Username:  username,
-		},
-	)
-	if err != nil {
-		return "", fmt.Errorf("failed to create discord speaker: %w", err)
 	}
 
 	bot.log.Info(
@@ -384,40 +316,6 @@ func (bot *Bot) handleVoiceStateUpdate(
 		return
 	}
 
-	// Fetch the user information
-	user, err := bot.discord.User(v.UserID)
-	if err != nil {
-		bot.log.Error(
-			"Failed to fetch user information",
-			"error",
-			err,
-			"userID",
-			v.UserID,
-		)
-		return
-	}
-
-	// Update the username in the database
-	err = bot.db.UpdateDiscordSpeakerUsername(
-		context.Background(),
-		db.UpdateDiscordSpeakerUsernameParams{
-			DiscordID: v.UserID,
-			Username:  user.Username,
-		},
-	)
-	if err != nil {
-		bot.log.Error(
-			"Failed to update username",
-			"error",
-			err,
-			"userID",
-			v.UserID,
-			"username",
-			user.Username,
-		)
-	} else {
-		bot.log.Info("Updated username", "userID", v.UserID, "username", user.Username)
-	}
 }
 
 func (bot *Bot) speakInChannel(

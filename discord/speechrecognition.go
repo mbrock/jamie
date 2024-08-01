@@ -34,9 +34,9 @@ func (bot *Bot) getRecognizersForStream(streamID string) ([]ai.SpeechRecognition
 }
 
 func (bot *Bot) addRecognizer(streamID string, recognizers *[]ai.SpeechRecognitionSession, language string) error {
-	stream, err := bot.db.GetStream(context.Background(), streamID)
+	firstSampleIdx, err := bot.db.GetVoiceStreamEarliestSampleIdx(context.Background(), streamID)
 	if err != nil {
-		return fmt.Errorf("failed to get stream: %w", err)
+		return fmt.Errorf("failed to get earliest sample index: %w", err)
 	}
 
 	session, err := bot.speechRecognitionService.Start(context.Background(), language)
@@ -48,7 +48,8 @@ func (bot *Bot) addRecognizer(streamID string, recognizers *[]ai.SpeechRecogniti
 	if !ok {
 		return fmt.Errorf("unexpected session type")
 	}
-	deepgramSession.InitialSampleIndex = int(stream.SampleIdxOffset)
+
+	deepgramSession.InitialSampleIndex = int(firstSampleIdx)
 
 	*recognizers = append(*recognizers, deepgramSession)
 	go bot.speechRecognitionLoop(streamID, deepgramSession)
@@ -60,7 +61,7 @@ func (bot *Bot) speechRecognitionLoop(
 	session *ai.DeepgramSession,
 ) {
 	for segmentDrafts := range session.Receive() {
-		bot.processPendingRecognitionResult(streamID, segmentDrafts, int64(session.InitialSampleIndex))
+		bot.processPendingRecognitionResult(streamID, segmentDrafts)
 	}
 
 	bot.log.Info(
@@ -73,7 +74,6 @@ func (bot *Bot) speechRecognitionLoop(
 func (bot *Bot) processPendingRecognitionResult(
 	streamID string,
 	drafts <-chan ai.Result,
-	initialSampleIndex int64,
 ) {
 	var result ai.Result
 	for draft := range drafts {
@@ -84,19 +84,15 @@ func (bot *Bot) processPendingRecognitionResult(
 	const confidenceThreshold = 0.7
 
 	if result.Text != "" && result.Confidence >= confidenceThreshold {
-		row, err := bot.db.GetChannelAndUsernameForStream(
-			context.Background(),
-			streamID,
-		)
+		row, err := bot.db.GetVoiceStreamDiscordInfo(context.Background(), streamID)
 		if err != nil {
 			bot.log.Error(
-				"Failed to get channel and username",
+				"Failed to get voice stream discord info",
 				"error", err.Error(),
 				"streamID", streamID,
 			)
 			return
 		}
-
 		bot.lastValidTranscription = time.Now()
 
 		if bot.voiceChat != nil && bot.voiceChat.TalkMode {
@@ -111,9 +107,10 @@ func (bot *Bot) processPendingRecognitionResult(
 
 				bot.handleTalkCommand(&discordgo.MessageCreate{
 					Message: &discordgo.Message{
-						ChannelID: row.DiscordChannel,
+						ChannelID: row.DiscordChannelID,
 						Author: &discordgo.User{
-							Username: row.Username,
+							ID:       row.DiscordUserID,
+							Username: bot.getUsernameFromID(row.DiscordUserID),
 						},
 						Content: result.Text,
 					},
@@ -122,30 +119,30 @@ func (bot *Bot) processPendingRecognitionResult(
 				)
 
 				_, err = bot.discord.ChannelMessageSend(
-					row.DiscordChannel,
-					fmt.Sprintf("> %s: %s", row.Username, result.Text),
+					row.DiscordChannelID,
+					fmt.Sprintf("> %s: %s", bot.getUsernameFromID(row.DiscordUserID), result.Text),
 				)
 
 				if err != nil {
 					bot.log.Error(
 						"Failed to send transcribed message in talk mode",
 						"error", err.Error(),
-						"channel", row.DiscordChannel,
+						"channel", row.DiscordChannelID,
 					)
 				}
 			}
 		} else {
 			// Send the transcribed message as usual
 			_, err = bot.discord.ChannelMessageSend(
-				row.DiscordChannel,
-				fmt.Sprintf("> %s: %s (Confidence: %.2f)", row.Username, result.Text, result.Confidence),
+				row.DiscordChannelID,
+				fmt.Sprintf("> %s: %s (Confidence: %.2f)", bot.getUsernameFromID(row.DiscordUserID), result.Text, result.Confidence),
 			)
 
 			if err != nil {
 				bot.log.Error(
 					"Failed to send transcribed message",
 					"error", err.Error(),
-					"channel", row.DiscordChannel,
+					"channel", row.DiscordChannelID,
 				)
 			}
 		}
@@ -160,18 +157,14 @@ func (bot *Bot) processPendingRecognitionResult(
 	} else {
 		recognitionID := etc.NewFreshID()
 
-		// Adjust the sample index by adding the initial sample index
-		adjustedSampleIdx := initialSampleIndex + int64(result.Start*48000)
-
-		err := bot.db.SaveRecognition(
+		err := bot.db.InsertRecognitionResult(
 			context.Background(),
-			db.SaveRecognitionParams{
-				ID:         recognitionID,
-				Stream:     streamID,
-				SampleIdx:  adjustedSampleIdx,
-				SampleLen:  int64(result.Duration * 48000),
-				Text:       result.Text,
-				Confidence: result.Confidence,
+			db.InsertRecognitionResultParams{
+				ID:          recognitionID,
+				StartSecond: result.Start,
+				EndSecond:   result.Start + result.Duration,
+				Text:        result.Text,
+				Confidence:  result.Confidence,
 			},
 		)
 		if err != nil {
