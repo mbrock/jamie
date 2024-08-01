@@ -8,12 +8,13 @@ import (
 	"os"
 	"os/signal"
 
+	"encoding/json"
+
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
 	pgx "github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/spf13/cobra"
-	"encoding/json"
 )
 
 //go:embed db_init.sql
@@ -299,7 +300,7 @@ var listenCmd = &cobra.Command{
 }
 
 var listenPacketsCmd = &cobra.Command{
-	Use:   "listen-packets",
+	Use:   "packets",
 	Short: "Listen for new opus packets",
 	Long:  `This command listens for new opus packets and prints information about each new packet.`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -327,7 +328,8 @@ var listenPacketsCmd = &cobra.Command{
 		log.Info("Listening for new opus packets. Press CTRL-C to exit.")
 
 		for {
-			notification, err := conn.Conn().WaitForNotification(context.Background())
+			notification, err := conn.Conn().
+				WaitForNotification(context.Background())
 			if err != nil {
 				log.Error("Error waiting for notification", "error", err)
 				continue
