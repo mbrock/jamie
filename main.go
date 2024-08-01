@@ -16,8 +16,9 @@ import (
 var sqlFS embed.FS
 
 type Bot struct {
-	Discord *discordgo.Session
-	DBPool  *pgxpool.Pool
+	Discord   *discordgo.Session
+	DBPool    *pgxpool.Pool
+	SessionID int
 }
 
 func (b *Bot) handleEvent(s *discordgo.Session, m *discordgo.Event) {
@@ -123,15 +124,7 @@ func (b *Bot) handleVoiceSpeakingUpdate(
 	vc *discordgo.VoiceConnection,
 	m *discordgo.VoiceSpeakingUpdate,
 ) {
-	var sessionID int
-	err := b.DBPool.QueryRow(context.Background(),
-		"SELECT id FROM discord_sessions ORDER BY created_at DESC LIMIT 1").Scan(&sessionID)
-	if err != nil {
-		log.Error("Failed to get latest session ID", "error", err)
-		return
-	}
-
-	_, err = b.DBPool.Exec(
+	_, err := b.DBPool.Exec(
 		context.Background(),
 		`INSERT INTO ssrc_mappings (guild_id, channel_id, user_id, ssrc, session_id) 
 		VALUES ($1, $2, $3, $4, $5) 
@@ -141,7 +134,7 @@ func (b *Bot) handleVoiceSpeakingUpdate(
 		vc.ChannelID,
 		m.UserID,
 		m.SSRC,
-		sessionID,
+		b.SessionID,
 	)
 	if err != nil {
 		log.Error("Failed to insert/update SSRC mapping", "error", err)
@@ -149,14 +142,6 @@ func (b *Bot) handleVoiceSpeakingUpdate(
 }
 
 func (b *Bot) handleOpusPackets(vc *discordgo.VoiceConnection) {
-	var sessionID int
-	err := b.DBPool.QueryRow(context.Background(),
-		"SELECT id FROM discord_sessions ORDER BY created_at DESC LIMIT 1").Scan(&sessionID)
-	if err != nil {
-		log.Error("Failed to get latest session ID", "error", err)
-		return
-	}
-
 	for pkt := range vc.OpusRecv {
 		_, err := b.DBPool.Exec(
 			context.Background(),
@@ -170,7 +155,7 @@ func (b *Bot) handleOpusPackets(vc *discordgo.VoiceConnection) {
 			pkt.Sequence,
 			pkt.Timestamp,
 			pkt.Opus,
-			sessionID,
+			b.SessionID,
 		)
 
 		if err != nil {
@@ -236,15 +221,17 @@ func main() {
 	log.Info("discord", "status", discord.State.User.Username)
 
 	// Insert a record into the discord_sessions table
-	_, err = dbpool.Exec(
+	var sessionID int
+	err = dbpool.QueryRow(
 		context.Background(),
-		`INSERT INTO discord_sessions (bot_token, user_id) VALUES ($1, $2)`,
+		`INSERT INTO discord_sessions (bot_token, user_id) VALUES ($1, $2) RETURNING id`,
 		os.Getenv("DISCORD_TOKEN"),
 		discord.State.User.ID,
-	)
+	).Scan(&sessionID)
 	if err != nil {
 		log.Error("Failed to insert discord session", "error", err)
 	}
+	bot.SessionID = sessionID
 
 	// wait for CTRL-C
 	sig := make(chan os.Signal, 1)
