@@ -43,3 +43,11 @@ CREATE TABLE IF NOT EXISTS voice_state_events (
     request_to_speak_timestamp TIMESTAMP,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS bot_voice_joins (
+    id SERIAL PRIMARY KEY,
+    guild_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    session_id INTEGER REFERENCES discord_sessions(id),
+    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
