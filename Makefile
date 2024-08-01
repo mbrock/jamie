@@ -24,3 +24,5 @@ run:
 
 deps:
 	$(GOGET) ./...
+	$(GOGET) github.com/bwmarrin/discordgo
+	$(GOGET) github.com/nats-io/nats.go
