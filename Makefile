@@ -12,7 +12,7 @@ build:
 	$(GOBUILD) -o $(BINARY_NAME) -v
 
 test:
-	$(GOTEST) -v ./...
+	$(GOTEST) -v -count=1 ./...
 
 clean:
 	$(GOCLEAN)
