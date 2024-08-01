@@ -1,14 +1,15 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/signal"
-	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
 	"github.com/nats-io/nats.go"
+	"github.com/nats-io/nats.go/jetstream"
 )
 
 func main() {
@@ -20,21 +21,26 @@ func main() {
 	defer nc.Close()
 
 	// Create JetStream context
-	js, err := nc.JetStream()
+	js, err := jetstream.New(nc)
 	if err != nil {
 		log.Fatal("Failed to create JetStream context", "error", err)
 	}
 
 	// Create a stream for opus packets
-	_, err = js.AddStream(&nats.StreamConfig{
-		Name:     "OPUS_PACKETS",
-		Subjects: []string{"opus.>"},
-	})
+	_, err = js.CreateStream(
+		context.Background(),
+		jetstream.StreamConfig{
+			Name:     "DISCORD",
+			Subjects: []string{"discord.>"},
+		},
+	)
 	if err != nil {
 		log.Fatal("Failed to create stream", "error", err)
 	}
 
-	discord, err := discordgo.New(fmt.Sprintf("Bot %s", os.Getenv("DISCORD_TOKEN")))
+	discord, err := discordgo.New(
+		fmt.Sprintf("Bot %s", os.Getenv("DISCORD_TOKEN")),
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -54,66 +60,161 @@ func main() {
 	}()
 
 	discord.AddHandler(func(s *discordgo.Session, m *discordgo.Event) {
-		log.Info("message", "op", m.Operation, "type", m.Type, "data", m.Struct)
+		log.Info(
+			"message",
+			"op",
+			m.Operation,
+			"type",
+			m.Type,
+			"data",
+			m.Struct,
+		)
 	})
 
 	discord.AddHandler(func(s *discordgo.Session, m *discordgo.GuildCreate) {
 		log.Info("guild", "id", m.ID, "name", m.Name)
 		for _, channel := range m.Guild.Channels {
-			log.Info("channel", "id", channel.ID, "name", channel.Name, "type", channel.Type)
+			log.Info(
+				"channel",
+				"id",
+				channel.ID,
+				"name",
+				channel.Name,
+				"type",
+				channel.Type,
+			)
 		}
 		for _, voice := range m.Guild.VoiceStates {
 			log.Info("voice", "id", voice.UserID, "channel", voice.ChannelID)
 		}
 
-		cmd, err := s.ApplicationCommandCreate(discord.State.User.ID, m.ID, &discordgo.ApplicationCommand{
-			Name:        "jamie",
-			Description: "Summon Jamie to this channel",
-		})
+		cmd, err := s.ApplicationCommandCreate(
+			discord.State.User.ID,
+			m.ID,
+			&discordgo.ApplicationCommand{
+				Name:        "jamie",
+				Description: "Summon Jamie to this channel",
+			},
+		)
 		if err != nil {
 			log.Error("command", "error", err)
 		}
 		log.Info("app command", "id", cmd.ID)
 	})
 
-	discord.AddHandler(func(s *discordgo.Session, m *discordgo.VoiceStateUpdate) {
-		log.Info("voice", "user", m.UserID, "channel", m.ChannelID)
-	})
+	discord.AddHandler(
+		func(s *discordgo.Session, m *discordgo.VoiceStateUpdate) {
+			log.Info("voice", "user", m.UserID, "channel", m.ChannelID)
+		},
+	)
 
-	discord.AddHandler(func(s *discordgo.Session, m *discordgo.VoiceServerUpdate) {
-		log.Info("voice", "server", m.Endpoint, "token", m.Token)
-	})
+	discord.AddHandler(
+		func(s *discordgo.Session, m *discordgo.VoiceServerUpdate) {
+			log.Info("voice", "server", m.Endpoint, "token", m.Token)
+		},
+	)
 
-	discord.AddHandler(func(s *discordgo.Session, m *discordgo.InteractionCreate) {
-		log.Info("interaction", "type", m.ApplicationCommandData().CommandType, "name", m.ApplicationCommandData().Name, "channel", m.ChannelID)
-		s.InteractionRespond(m.Interaction, &discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: "Hello, world!",
-			},
-		})
+	discord.AddHandler(
+		func(s *discordgo.Session, m *discordgo.InteractionCreate) {
+			log.Info(
+				"interaction",
+				"type",
+				m.ApplicationCommandData().CommandType,
+				"name",
+				m.ApplicationCommandData().Name,
+				"channel",
+				m.ChannelID,
+			)
+			s.InteractionRespond(
+				m.Interaction,
+				&discordgo.InteractionResponse{
+					Type: discordgo.InteractionResponseChannelMessageWithSource,
+					Data: &discordgo.InteractionResponseData{
+						Content: "Hello, world!",
+					},
+				},
+			)
 
-		vc, err := s.ChannelVoiceJoin(m.GuildID, m.ChannelID, false, false)
-		if err != nil {
-			log.Error("voice", "error", err)
-		}
-
-		vc.AddHandler(func(_ *discordgo.VoiceConnection, m *discordgo.VoiceSpeakingUpdate) {
-			log.Info("speaking", "user", m.UserID, "ssrc", m.SSRC, "speaking", m.Speaking)
-		})
-
-		for pkt := range vc.OpusRecv {
-			log.Info("opus", "token", discord.Identify.Token, "session", vc.SessionID, "g", vc.GuildID, "c", vc.ChannelID, "ssrc", pkt.SSRC, "seq", pkt.Sequence, "ts", pkt.Timestamp, "n", len(pkt.Opus))
-			
-			// Publish opus packet to NATS JetStream
-			subject := fmt.Sprintf("opus.%s.%s.%d", vc.GuildID, vc.ChannelID, pkt.SSRC)
-			_, err := js.Publish(subject, pkt.Opus, nats.MsgId(fmt.Sprintf("%d", pkt.Timestamp)))
+			vc, err := s.ChannelVoiceJoin(
+				m.GuildID,
+				m.ChannelID,
+				false,
+				false,
+			)
 			if err != nil {
-				log.Error("Failed to publish opus packet", "error", err)
+				log.Error("voice", "error", err)
 			}
-		}
 
-	})
+			vc.AddHandler(
+				func(_ *discordgo.VoiceConnection, m *discordgo.VoiceSpeakingUpdate) {
+					log.Info(
+						"speaking",
+						"user",
+						m.UserID,
+						"ssrc",
+						m.SSRC,
+						"speaking",
+						m.Speaking,
+					)
+
+					ack, err := js.Publish(
+						context.Background(),
+						fmt.Sprintf(
+							"discord.ssrc.%s.%s",
+							vc.GuildID,
+							vc.ChannelID,
+						),
+						[]byte(fmt.Sprintf("%s:%d", m.UserID, m.SSRC)),
+					)
+					if err != nil {
+						log.Error("Failed to publish ssrc", "error", err)
+					}
+					log.Info("ack", "id", ack.Sequence)
+				},
+			)
+
+			for pkt := range vc.OpusRecv {
+				log.Info(
+					"opus",
+					"token",
+					discord.Identify.Token,
+					"session",
+					vc.SessionID,
+					"g",
+					vc.GuildID,
+					"c",
+					vc.ChannelID,
+					"ssrc",
+					pkt.SSRC,
+					"seq",
+					pkt.Sequence,
+					"ts",
+					pkt.Timestamp,
+					"n",
+					len(pkt.Opus),
+				)
+
+				// Publish opus packet to NATS JetStream
+				subject := fmt.Sprintf(
+					"discord.opus.%s.%s.%d",
+					vc.GuildID,
+					vc.ChannelID,
+					pkt.SSRC,
+				)
+
+				_, err := js.Publish(
+					context.Background(),
+					subject,
+					pkt.Opus,
+				)
+
+				if err != nil {
+					log.Error("Failed to publish opus packet", "error", err)
+				}
+			}
+
+		},
+	)
 
 	log.Info("discord", "status", discord.State.User.Username)
 
