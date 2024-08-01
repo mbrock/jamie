@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS ssrc_mappings (
     user_id TEXT,
     ssrc BIGINT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    session_id INTEGER REFERENCES discord_sessions(id),
     PRIMARY KEY (guild_id, channel_id, ssrc)
 );
 
@@ -15,7 +16,8 @@ CREATE TABLE IF NOT EXISTS opus_packets (
     sequence INTEGER,
     timestamp BIGINT,
     opus_data BYTEA,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    session_id INTEGER REFERENCES discord_sessions(id)
 );
 
 CREATE TABLE IF NOT EXISTS voice_state_events (

@@ -123,16 +123,25 @@ func (b *Bot) handleVoiceSpeakingUpdate(
 	vc *discordgo.VoiceConnection,
 	m *discordgo.VoiceSpeakingUpdate,
 ) {
-	_, err := b.DBPool.Exec(
+	var sessionID int
+	err := b.DBPool.QueryRow(context.Background(),
+		"SELECT id FROM discord_sessions ORDER BY created_at DESC LIMIT 1").Scan(&sessionID)
+	if err != nil {
+		log.Error("Failed to get latest session ID", "error", err)
+		return
+	}
+
+	_, err = b.DBPool.Exec(
 		context.Background(),
-		`INSERT INTO ssrc_mappings (guild_id, channel_id, user_id, ssrc) 
-		VALUES ($1, $2, $3, $4) 
+		`INSERT INTO ssrc_mappings (guild_id, channel_id, user_id, ssrc, session_id) 
+		VALUES ($1, $2, $3, $4, $5) 
 		ON CONFLICT (guild_id, channel_id, ssrc) 
-		DO UPDATE SET user_id = $3`,
+		DO UPDATE SET user_id = $3, session_id = $5`,
 		vc.GuildID,
 		vc.ChannelID,
 		m.UserID,
 		m.SSRC,
+		sessionID,
 	)
 	if err != nil {
 		log.Error("Failed to insert/update SSRC mapping", "error", err)
@@ -140,19 +149,28 @@ func (b *Bot) handleVoiceSpeakingUpdate(
 }
 
 func (b *Bot) handleOpusPackets(vc *discordgo.VoiceConnection) {
+	var sessionID int
+	err := b.DBPool.QueryRow(context.Background(),
+		"SELECT id FROM discord_sessions ORDER BY created_at DESC LIMIT 1").Scan(&sessionID)
+	if err != nil {
+		log.Error("Failed to get latest session ID", "error", err)
+		return
+	}
+
 	for pkt := range vc.OpusRecv {
 		_, err := b.DBPool.Exec(
 			context.Background(),
 			`INSERT INTO opus_packets 
-				(guild_id, channel_id, ssrc, sequence, timestamp, opus_data) 
+				(guild_id, channel_id, ssrc, sequence, timestamp, opus_data, session_id) 
 			VALUES 
-				($1, $2, $3, $4, $5, $6)`,
+				($1, $2, $3, $4, $5, $6, $7)`,
 			vc.GuildID,
 			vc.ChannelID,
 			pkt.SSRC,
 			pkt.Sequence,
 			pkt.Timestamp,
 			pkt.Opus,
+			sessionID,
 		)
 
 		if err != nil {
