@@ -8,34 +8,40 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
-	"github.com/nats-io/nats.go"
-	"github.com/nats-io/nats.go/jetstream"
+	"github.com/jackc/pgx/v4/pgxpool"
 )
 
 func main() {
-	// Connect to NATS
-	nc, err := nats.Connect(nats.DefaultURL)
+	// Connect to PostgreSQL
+	dbpool, err := pgxpool.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 	if err != nil {
-		log.Fatal("Failed to connect to NATS", "error", err)
+		log.Fatal("Unable to connect to database", "error", err)
 	}
-	defer nc.Close()
+	defer dbpool.Close()
 
-	// Create JetStream context
-	js, err := jetstream.New(nc)
+	// Create tables if they don't exist
+	_, err = dbpool.Exec(context.Background(), `
+		CREATE TABLE IF NOT EXISTS ssrc_mappings (
+			guild_id TEXT,
+			channel_id TEXT,
+			user_id TEXT,
+			ssrc BIGINT,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			PRIMARY KEY (guild_id, channel_id, ssrc)
+		);
+		CREATE TABLE IF NOT EXISTS opus_packets (
+			id SERIAL PRIMARY KEY,
+			guild_id TEXT,
+			channel_id TEXT,
+			ssrc BIGINT,
+			sequence INTEGER,
+			timestamp BIGINT,
+			opus_data BYTEA,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+		);
+	`)
 	if err != nil {
-		log.Fatal("Failed to create JetStream context", "error", err)
-	}
-
-	// Create a stream for opus packets
-	_, err = js.CreateStream(
-		context.Background(),
-		jetstream.StreamConfig{
-			Name:     "DISCORD",
-			Subjects: []string{"discord.>"},
-		},
-	)
-	if err != nil {
-		log.Fatal("Failed to create stream", "error", err)
+		log.Fatal("Failed to create tables", "error", err)
 	}
 
 	discord, err := discordgo.New(
@@ -157,19 +163,12 @@ func main() {
 						m.Speaking,
 					)
 
-					ack, err := js.Publish(
-						context.Background(),
-						fmt.Sprintf(
-							"discord.ssrc.%s.%s",
-							vc.GuildID,
-							vc.ChannelID,
-						),
-						[]byte(fmt.Sprintf("%s:%d", m.UserID, m.SSRC)),
-					)
+					_, err := dbpool.Exec(context.Background(),
+						"INSERT INTO ssrc_mappings (guild_id, channel_id, user_id, ssrc) VALUES ($1, $2, $3, $4) ON CONFLICT (guild_id, channel_id, ssrc) DO UPDATE SET user_id = $3",
+						vc.GuildID, vc.ChannelID, m.UserID, m.SSRC)
 					if err != nil {
-						log.Error("Failed to publish ssrc", "error", err)
+						log.Error("Failed to insert/update SSRC mapping", "error", err)
 					}
-					log.Info("ack", "id", ack.Sequence)
 				},
 			)
 
@@ -194,22 +193,13 @@ func main() {
 					len(pkt.Opus),
 				)
 
-				// Publish opus packet to NATS JetStream
-				subject := fmt.Sprintf(
-					"discord.opus.%s.%s.%d",
-					vc.GuildID,
-					vc.ChannelID,
-					pkt.SSRC,
-				)
-
-				_, err := js.Publish(
-					context.Background(),
-					subject,
-					pkt.Opus,
-				)
+				// Insert opus packet into PostgreSQL
+				_, err := dbpool.Exec(context.Background(),
+					"INSERT INTO opus_packets (guild_id, channel_id, ssrc, sequence, timestamp, opus_data) VALUES ($1, $2, $3, $4, $5, $6)",
+					vc.GuildID, vc.ChannelID, pkt.SSRC, pkt.Sequence, pkt.Timestamp, pkt.Opus)
 
 				if err != nil {
-					log.Error("Failed to publish opus packet", "error", err)
+					log.Error("Failed to insert opus packet", "error", err)
 				}
 			}
 
