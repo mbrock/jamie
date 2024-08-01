@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"embed"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
+	pgx "github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/spf13/cobra"
 )
@@ -54,22 +56,35 @@ func (b *Bot) handleGuildCreate(
 	// Check if we should join a voice channel in this guild
 	var channelID string
 	err = b.DBPool.QueryRow(context.Background(),
-		`SELECT channel_id
-		 FROM bot_voice_joins
-		 WHERE guild_id = $1 AND session_id = $2`,
-		m.ID, b.SessionID).Scan(&channelID)
+		`SELECT bvj.channel_id
+		 FROM bot_voice_joins bvj
+		 JOIN discord_sessions ds ON bvj.session_id = ds.id
+		 WHERE bvj.guild_id = $1 AND ds.bot_token = $2
+		 ORDER BY bvj.joined_at DESC
+		 LIMIT 1`,
+		m.ID, os.Getenv("DISCORD_TOKEN")).Scan(&channelID)
 
 	if err == nil && channelID != "" {
 		// We have a record of joining a channel in this guild, so let's join it
 		vc, err := s.ChannelVoiceJoin(m.ID, channelID, false, false)
 		if err != nil {
-			log.Error("Failed to join voice channel", "guild", m.ID, "channel", channelID, "error", err)
+			log.Error(
+				"Failed to join voice channel",
+				"guild",
+				m.ID,
+				"channel",
+				channelID,
+				"error",
+				err,
+			)
 		} else {
 			log.Info("Rejoined voice channel", "guild", m.ID, "channel", channelID)
 			vc.AddHandler(b.handleVoiceSpeakingUpdate)
 			go b.handleOpusPackets(vc)
 		}
-	} else if err != pgx.ErrNoRows {
+	} else if errors.Is(err, pgx.ErrNoRows) {
+		log.Info("No bot voice joins found for guild", "guild", m.ID)
+	} else {
 		log.Error("Failed to query bot voice joins", "error", err)
 	}
 }
@@ -274,20 +289,12 @@ var listenCmd = &cobra.Command{
 		}
 		bot.SessionID = sessionID
 
-		// Rejoin previously joined channels
-		bot.rejoinChannels()
-
 		// wait for CTRL-C
 		log.Info("Jamie is now listening. Press CTRL-C to exit.")
 		sig := make(chan os.Signal, 1)
 		signal.Notify(sig, os.Interrupt)
 		<-sig
 	},
-}
-
-func (b *Bot) rejoinChannels() {
-	// This function is now empty as joining is handled in handleGuildCreate
-	log.Info("Rejoining channels is now handled in handleGuildCreate")
 }
 
 func init() {
