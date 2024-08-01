@@ -4,12 +4,36 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
+	"github.com/nats-io/nats.go"
 )
 
 func main() {
+	// Connect to NATS
+	nc, err := nats.Connect(nats.DefaultURL)
+	if err != nil {
+		log.Fatal("Failed to connect to NATS", "error", err)
+	}
+	defer nc.Close()
+
+	// Create JetStream context
+	js, err := nc.JetStream()
+	if err != nil {
+		log.Fatal("Failed to create JetStream context", "error", err)
+	}
+
+	// Create a stream for opus packets
+	_, err = js.AddStream(&nats.StreamConfig{
+		Name:     "OPUS_PACKETS",
+		Subjects: []string{"opus.>"},
+	})
+	if err != nil {
+		log.Fatal("Failed to create stream", "error", err)
+	}
+
 	discord, err := discordgo.New(fmt.Sprintf("Bot %s", os.Getenv("DISCORD_TOKEN")))
 	if err != nil {
 		panic(err)
@@ -80,6 +104,13 @@ func main() {
 
 		for pkt := range vc.OpusRecv {
 			log.Info("opus", "token", discord.Identify.Token, "session", vc.SessionID, "g", vc.GuildID, "c", vc.ChannelID, "ssrc", pkt.SSRC, "seq", pkt.Sequence, "ts", pkt.Timestamp, "n", len(pkt.Opus))
+			
+			// Publish opus packet to NATS JetStream
+			subject := fmt.Sprintf("opus.%s.%s.%d", vc.GuildID, vc.ChannelID, pkt.SSRC)
+			_, err := js.Publish(subject, pkt.Opus, nats.MsgId(fmt.Sprintf("%d", pkt.Timestamp)))
+			if err != nil {
+				log.Error("Failed to publish opus packet", "error", err)
+			}
 		}
 
 	})
