@@ -349,7 +349,8 @@ var listenPacketsCmd = &cobra.Command{
 			packetCount++
 			now := time.Now()
 
-			if lastPrintTime.IsZero() || now.Sub(lastPrintTime) >= time.Second {
+			if lastPrintTime.IsZero() ||
+				now.Sub(lastPrintTime) >= time.Second {
 				log.Info("Opus packets received", "count", packetCount)
 				lastPrintTime = now
 				packetCount = 0
@@ -407,13 +408,6 @@ var packetInfoCmd = &cobra.Command{
 			}
 			lastTimestamp = createdAt
 			packetCount++
-
-			log.Info("Packet info",
-				"id", id,
-				"sequence", sequence,
-				"timestamp", timestamp,
-				"created_at", createdAt,
-			)
 		}
 
 		log.Info("Summary",
@@ -429,8 +423,10 @@ func init() {
 	rootCmd.AddCommand(packetInfoCmd)
 
 	packetInfoCmd.Flags().Int64P("ssrc", "s", 0, "SSRC to filter packets")
-	packetInfoCmd.Flags().StringP("start", "f", time.Now().Add(-10*time.Minute).Format(time.RFC3339), "Start time (RFC3339 format)")
-	packetInfoCmd.Flags().StringP("end", "t", time.Now().Format(time.RFC3339), "End time (RFC3339 format)")
+	packetInfoCmd.Flags().
+		StringP("start", "f", time.Now().Add(-10*time.Minute).Format(time.RFC3339), "Start time (RFC3339 format)")
+	packetInfoCmd.Flags().
+		StringP("end", "t", time.Now().Format(time.RFC3339), "End time (RFC3339 format)")
 }
 
 func init() {
