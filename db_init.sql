@@ -62,15 +62,18 @@ END;
 
 $$ LANGUAGE plpgsql;
 
-DO $$ BEGIN IF NOT EXISTS (
-    SELECT 1
-    FROM pg_trigger
-    WHERE tgname = 'opus_packet_inserted'
-) THEN CREATE TRIGGER opus_packet_inserted
-AFTER
-INSERT ON opus_packets FOR EACH ROW EXECUTE FUNCTION notify_new_opus_packet();
-
-END IF;
+DO $$ 
+BEGIN 
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_trigger
+        WHERE tgname = 'opus_packet_inserted'
+    ) THEN 
+        CREATE TRIGGER opus_packet_inserted
+        AFTER INSERT ON opus_packets 
+        FOR EACH ROW 
+        EXECUTE FUNCTION notify_new_opus_packet();
+    END IF;
 
 END $$;
 
