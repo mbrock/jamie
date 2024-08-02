@@ -2,14 +2,16 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
 	"embed"
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"time"
 
+	"encoding/hex"
 	"encoding/json"
 
 	"github.com/bwmarrin/discordgo"
@@ -17,11 +19,10 @@ import (
 	"github.com/google/generative-ai-go/genai"
 	pgx "github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
-	"github.com/sashabaranov/go-openai"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/option"
+	"node.town/transcription"
 	"swa.sh/ieva/ievadb"
-	"swa.sh/ieva/transcription"
 )
 
 //go:embed db_init.sql
@@ -218,7 +219,6 @@ func (b *Bot) handleOpusPackets(vc *discordgo.VoiceConnection) {
 		}
 	}
 }
-
 
 var rootCmd = &cobra.Command{
 	Use:   "jamie",
@@ -500,12 +500,24 @@ var uploadCmd = &cobra.Command{
 		for _, fileName := range args {
 			remoteURI, uploaded, err := uploadFile(ctx, client, fileName)
 			if err != nil {
-				log.Error("Error processing file", "file", fileName, "error", err)
+				log.Error(
+					"Error processing file",
+					"file",
+					fileName,
+					"error",
+					err,
+				)
 				continue
 			}
 
 			if uploaded {
-				log.Info("File uploaded successfully", "file", fileName, "remoteURI", remoteURI)
+				log.Info(
+					"File uploaded successfully",
+					"file",
+					fileName,
+					"remoteURI",
+					remoteURI,
+				)
 			} else {
 				log.Info("File was already uploaded", "file", fileName, "remoteURI", remoteURI)
 			}
@@ -534,7 +546,10 @@ func uploadFile(
 
 	remoteURI, err := ievadb.GetUploadedFile(hashString)
 	if err != nil {
-		return "", false, fmt.Errorf("error checking for existing file: %w", err)
+		return "", false, fmt.Errorf(
+			"error checking for existing file: %w",
+			err,
+		)
 	}
 	if remoteURI != "" {
 		return remoteURI, false, nil
@@ -555,7 +570,10 @@ func uploadFile(
 	}
 
 	if err := ievadb.SaveUploadedFile(hashString, fileName, gfile.URI); err != nil {
-		return "", false, fmt.Errorf("error saving uploaded file info: %w", err)
+		return "", false, fmt.Errorf(
+			"error saving uploaded file info: %w",
+			err,
+		)
 	}
 
 	return gfile.URI, true, nil
