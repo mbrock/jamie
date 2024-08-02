@@ -9,7 +9,12 @@ import (
 	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
 )
 
-func createRTPPacket(sequenceNumber uint16, timestamp uint32, ssrc uint32, payload []byte) *rtp.Packet {
+func createRTPPacket(
+	sequenceNumber uint16,
+	timestamp uint32,
+	ssrc uint32,
+	payload []byte,
+) *rtp.Packet {
 	return &rtp.Packet{
 		Header: rtp.Header{
 			Version:        2,
@@ -84,14 +89,18 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 	if o.packetCount == 0 {
 		o.firstTimestamp = packet.CreatedAt
 		o.addInitialSilence(packet.CreatedAt, packet.Timestamp)
-		o.sequenceNumber = 0 // Start from 0
 	} else {
 		o.gapCount += o.handleGap(packet.Timestamp, o.lastPacketTimestamp, packet.ID, packet.CreatedAt)
 	}
 
 	o.sequenceNumber++ // Increment sequence number
 
-	rtpPacket := createRTPPacket(o.sequenceNumber, packet.Timestamp, uint32(o.ssrc), packet.OpusData)
+	rtpPacket := createRTPPacket(
+		o.sequenceNumber,
+		packet.Timestamp,
+		uint32(o.ssrc),
+		packet.OpusData,
+	)
 
 	if err := o.oggWriter.WriteRTP(rtpPacket); err != nil {
 		return fmt.Errorf("error writing RTP packet: %w", err)
@@ -156,7 +165,12 @@ func (o *Ogg) writeSilentFrames(
 			timestamp = startTimestamp + uint32(i*960)
 		}
 		o.sequenceNumber++ // Increment sequence number
-		silentPacket := createRTPPacket(o.sequenceNumber, timestamp, uint32(o.ssrc), []byte{0xf8, 0xff, 0xfe})
+		silentPacket := createRTPPacket(
+			o.sequenceNumber,
+			timestamp,
+			uint32(o.ssrc),
+			[]byte{0xf8, 0xff, 0xfe},
+		)
 		if err := o.oggWriter.WriteRTP(silentPacket); err != nil {
 			log.Error("Error writing silent frame", "error", err)
 		}
