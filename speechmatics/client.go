@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/charmbracelet/log"
 )
 
 const (
@@ -29,7 +31,7 @@ func NewClient(apiKey string) *Client {
 }
 
 type JobConfig struct {
-	Type                string             `json:"type"`
+	Type                string               `json:"type"`
 	TranscriptionConfig *TranscriptionConfig `json:"transcription_config,omitempty"`
 	AlignmentConfig     *AlignmentConfig     `json:"alignment_config,omitempty"`
 }
@@ -89,8 +91,11 @@ const (
 	OnePerLine      AlignmentTag = "one_per_line"
 )
 
-
-func (c *Client) CreateJob(ctx context.Context, audioFilePath string, config JobConfig) (*JobResponse, error) {
+func (c *Client) CreateJob(
+	ctx context.Context,
+	audioFilePath string,
+	config JobConfig,
+) (*JobResponse, error) {
 	url := fmt.Sprintf("%s/jobs", BaseURL)
 
 	// Prepare the multipart form data
@@ -147,9 +152,17 @@ func (c *Client) CreateJob(ctx context.Context, audioFilePath string, config Job
 	if resp.StatusCode != http.StatusCreated {
 		body, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return nil, fmt.Errorf("unexpected status code: %d, failed to read response body: %w", resp.StatusCode, err)
+			return nil, fmt.Errorf(
+				"unexpected status code: %d, failed to read response body: %w",
+				resp.StatusCode,
+				err,
+			)
 		}
-		return nil, fmt.Errorf("unexpected status code: %d, response body: %s", resp.StatusCode, string(body))
+		return nil, fmt.Errorf(
+			"unexpected status code: %d, response body: %s",
+			resp.StatusCode,
+			string(body),
+		)
 	}
 
 	// Parse the response
@@ -162,7 +175,10 @@ func (c *Client) CreateJob(ctx context.Context, audioFilePath string, config Job
 	return &jobResponse, nil
 }
 
-func (c *Client) GetJobDetails(ctx context.Context, jobID string) (*JobDetails, error) {
+func (c *Client) GetJobDetails(
+	ctx context.Context,
+	jobID string,
+) (*JobDetails, error) {
 	url := fmt.Sprintf("%s/jobs/%s", BaseURL, jobID)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -193,11 +209,19 @@ func (c *Client) GetJobDetails(ctx context.Context, jobID string) (*JobDetails, 
 	return &wrappedResponse.Job, nil
 }
 
-func (c *Client) GetTranscript(ctx context.Context, jobID string, format string) (string, error) {
+func (c *Client) GetTranscript(
+	ctx context.Context,
+	jobID string,
+	format string,
+) (string, error) {
 	var url string
 	switch format {
 	case "json":
-		url = fmt.Sprintf("%s/jobs/%s/transcript?format=json-v2", BaseURL, jobID)
+		url = fmt.Sprintf(
+			"%s/jobs/%s/transcript?format=json-v2",
+			BaseURL,
+			jobID,
+		)
 	case "txt":
 		url = fmt.Sprintf("%s/jobs/%s/transcript?format=txt", BaseURL, jobID)
 	case "srt":
@@ -254,7 +278,11 @@ func (c *Client) DeleteJob(ctx context.Context, jobID string) error {
 	return nil
 }
 
-func (c *Client) CreateAlignmentJob(ctx context.Context, audioFilePath, textFilePath string, config JobConfig) (*JobResponse, error) {
+func (c *Client) CreateAlignmentJob(
+	ctx context.Context,
+	audioFilePath, textFilePath string,
+	config JobConfig,
+) (*JobResponse, error) {
 	url := fmt.Sprintf("%s/jobs", BaseURL)
 
 	// Prepare the multipart form data
@@ -338,7 +366,11 @@ func (c *Client) CreateAlignmentJob(ctx context.Context, audioFilePath, textFile
 	return &jobResponse, nil
 }
 
-func (c *Client) GetAlignment(ctx context.Context, jobID string, tags AlignmentTag) (string, error) {
+func (c *Client) GetAlignment(
+	ctx context.Context,
+	jobID string,
+	tags AlignmentTag,
+) (string, error) {
 	url := fmt.Sprintf("%s/jobs/%s/alignment?tags=%s", BaseURL, jobID, tags)
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -366,19 +398,33 @@ func (c *Client) GetAlignment(ctx context.Context, jobID string, tags AlignmentT
 	return string(alignment), nil
 }
 
-func (c *Client) SubmitAndWaitForAlignment(ctx context.Context, audioFilePath, textFilePath string, alignmentConfig AlignmentConfig, pollInterval time.Duration, tags AlignmentTag) (string, error) {
+func (c *Client) SubmitAndWaitForAlignment(
+	ctx context.Context,
+	audioFilePath, textFilePath string,
+	alignmentConfig AlignmentConfig,
+	pollInterval time.Duration,
+	tags AlignmentTag,
+) (string, error) {
 	config := JobConfig{
 		Type:            "alignment",
 		AlignmentConfig: &alignmentConfig,
 	}
-	jobResponse, err := c.CreateAlignmentJob(ctx, audioFilePath, textFilePath, config)
+	jobResponse, err := c.CreateAlignmentJob(
+		ctx,
+		audioFilePath,
+		textFilePath,
+		config,
+	)
 	if err != nil {
 		return "", fmt.Errorf("failed to create alignment job: %w", err)
 	}
 
 	_, err = c.WaitForJobCompletion(ctx, jobResponse.ID, pollInterval)
 	if err != nil {
-		return "", fmt.Errorf("failed while waiting for alignment job completion: %w", err)
+		return "", fmt.Errorf(
+			"failed while waiting for alignment job completion: %w",
+			err,
+		)
 	}
 
 	alignment, err := c.GetAlignment(ctx, jobResponse.ID, tags)
@@ -389,7 +435,11 @@ func (c *Client) SubmitAndWaitForAlignment(ctx context.Context, audioFilePath, t
 	return alignment, nil
 }
 
-func (c *Client) WaitForJobCompletion(ctx context.Context, jobID string, pollInterval time.Duration) (*JobDetails, error) {
+func (c *Client) WaitForJobCompletion(
+	ctx context.Context,
+	jobID string,
+	pollInterval time.Duration,
+) (*JobDetails, error) {
 	ticker := time.NewTicker(pollInterval)
 	defer ticker.Stop()
 
@@ -403,17 +453,26 @@ func (c *Client) WaitForJobCompletion(ctx context.Context, jobID string, pollInt
 				return nil, err
 			}
 
+			log.Info("speechmatics", "status", jobDetails.Status)
 			switch jobDetails.Status {
 			case "done":
 				return jobDetails, nil
 			case "rejected", "deleted", "expired":
-				return nil, fmt.Errorf("job failed with status: %s", jobDetails.Status)
+				return nil, fmt.Errorf(
+					"job failed with status: %s",
+					jobDetails.Status,
+				)
 			}
 		}
 	}
 }
 
-func (c *Client) SubmitAndWaitForTranscript(ctx context.Context, audioFilePath string, transcriptionConfig TranscriptionConfig, pollInterval time.Duration) (string, error) {
+func (c *Client) SubmitAndWaitForTranscript(
+	ctx context.Context,
+	audioFilePath string,
+	transcriptionConfig TranscriptionConfig,
+	pollInterval time.Duration,
+) (string, error) {
 	config := JobConfig{
 		Type:                "transcription",
 		TranscriptionConfig: &transcriptionConfig,
@@ -425,10 +484,17 @@ func (c *Client) SubmitAndWaitForTranscript(ctx context.Context, audioFilePath s
 
 	_, err = c.WaitForJobCompletion(ctx, jobResponse.ID, pollInterval)
 	if err != nil {
-		return "", fmt.Errorf("failed while waiting for job completion: %w", err)
+		return "", fmt.Errorf(
+			"failed while waiting for job completion: %w",
+			err,
+		)
 	}
 
-	transcript, err := c.GetTranscript(ctx, jobResponse.ID, "txt") // Default to txt format
+	transcript, err := c.GetTranscript(
+		ctx,
+		jobResponse.ID,
+		"txt",
+	) // Default to txt format
 	if err != nil {
 		return "", fmt.Errorf("failed to get transcript: %w", err)
 	}
@@ -465,29 +531,4 @@ func (c *Client) ListJobs(ctx context.Context) ([]JobDetails, error) {
 	}
 
 	return response.Jobs, nil
-}
-package speechmatics
-
-import (
-	"context"
-	"fmt"
-	"io"
-	"os"
-	"time"
-)
-
-type Client struct {
-	APIKey string
-}
-
-func NewClient(apiKey string) *Client {
-	return &Client{APIKey: apiKey}
-}
-
-func (c *Client) Transcribe(ctx context.Context, audioFilePath string) (string, error) {
-	// This is a placeholder implementation
-	// In a real implementation, you would use the Speechmatics API to transcribe the audio file
-	fmt.Println("Transcribing with Speechmatics:", audioFilePath)
-	time.Sleep(2 * time.Second) // Simulate API call
-	return "This is a placeholder transcription from Speechmatics.", nil
 }

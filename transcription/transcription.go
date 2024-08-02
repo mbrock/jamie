@@ -75,6 +75,7 @@ func (tm *TranscriptionManager) TranscribeSegment(
 	ctx context.Context,
 	audioURI string,
 	isResuming bool,
+	builder *strings.Builder,
 ) error {
 	var prompt []genai.Part
 	if len(tm.history) == 0 && !isResuming {
@@ -107,7 +108,6 @@ func (tm *TranscriptionManager) TranscribeSegment(
 
 	stream := tm.model.GenerateContentStream(ctx, prompt...)
 
-	var currentSegment strings.Builder
 	for {
 		resp, err := stream.Next()
 		if err == iterator.Done {
@@ -122,10 +122,10 @@ func (tm *TranscriptionManager) TranscribeSegment(
 		if _, err := io.WriteString(tm.output, chunk); err != nil {
 			return fmt.Errorf("error writing to output: %w", err)
 		}
-		currentSegment.WriteString(chunk)
+		builder.WriteString(chunk)
 	}
 
-	tm.history = append(tm.history, currentSegment.String())
+	tm.history = append(tm.history, builder.String())
 	tm.previousAudioURI = audioURI
 	return nil
 }

@@ -93,17 +93,17 @@ func (o *Ogg) Close() error {
 func (o *Ogg) WritePacket(packet OpusPacket) error {
 	if o.packetCount == 0 {
 		o.firstTimestamp = packet.CreatedAt
-		o.addInitialSilence(packet.CreatedAt, packet.Timestamp)
+		o.addInitialSilence(packet.CreatedAt)
 	} else {
 		o.gapCount += o.handleGap(packet.Timestamp, o.lastPacketTimestamp, packet.ID, packet.CreatedAt)
 	}
 
-	o.sequenceNumber++ // Increment sequence number
-	o.segmentNumber++  // Increment segment number
+	o.sequenceNumber++
+	o.segmentNumber++
 
 	rtpPacket := createRTPPacket(
 		o.sequenceNumber,
-		o.segmentNumber * 960, // Use segment number for timestamp
+		o.segmentNumber*960, // Use segment number for timestamp
 		uint32(o.ssrc),
 		packet.OpusData,
 	)
@@ -119,7 +119,7 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 	return nil
 }
 
-func (o *Ogg) addInitialSilence(createdAt time.Time, timestamp uint32) {
+func (o *Ogg) addInitialSilence(createdAt time.Time) {
 	createdAtUTC := createdAt
 	startTimeUTC := o.startTime
 	if createdAtUTC.After(startTimeUTC) {
@@ -127,7 +127,7 @@ func (o *Ogg) addInitialSilence(createdAt time.Time, timestamp uint32) {
 		silentFrames := int(
 			silenceDuration.Milliseconds() / 20,
 		) // 20ms per frame
-		o.writeSilentFrames(silentFrames, true)
+		o.writeSilentFrames(silentFrames)
 		log.Info("Added initial silence", "duration", silenceDuration,
 			"created_at", createdAtUTC,
 			"start_time", startTimeUTC,
@@ -152,22 +152,19 @@ func (o *Ogg) handleGap(
 		)
 
 		silentFrames := int(timestampDiff / 960)
-		o.writeSilentFrames(silentFrames, false)
+		o.writeSilentFrames(silentFrames)
 		return 1
 	}
 	return 0
 }
 
-func (o *Ogg) writeSilentFrames(
-	frames int,
-	isInitial bool,
-) {
+func (o *Ogg) writeSilentFrames(frames int) {
 	for i := 0; i < frames; i++ {
-		o.sequenceNumber++ // Increment sequence number
-		o.segmentNumber++  // Increment segment number
+		o.sequenceNumber++
+		o.segmentNumber++
 		silentPacket := createRTPPacket(
 			o.sequenceNumber,
-			o.segmentNumber * 960,
+			o.segmentNumber*960,
 			uint32(o.ssrc),
 			[]byte{0xf8, 0xff, 0xfe},
 		)

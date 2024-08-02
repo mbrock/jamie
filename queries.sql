@@ -5,6 +5,18 @@ UPDATE
 SET channel_id = EXCLUDED.channel_id,
     joined_at = CURRENT_TIMESTAMP;
 
+-- name: GetVoiceActivityReport :many
+SELECT u.user_id,
+    COUNT(DISTINCT op.id) AS packet_count,
+    MIN(op.created_at)::TIMESTAMPTZ AS first_packet,
+    MAX(op.created_at)::TIMESTAMPTZ AS last_packet,
+    SUM(LENGTH(op.opus_data)) AS total_bytes
+FROM opus_packets op
+    JOIN ssrc_mappings u ON op.ssrc = u.ssrc
+WHERE op.created_at BETWEEN $1 AND $2
+GROUP BY u.user_id
+ORDER BY packet_count DESC;
+
 -- name: UpsertSSRCMapping :exec
 INSERT INTO ssrc_mappings (guild_id, channel_id, user_id, ssrc, session_id)
 VALUES ($1, $2, $3, $4, $5) ON CONFLICT (guild_id, channel_id, user_id, ssrc) DO
@@ -29,17 +41,12 @@ VALUES ($1, $2)
 RETURNING id;
 
 -- name: GetLastJoinedChannel :one
-SELECT channel_id
-FROM bot_voice_joins
-WHERE guild_id = $1
-    AND session_id = (
-        SELECT id
-        FROM discord_sessions
-        WHERE bot_token = $2
-        ORDER BY created_at DESC
-        LIMIT 1
-    )
-ORDER BY joined_at DESC
+SELECT bvj.channel_id
+FROM bot_voice_joins bvj
+    JOIN discord_sessions ds ON bvj.session_id = ds.id
+WHERE bvj.guild_id = $1
+    AND ds.bot_token = $2
+ORDER BY bvj.joined_at DESC
 LIMIT 1;
 
 -- name: InsertVoiceStateEvent :exec
