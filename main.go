@@ -29,15 +29,6 @@ import (
 	"node.town/transcription"
 )
 
-// Define connectToDatabase function
-func connectToDatabase() (*db.Queries, error) {
-	sqlDB, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
-	if err != nil {
-		return nil, err
-	}
-	return db.New(sqlDB), nil
-}
-
 //go:embed db_init.sql
 var sqlFS embed.FS
 
@@ -125,18 +116,17 @@ func (b *Bot) handleVoiceStateUpdate(
 	err := b.Queries.InsertVoiceStateEvent(
 		context.Background(),
 		db.InsertVoiceStateEventParams{
-			GuildID:                 m.GuildID,
-			ChannelID:               m.ChannelID,
-			UserID:                  m.UserID,
-			SessionID:               int32(b.SessionID),
-			Deaf:                    m.Deaf,
-			Mute:                    m.Mute,
-			SelfDeaf:                m.SelfDeaf,
-			SelfMute:                m.SelfMute,
-			SelfStream:              m.SelfStream,
-			SelfVideo:               m.SelfVideo,
-			Suppress:                m.Suppress,
-			RequestToSpeakTimestamp: *m.RequestToSpeakTimestamp,
+			GuildID:    m.GuildID,
+			ChannelID:  m.ChannelID,
+			UserID:     m.UserID,
+			SessionID:  int32(b.SessionID),
+			Deaf:       m.Deaf,
+			Mute:       m.Mute,
+			SelfDeaf:   m.SelfDeaf,
+			SelfMute:   m.SelfMute,
+			SelfStream: m.SelfStream,
+			SelfVideo:  m.SelfVideo,
+			Suppress:   m.Suppress,
 		},
 	)
 
@@ -238,7 +228,10 @@ var listenCmd = &cobra.Command{
 	Short: "Start listening in Discord voice channels",
 	Long:  `This command starts the Jamie bot and makes it listen in Discord voice channels.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		sqlDB, err := sql.Open("postgres", os.Getenv("DATABASE_URL")+"?sslmode=disable")
+		sqlDB, err := sql.Open(
+			"postgres",
+			os.Getenv("DATABASE_URL")+"?sslmode=disable",
+		)
 		handleError(err, "Unable to connect to database")
 		defer sqlDB.Close()
 
@@ -309,7 +302,10 @@ var listenPacketsCmd = &cobra.Command{
 	Long:  `This command listens for new opus packets and prints information about each new packet.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Connect to PostgreSQL
-		sqlDB, err := sql.Open("postgres", os.Getenv("DATABASE_URL")+"?sslmode=disable")
+		sqlDB, err := sql.Open(
+			"postgres",
+			os.Getenv("DATABASE_URL")+"?sslmode=disable",
+		)
 		if err != nil {
 			log.Fatal("Unable to connect to database", "error", err)
 		}
@@ -381,11 +377,14 @@ func fetchOpusPackets(
 	ssrc int64,
 	startTime, endTime time.Time,
 ) ([]db.OpusPacket, error) {
-	return queries.GetOpusPackets(context.Background(), db.GetOpusPacketsParams{
-		Ssrc:      ssrc,
-		CreatedAt: startTime,
-		CreatedAt_2: endTime,
-	})
+	return queries.GetOpusPackets(
+		context.Background(),
+		db.GetOpusPacketsParams{
+			Ssrc:        ssrc,
+			CreatedAt:   startTime,
+			CreatedAt_2: endTime,
+		},
+	)
 }
 
 func processOpusPackets(packets []db.OpusPacket, ogg *Ogg) error {
