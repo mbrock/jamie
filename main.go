@@ -238,7 +238,7 @@ var listenCmd = &cobra.Command{
 	Short: "Start listening in Discord voice channels",
 	Long:  `This command starts the Jamie bot and makes it listen in Discord voice channels.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		sqlDB, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
+		sqlDB, err := sql.Open("postgres", os.Getenv("DATABASE_URL")+"?sslmode=disable")
 		handleError(err, "Unable to connect to database")
 		defer sqlDB.Close()
 
@@ -309,7 +309,7 @@ var listenPacketsCmd = &cobra.Command{
 	Long:  `This command listens for new opus packets and prints information about each new packet.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Connect to PostgreSQL
-		sqlDB, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
+		sqlDB, err := sql.Open("postgres", os.Getenv("DATABASE_URL")+"?sslmode=disable")
 		if err != nil {
 			log.Fatal("Unable to connect to database", "error", err)
 		}
