@@ -18,3 +18,16 @@ VALUES ($1, $2, $3, $4, $5, $6, $7);
 INSERT INTO discord_sessions (bot_token, user_id)
 VALUES ($1, $2)
 RETURNING id;
+
+-- name: GetLastJoinedChannel :one
+SELECT channel_id
+FROM bot_voice_joins
+WHERE guild_id = $1 AND session_id = (
+    SELECT id
+    FROM discord_sessions
+    WHERE bot_token = $2
+    ORDER BY created_at DESC
+    LIMIT 1
+)
+ORDER BY joined_at DESC
+LIMIT 1;
