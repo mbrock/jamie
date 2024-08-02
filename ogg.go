@@ -51,6 +51,7 @@ type Ogg struct {
 	lastPacketTimestamp uint32
 	gapCount            int
 	sequenceNumber      uint16
+	segmentNumber       uint32
 }
 
 func NewOgg(
@@ -98,10 +99,11 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 	}
 
 	o.sequenceNumber++ // Increment sequence number
+	o.segmentNumber++  // Increment segment number
 
 	rtpPacket := createRTPPacket(
 		o.sequenceNumber,
-		uint32(o.sequenceNumber-1)*960,
+		o.segmentNumber * 960, // Use segment number for timestamp
 		uint32(o.ssrc),
 		packet.OpusData,
 	)
@@ -125,7 +127,7 @@ func (o *Ogg) addInitialSilence(createdAt time.Time, timestamp uint32) {
 		silentFrames := int(
 			silenceDuration.Milliseconds() / 20,
 		) // 20ms per frame
-		o.writeSilentFrames(silentFrames, timestamp, true)
+		o.writeSilentFrames(silentFrames, true)
 		log.Info("Added initial silence", "duration", silenceDuration,
 			"created_at", createdAtUTC,
 			"start_time", startTimeUTC,
@@ -150,7 +152,7 @@ func (o *Ogg) handleGap(
 		)
 
 		silentFrames := int(timestampDiff / 960)
-		o.writeSilentFrames(silentFrames, lastPacketTimestamp, false)
+		o.writeSilentFrames(silentFrames, false)
 		return 1
 	}
 	return 0
@@ -158,14 +160,14 @@ func (o *Ogg) handleGap(
 
 func (o *Ogg) writeSilentFrames(
 	frames int,
-	startTimestamp uint32,
 	isInitial bool,
 ) {
 	for i := 0; i < frames; i++ {
 		o.sequenceNumber++ // Increment sequence number
+		o.segmentNumber++  // Increment segment number
 		silentPacket := createRTPPacket(
 			o.sequenceNumber,
-			uint32(o.sequenceNumber-1)*960,
+			o.segmentNumber * 960,
 			uint32(o.ssrc),
 			[]byte{0xf8, 0xff, 0xfe},
 		)
