@@ -18,19 +18,23 @@ type OpusPacket struct {
 }
 
 type Ogg struct {
-	ssrc           int64
-	startTime      time.Time
-	endTime        time.Time
-	outputFile     string
-	oggWriter      *oggwriter.OggWriter
-	packetCount    int
-	firstTimestamp time.Time
-	lastTimestamp  time.Time
+	ssrc                int64
+	startTime           time.Time
+	endTime             time.Time
+	outputFile          string
+	oggWriter           *oggwriter.OggWriter
+	packetCount         int
+	firstTimestamp      time.Time
+	lastTimestamp       time.Time
 	lastPacketTimestamp uint32
-	gapCount       int
+	gapCount            int
 }
 
-func NewOgg(ssrc int64, startTime, endTime time.Time, outputFile string) (*Ogg, error) {
+func NewOgg(
+	ssrc int64,
+	startTime, endTime time.Time,
+	outputFile string,
+) (*Ogg, error) {
 	oggWriter, err := oggwriter.New(outputFile, 48000, 2)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OggWriter: %w", err)
@@ -89,16 +93,27 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 func (o *Ogg) addInitialSilence(createdAt time.Time, timestamp uint32) {
 	if createdAt.After(o.startTime) {
 		silenceDuration := createdAt.Sub(o.startTime)
-		silentFrames := int(silenceDuration.Milliseconds() / 20) // 20ms per frame
+		silentFrames := int(
+			silenceDuration.Milliseconds() / 20,
+		) // 20ms per frame
 		o.writeSilentFrames(silentFrames, timestamp, true)
-		log.Info("Added initial silence", "duration", silenceDuration)
+		log.Info("Added initial silence", "duration", silenceDuration,
+			"created_at", createdAt,
+			"start_time", o.startTime,
+		)
 	}
 }
 
-func (o *Ogg) handleGap(timestamp, lastPacketTimestamp uint32, id int, createdAt time.Time) int {
+func (o *Ogg) handleGap(
+	timestamp, lastPacketTimestamp uint32,
+	id int,
+	createdAt time.Time,
+) int {
 	timestampDiff := timestamp - lastPacketTimestamp
 	if timestampDiff > 960 { // 960 represents 20ms in the Opus timestamp units
-		gapDuration := time.Duration(timestampDiff) * time.Millisecond / 48 // Convert to real time (Opus uses 48kHz)
+		gapDuration := time.Duration(
+			timestampDiff,
+		) * time.Millisecond / 48 // Convert to real time (Opus uses 48kHz)
 		log.Info("Audio gap detected",
 			"gap_duration", gapDuration,
 			"packet_id", id,
@@ -112,7 +127,11 @@ func (o *Ogg) handleGap(timestamp, lastPacketTimestamp uint32, id int, createdAt
 	return 0
 }
 
-func (o *Ogg) writeSilentFrames(frames int, startTimestamp uint32, isInitial bool) {
+func (o *Ogg) writeSilentFrames(
+	frames int,
+	startTimestamp uint32,
+	isInitial bool,
+) {
 	for i := 0; i < frames; i++ {
 		var timestamp uint32
 		if isInitial {
