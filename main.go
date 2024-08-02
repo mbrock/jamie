@@ -367,9 +367,19 @@ var packetInfoCmd = &cobra.Command{
 	Long:  `This command retrieves information about opus packets for a given SSRC within a specified time range and generates an Ogg file.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		ssrc, _ := cmd.Flags().GetInt64("ssrc")
-		startTime, _ := cmd.Flags().GetString("start")
-		endTime, _ := cmd.Flags().GetString("end")
+		startTimeStr, _ := cmd.Flags().GetString("start")
+		endTimeStr, _ := cmd.Flags().GetString("end")
 		outputFile, _ := cmd.Flags().GetString("output")
+
+		startTime, err := time.Parse(time.RFC3339, startTimeStr)
+		if err != nil {
+			log.Fatal("Error parsing start time", "error", err)
+		}
+
+		endTime, err := time.Parse(time.RFC3339, endTimeStr)
+		if err != nil {
+			log.Fatal("Error parsing end time", "error", err)
+		}
 
 		// Connect to PostgreSQL
 		dbpool, err := pgxpool.Connect(
@@ -381,127 +391,10 @@ var packetInfoCmd = &cobra.Command{
 		}
 		defer dbpool.Close()
 
-		// Query the database
-		rows, err := dbpool.Query(context.Background(), `
-			SELECT id, sequence, timestamp, created_at, opus_data
-			FROM opus_packets
-			WHERE ssrc = $1 AND created_at BETWEEN $2 AND $3
-			ORDER BY created_at
-		`, ssrc, startTime, endTime)
-		if err != nil {
-			log.Fatal("Error querying database", "error", err)
+		ogg := NewOgg(dbpool, ssrc, startTime, endTime, outputFile)
+		if err := ogg.ProcessPackets(); err != nil {
+			log.Fatal("Error processing packets", "error", err)
 		}
-		defer rows.Close()
-
-		// Create OggWriter
-		oggWriter, err := oggwriter.New(outputFile, 48000, 2)
-		if err != nil {
-			log.Fatal("Error creating OggWriter", "error", err)
-		}
-		defer func() {
-			if err := oggWriter.Close(); err != nil {
-				log.Error("Error closing OggWriter", "error", err)
-			}
-		}()
-
-		var packetCount int
-		var firstTimestamp, lastTimestamp time.Time
-		var lastPacketTimestamp uint32
-		var gapCount int
-
-		requestedStartTime, err := time.Parse(time.RFC3339, startTime)
-		if err != nil {
-			log.Fatal("Error parsing start time", "error", err)
-		}
-
-		for rows.Next() {
-			var id int
-			var sequence uint16
-			var timestamp uint32
-			var createdAt time.Time
-			var opusData []byte
-			err := rows.Scan(
-				&id,
-				&sequence,
-				&timestamp,
-				&createdAt,
-				&opusData,
-			)
-			if err != nil {
-				log.Error("Error scanning row", "error", err)
-				continue
-			}
-
-			if packetCount == 0 {
-				firstTimestamp = createdAt
-				// Add silence if the first packet is after the requested start time
-				if createdAt.After(requestedStartTime) {
-					silenceDuration := createdAt.Sub(requestedStartTime)
-					silentFrames := int(silenceDuration.Milliseconds() / 20) // 20ms per frame
-					for i := 0; i < silentFrames; i++ {
-						silentPacket := &rtp.Packet{
-							Header: rtp.Header{
-								Timestamp: timestamp - uint32((silentFrames-i)*960),
-							},
-							Payload: []byte{0xf8, 0xff, 0xfe}, // Empty packet payload
-						}
-						if err := oggWriter.WriteRTP(silentPacket); err != nil {
-							log.Error("Error writing initial silent frame", "error", err)
-						}
-					}
-					log.Info("Added initial silence", "duration", silenceDuration)
-				}
-			} else {
-				timestampDiff := timestamp - lastPacketTimestamp
-				if timestampDiff > 960 { // 960 represents 20ms in the Opus timestamp units
-					gapCount++
-					gapDuration := time.Duration(timestampDiff) * time.Millisecond / 48 // Convert to real time (Opus uses 48kHz)
-					log.Info("Audio gap detected",
-						"gap_duration", gapDuration,
-						"packet_id", id,
-						"created_at", createdAt,
-					)
-
-					// Insert silent frames
-					silentFrames := int(timestampDiff / 960)
-					for i := 0; i < silentFrames; i++ {
-						silentPacket := &rtp.Packet{
-							Header: rtp.Header{
-								Timestamp: lastPacketTimestamp + uint32(i*960),
-							},
-							Payload: []byte{0xf8, 0xff, 0xfe}, // Empty packet payload
-						}
-						if err := oggWriter.WriteRTP(silentPacket); err != nil {
-							log.Error("Error writing silent frame", "error", err)
-						}
-					}
-				}
-			}
-
-			// Create RTP packet from the database row
-			rtpPacket := &rtp.Packet{
-				Header: rtp.Header{
-					Timestamp: timestamp,
-				},
-				Payload: opusData,
-			}
-
-			// Write the actual RTP packet
-			if err := oggWriter.WriteRTP(rtpPacket); err != nil {
-				log.Error("Error writing RTP packet", "error", err)
-			}
-
-			lastTimestamp = createdAt
-			lastPacketTimestamp = timestamp
-			packetCount++
-		}
-
-		log.Info("Summary",
-			"total_packets", packetCount,
-			"time_range", lastTimestamp.Sub(firstTimestamp),
-			"gap_count", gapCount,
-			"output_file", outputFile,
-		)
 	},
 }
 
