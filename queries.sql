@@ -31,3 +31,14 @@ WHERE guild_id = $1 AND session_id = (
 )
 ORDER BY joined_at DESC
 LIMIT 1;
+
+-- name: InsertVoiceStateEvent :exec
+INSERT INTO voice_state_events (
+    guild_id, channel_id, user_id, session_id,
+    deaf, mute, self_deaf, self_mute,
+    self_stream, self_video, suppress,
+    request_to_speak_timestamp
+)
+VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+);
