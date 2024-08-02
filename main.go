@@ -20,6 +20,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
 	"github.com/google/generative-ai-go/genai"
+	"github.com/olekukonko/tablewriter"
 
 	_ "github.com/lib/pq"
 	"github.com/spf13/cobra"
