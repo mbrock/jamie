@@ -466,3 +466,28 @@ func (c *Client) ListJobs(ctx context.Context) ([]JobDetails, error) {
 
 	return response.Jobs, nil
 }
+package speechmatics
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"os"
+	"time"
+)
+
+type Client struct {
+	APIKey string
+}
+
+func NewClient(apiKey string) *Client {
+	return &Client{APIKey: apiKey}
+}
+
+func (c *Client) Transcribe(ctx context.Context, audioFilePath string) (string, error) {
+	// This is a placeholder implementation
+	// In a real implementation, you would use the Speechmatics API to transcribe the audio file
+	fmt.Println("Transcribing with Speechmatics:", audioFilePath)
+	time.Sleep(2 * time.Second) // Simulate API call
+	return "This is a placeholder transcription from Speechmatics.", nil
+}

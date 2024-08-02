@@ -23,6 +23,7 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/option"
+	"node.town/speechmatics"
 	"node.town/transcription"
 )
 
@@ -445,28 +446,15 @@ var packetInfoCmd = &cobra.Command{
 			log.Fatal("Error converting OGG to MP3", "error", err)
 		}
 
-		// Upload and transcribe
+		// Transcribe
 		ctx := context.Background()
-		client, err := genai.NewClient(
-			ctx,
-			option.WithAPIKey(os.Getenv("GEMINI_API_KEY")),
-		)
-		if err != nil {
-			log.Fatal("Error initializing Gemini client", "error", err)
-		}
-		defer client.Close()
-
-		remoteURI, _, err := uploadFile(ctx, client, dbpool, mp3OutputFile)
-		if err != nil {
-			log.Fatal("Error uploading file", "error", err)
-		}
-
-		tm := transcription.NewTranscriptionManager(client, os.Stdout, nil)
-		err = tm.TranscribeSegment(ctx, remoteURI, false)
+		transcriptionService, _ := cmd.Flags().GetString("transcription-service")
+		transcription, err := transcribeAudio(ctx, mp3OutputFile, transcriptionService)
 		if err != nil {
 			log.Fatal("Error transcribing", "error", err)
 		}
-		fmt.Println("OK.")
+		fmt.Println("Transcription:")
+		fmt.Println(transcription)
 	},
 }
 
@@ -483,6 +471,8 @@ func init() {
 		StringP("end", "t", time.Now().Format(time.RFC3339), "End time (RFC33339 format)")
 	packetInfoCmd.Flags().
 		StringP("output", "o", "output.ogg", "Output Ogg file path")
+	packetInfoCmd.Flags().
+		StringP("transcription-service", "r", "gemini", "Transcription service to use (gemini or speechmatics)")
 }
 
 func uploadFile(
@@ -560,5 +550,30 @@ func convertOggToMp3(inputFile, outputFile string) error {
 func main() {
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal("Error executing root command", "error", err)
+	}
+}
+func transcribeAudio(ctx context.Context, audioFilePath string, transcriptionService string) (string, error) {
+	switch transcriptionService {
+	case "gemini":
+		client, err := genai.NewClient(ctx, option.WithAPIKey(os.Getenv("GEMINI_API_KEY")))
+		if err != nil {
+			return "", fmt.Errorf("error initializing Gemini client: %w", err)
+		}
+		defer client.Close()
+
+		tm := transcription.NewTranscriptionManager(client, os.Stdout, nil)
+		var transcription strings.Builder
+		err = tm.TranscribeSegment(ctx, audioFilePath, false, &transcription)
+		if err != nil {
+			return "", fmt.Errorf("error transcribing with Gemini: %w", err)
+		}
+		return transcription.String(), nil
+
+	case "speechmatics":
+		client := speechmatics.NewClient(os.Getenv("SPEECHMATICS_API_KEY"))
+		return client.Transcribe(ctx, audioFilePath)
+
+	default:
+		return "", fmt.Errorf("unknown transcription service: %s", transcriptionService)
 	}
 }
