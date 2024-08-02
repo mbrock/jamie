@@ -1,45 +1,45 @@
 CREATE TABLE IF NOT EXISTS discord_sessions (
     id SERIAL PRIMARY KEY,
-    bot_token TEXT,
-    user_id TEXT,
+    bot_token TEXT NOT NULL,
+    user_id TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS ssrc_mappings (
     id SERIAL PRIMARY KEY,
-    guild_id TEXT,
-    channel_id TEXT,
-    user_id TEXT,
-    ssrc BIGINT,
+    guild_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    ssrc BIGINT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    session_id INTEGER REFERENCES discord_sessions(id)
+    session_id INTEGER NOT NULL REFERENCES discord_sessions(id)
 );
 
 CREATE TABLE IF NOT EXISTS opus_packets (
     id SERIAL PRIMARY KEY,
-    guild_id TEXT,
-    channel_id TEXT,
-    ssrc BIGINT,
-    sequence INTEGER,
-    timestamp BIGINT,
-    opus_data BYTEA,
-    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    session_id INTEGER REFERENCES discord_sessions(id)
+    guild_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    ssrc BIGINT NOT NULL,
+    sequence INTEGER NOT NULL,
+    timestamp BIGINT NOT NULL,
+    opus_data BYTEA NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    session_id INTEGER NOT NULL REFERENCES discord_sessions(id)
 );
 
 CREATE TABLE IF NOT EXISTS voice_state_events (
     id SERIAL PRIMARY KEY,
-    guild_id TEXT,
-    channel_id TEXT,
-    user_id TEXT,
-    session_id INTEGER REFERENCES discord_sessions(id),
-    deaf BOOLEAN,
-    mute BOOLEAN,
-    self_deaf BOOLEAN,
-    self_mute BOOLEAN,
-    self_stream BOOLEAN,
-    self_video BOOLEAN,
-    suppress BOOLEAN,
+    guild_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    session_id INTEGER NOT NULL REFERENCES discord_sessions(id),
+    deaf BOOLEAN NOT NULL,
+    mute BOOLEAN NOT NULL,
+    self_deaf BOOLEAN NOT NULL,
+    self_mute BOOLEAN NOT NULL,
+    self_stream BOOLEAN NOT NULL,
+    self_video BOOLEAN NOT NULL,
+    suppress BOOLEAN NOT NULL,
     request_to_speak_timestamp TIMESTAMP,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
