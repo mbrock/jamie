@@ -20,6 +20,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
 	"github.com/google/generative-ai-go/genai"
+
 	_ "github.com/lib/pq"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/option"
@@ -82,11 +83,13 @@ func (b *Bot) handleGuildCreate(
 	log.Info("app command", "id", cmd.ID)
 
 	// Check if we should join a voice channel in this guild
-	var channelID string
-	err = b.Queries.GetLastJoinedChannel(context.Background(), db.GetLastJoinedChannelParams{
-		GuildID:  m.ID,
-		BotToken: os.Getenv("DISCORD_TOKEN"),
-	}).Scan(&channelID)
+	channelID, err := b.Queries.GetLastJoinedChannel(
+		context.Background(),
+		db.GetLastJoinedChannelParams{
+			GuildID:  m.ID,
+			BotToken: os.Getenv("DISCORD_TOKEN"),
+		},
+	)
 
 	if err == nil && channelID != "" {
 		// We have a record of joining a channel in this guild, so let's join it
@@ -106,7 +109,7 @@ func (b *Bot) handleGuildCreate(
 			vc.AddHandler(b.handleVoiceSpeakingUpdate)
 			go b.handleOpusPackets(vc)
 		}
-	} else if errors.Is(err, pgx.ErrNoRows) {
+	} else if errors.Is(err, sql.ErrNoRows) {
 		log.Info("No bot voice joins found for guild", "guild", m.ID)
 	} else {
 		log.Error("Failed to query bot voice joins", "error", err)
@@ -119,20 +122,23 @@ func (b *Bot) handleVoiceStateUpdate(
 ) {
 	log.Info("voice", "user", m.UserID, "channel", m.ChannelID)
 
-	err := b.Queries.InsertVoiceStateEvent(context.Background(), db.InsertVoiceStateEventParams{
-		GuildID:                 m.GuildID,
-		ChannelID:               m.ChannelID,
-		UserID:                  m.UserID,
-		SessionID:               int32(b.SessionID),
-		Deaf:                    m.Deaf,
-		Mute:                    m.Mute,
-		SelfDeaf:                m.SelfDeaf,
-		SelfMute:                m.SelfMute,
-		SelfStream:              m.SelfStream,
-		SelfVideo:               m.SelfVideo,
-		Suppress:                m.Suppress,
-		RequestToSpeakTimestamp: m.RequestToSpeakTimestamp,
-	})
+	err := b.Queries.InsertVoiceStateEvent(
+		context.Background(),
+		db.InsertVoiceStateEventParams{
+			GuildID:                 m.GuildID,
+			ChannelID:               m.ChannelID,
+			UserID:                  m.UserID,
+			SessionID:               int32(b.SessionID),
+			Deaf:                    m.Deaf,
+			Mute:                    m.Mute,
+			SelfDeaf:                m.SelfDeaf,
+			SelfMute:                m.SelfMute,
+			SelfStream:              m.SelfStream,
+			SelfVideo:               m.SelfVideo,
+			Suppress:                m.Suppress,
+			RequestToSpeakTimestamp: *m.RequestToSpeakTimestamp,
+		},
+	)
 
 	if err != nil {
 		log.Error("Failed to insert voice state event", "error", err)
@@ -188,11 +194,11 @@ func (b *Bot) handleVoiceSpeakingUpdate(
 	err := b.Queries.UpsertSSRCMapping(
 		context.Background(),
 		db.UpsertSSRCMappingParams{
-			GuildID:   sql.NullString{String: vc.GuildID, Valid: true},
-			ChannelID: sql.NullString{String: vc.ChannelID, Valid: true},
-			UserID:    sql.NullString{String: m.UserID, Valid: true},
-			Ssrc:      sql.NullInt64{Int64: int64(m.SSRC), Valid: true},
-			SessionID: sql.NullInt32{Int32: b.SessionID, Valid: true},
+			GuildID:   vc.GuildID,
+			ChannelID: vc.ChannelID,
+			UserID:    m.UserID,
+			Ssrc:      int64(m.SSRC),
+			SessionID: b.SessionID,
 		},
 	)
 	if err != nil {
@@ -205,13 +211,13 @@ func (b *Bot) handleOpusPackets(vc *discordgo.VoiceConnection) {
 		err := b.Queries.InsertOpusPacket(
 			context.Background(),
 			db.InsertOpusPacketParams{
-				GuildID:   sql.NullString{String: vc.GuildID, Valid: true},
-				ChannelID: sql.NullString{String: vc.ChannelID, Valid: true},
-				Ssrc:      sql.NullInt64{Int64: int64(pkt.SSRC), Valid: true},
-				Sequence:  sql.NullInt32{Int32: int32(pkt.Sequence), Valid: true},
-				Timestamp: sql.NullInt64{Int64: int64(pkt.Timestamp), Valid: true},
+				GuildID:   vc.GuildID,
+				ChannelID: vc.ChannelID,
+				Ssrc:      int64(pkt.SSRC),
+				Sequence:  int32(pkt.Sequence),
+				Timestamp: int64(pkt.Timestamp),
 				OpusData:  pkt.Opus,
-				SessionID: sql.NullInt32{Int32: b.SessionID, Valid: true},
+				SessionID: b.SessionID,
 			},
 		)
 
@@ -242,7 +248,7 @@ var listenCmd = &cobra.Command{
 		sqlFile, err := sqlFS.ReadFile("db_init.sql")
 		handleError(err, "Failed to read embedded db_init.sql")
 
-		_, err = queries.db.Exec(context.Background(), string(sqlFile))
+		_, err = sqlDB.ExecContext(context.Background(), string(sqlFile))
 		handleError(err, "Failed to execute embedded db_init.sql")
 
 		discord, err := discordgo.New(
@@ -276,10 +282,14 @@ var listenCmd = &cobra.Command{
 		log.Info("discord", "status", discord.State.User.Username)
 
 		// Insert a record into the discord_sessions table
-		sessionID, err := bot.Queries.InsertDiscordSession(context.Background(), db.InsertDiscordSessionParams{
-			BotToken: sql.NullString{String: os.Getenv("DISCORD_TOKEN"), Valid: true},
-			UserID:   sql.NullString{String: discord.State.User.ID, Valid: true},
-		})
+		sessionID, err := bot.Queries.InsertDiscordSession(
+			context.Background(),
+			db.InsertDiscordSessionParams{
+				BotToken: os.Getenv("DISCORD_TOKEN"),
+				UserID:   discord.State.User.ID,
+			},
+		)
+
 		if err != nil {
 			log.Error("Failed to insert discord session", "error", err)
 		}
@@ -317,7 +327,8 @@ var listenPacketsCmd = &cobra.Command{
 
 		for {
 			var notification string
-			err := sqlDB.QueryRow("SELECT pg_notify('new_opus_packet', '')").Scan(&notification)
+			err := sqlDB.QueryRow("SELECT pg_notify('new_opus_packet', '')").
+				Scan(&notification)
 			if err != nil {
 				log.Error("Error waiting for notification", "error", err)
 				continue
