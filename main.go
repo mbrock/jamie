@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"embed"
 	"errors"
 	"fmt"
@@ -74,14 +75,11 @@ func (b *Bot) handleGuildCreate(
 
 	// Check if we should join a voice channel in this guild
 	var channelID string
-	err = b.DBPool.QueryRow(context.Background(),
-		`SELECT bvj.channel_id
-		 FROM bot_voice_joins bvj
-		 JOIN discord_sessions ds ON bvj.session_id = ds.id
-		 WHERE bvj.guild_id = $1 AND ds.bot_token = $2
-		 ORDER BY bvj.joined_at DESC
-		 LIMIT 1`,
-		m.ID, os.Getenv("DISCORD_TOKEN")).Scan(&channelID)
+	err = b.Queries.GetLastJoinedChannel(context.Background(),
+		db.GetLastJoinedChannelParams{
+			GuildID:  m.ID,
+			BotToken: os.Getenv("DISCORD_TOKEN"),
+		}).Scan(&channelID)
 
 	if err == nil && channelID != "" {
 		// We have a record of joining a channel in this guild, so let's join it
@@ -114,27 +112,21 @@ func (b *Bot) handleVoiceStateUpdate(
 ) {
 	log.Info("voice", "user", m.UserID, "channel", m.ChannelID)
 
-	_, err := b.DBPool.Exec(
-		context.Background(),
-		`INSERT INTO voice_state_events (
-			guild_id, channel_id, user_id, session_id, 
-			deaf, mute, self_deaf, self_mute, 
-			self_stream, self_video, suppress, 
-			request_to_speak_timestamp
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-		m.GuildID,
-		m.ChannelID,
-		m.UserID,
-		b.SessionID,
-		m.Deaf,
-		m.Mute,
-		m.SelfDeaf,
-		m.SelfMute,
-		m.SelfStream,
-		m.SelfVideo,
-		m.Suppress,
-		m.RequestToSpeakTimestamp,
-	)
+	err := b.Queries.InsertVoiceStateEvent(context.Background(),
+		db.InsertVoiceStateEventParams{
+			GuildID:                  m.GuildID,
+			ChannelID:                m.ChannelID,
+			UserID:                   m.UserID,
+			SessionID:                b.SessionID,
+			Deaf:                     m.Deaf,
+			Mute:                     m.Mute,
+			SelfDeaf:                 m.SelfDeaf,
+			SelfMute:                 m.SelfMute,
+			SelfStream:               m.SelfStream,
+			SelfVideo:                m.SelfVideo,
+			Suppress:                 m.Suppress,
+			RequestToSpeakTimestamp:  m.RequestToSpeakTimestamp,
+		})
 
 	if err != nil {
 		log.Error("Failed to insert voice state event", "error", err)
@@ -175,7 +167,7 @@ func (b *Bot) handleInteractionCreate(
 		db.UpsertBotVoiceJoinParams{
 			GuildID:   m.GuildID,
 			ChannelID: m.ChannelID,
-			SessionID: b.SessionID,
+			SessionID: sql.NullInt32{Int32: b.SessionID, Valid: true},
 		},
 	)
 	if err != nil {
@@ -190,11 +182,11 @@ func (b *Bot) handleVoiceSpeakingUpdate(
 	err := b.Queries.UpsertSSRCMapping(
 		context.Background(),
 		db.UpsertSSRCMappingParams{
-			GuildID:   vc.GuildID,
-			ChannelID: vc.ChannelID,
-			UserID:    m.UserID,
-			Ssrc:      int64(m.SSRC),
-			SessionID: b.SessionID,
+			GuildID:   sql.NullString{String: vc.GuildID, Valid: true},
+			ChannelID: sql.NullString{String: vc.ChannelID, Valid: true},
+			UserID:    sql.NullString{String: m.UserID, Valid: true},
+			Ssrc:      sql.NullInt64{Int64: int64(m.SSRC), Valid: true},
+			SessionID: sql.NullInt32{Int32: b.SessionID, Valid: true},
 		},
 	)
 	if err != nil {
@@ -207,13 +199,13 @@ func (b *Bot) handleOpusPackets(vc *discordgo.VoiceConnection) {
 		err := b.Queries.InsertOpusPacket(
 			context.Background(),
 			db.InsertOpusPacketParams{
-				GuildID:   vc.GuildID,
-				ChannelID: vc.ChannelID,
-				Ssrc:      int64(pkt.SSRC),
-				Sequence:  int32(pkt.Sequence),
-				Timestamp: int64(pkt.Timestamp),
+				GuildID:   sql.NullString{String: vc.GuildID, Valid: true},
+				ChannelID: sql.NullString{String: vc.ChannelID, Valid: true},
+				Ssrc:      sql.NullInt64{Int64: int64(pkt.SSRC), Valid: true},
+				Sequence:  sql.NullInt32{Int32: int32(pkt.Sequence), Valid: true},
+				Timestamp: sql.NullInt64{Int64: int64(pkt.Timestamp), Valid: true},
 				OpusData:  pkt.Opus,
-				SessionID: b.SessionID,
+				SessionID: sql.NullInt32{Int32: b.SessionID, Valid: true},
 			},
 		)
 
