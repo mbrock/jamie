@@ -151,11 +151,12 @@ func (o *Ogg) writeSilentFrames(
 		} else {
 			timestamp = startTimestamp + uint32(i*960)
 		}
+		o.sequenceNumber++ // Increment sequence number
 		silentPacket := &rtp.Packet{
 			Header: rtp.Header{
 				Version:        2,
 				PayloadType:    0x78,
-				SequenceNumber: 0, // todo
+				SequenceNumber: o.sequenceNumber,
 				Timestamp:      timestamp,
 				SSRC:           uint32(o.ssrc),
 			},
