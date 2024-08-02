@@ -15,6 +15,8 @@ import (
 	"github.com/charmbracelet/log"
 	pgx "github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/pion/opus"
+	"github.com/pion/opus/oggwriter"
 	"github.com/spf13/cobra"
 )
 
@@ -361,12 +363,13 @@ var listenPacketsCmd = &cobra.Command{
 
 var packetInfoCmd = &cobra.Command{
 	Use:   "packetInfo",
-	Short: "Get information about opus packets",
-	Long:  `This command retrieves information about opus packets for a given SSRC within a specified time range.`,
+	Short: "Get information about opus packets and generate Ogg file",
+	Long:  `This command retrieves information about opus packets for a given SSRC within a specified time range and generates an Ogg file.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		ssrc, _ := cmd.Flags().GetInt64("ssrc")
 		startTime, _ := cmd.Flags().GetString("start")
 		endTime, _ := cmd.Flags().GetString("end")
+		outputFile, _ := cmd.Flags().GetString("output")
 
 		// Connect to PostgreSQL
 		dbpool, err := pgxpool.Connect(
@@ -380,7 +383,7 @@ var packetInfoCmd = &cobra.Command{
 
 		// Query the database
 		rows, err := dbpool.Query(context.Background(), `
-			SELECT id, sequence, timestamp, created_at
+			SELECT id, sequence, timestamp, created_at, opus_data
 			FROM opus_packets
 			WHERE ssrc = $1 AND created_at BETWEEN $2 AND $3
 			ORDER BY created_at
@@ -389,6 +392,20 @@ var packetInfoCmd = &cobra.Command{
 			log.Fatal("Error querying database", "error", err)
 		}
 		defer rows.Close()
+
+		// Create Ogg file
+		oggFile, err := os.Create(outputFile)
+		if err != nil {
+			log.Fatal("Error creating Ogg file", "error", err)
+		}
+		defer oggFile.Close()
+
+		// Create OggWriter
+		oggWriter, err := oggwriter.New(oggFile, 48000, 2)
+		if err != nil {
+			log.Fatal("Error creating OggWriter", "error", err)
+		}
+		defer oggWriter.Close()
 
 		var packetCount int
 		var firstTimestamp, lastTimestamp time.Time
@@ -400,7 +417,8 @@ var packetInfoCmd = &cobra.Command{
 			var sequence int
 			var timestamp int64
 			var createdAt time.Time
-			err := rows.Scan(&id, &sequence, &timestamp, &createdAt)
+			var opusData []byte
+			err := rows.Scan(&id, &sequence, &timestamp, &createdAt, &opusData)
 			if err != nil {
 				log.Error("Error scanning row", "error", err)
 				continue
@@ -419,7 +437,21 @@ var packetInfoCmd = &cobra.Command{
 						"packet_id", id,
 						"created_at", createdAt,
 					)
+
+					// Insert silent frames
+					silentFrames := int(timestampDiff / 960)
+					for i := 0; i < silentFrames; i++ {
+						silentFrame := make([]byte, 2) // Minimum Opus frame size
+						if err := oggWriter.WriteOpusPacket(silentFrame); err != nil {
+							log.Error("Error writing silent frame", "error", err)
+						}
+					}
 				}
+			}
+
+			// Write the actual Opus packet
+			if err := oggWriter.WriteOpusPacket(opusData); err != nil {
+				log.Error("Error writing Opus packet", "error", err)
 			}
 
 			lastTimestamp = createdAt
@@ -431,6 +463,7 @@ var packetInfoCmd = &cobra.Command{
 			"total_packets", packetCount,
 			"time_range", lastTimestamp.Sub(firstTimestamp),
 			"gap_count", gapCount,
+			"output_file", outputFile,
 		)
 	},
 }
@@ -445,6 +478,8 @@ func init() {
 		StringP("start", "f", time.Now().Add(-10*time.Minute).Format(time.RFC3339), "Start time (RFC3339 format)")
 	packetInfoCmd.Flags().
 		StringP("end", "t", time.Now().Format(time.RFC3339), "End time (RFC3339 format)")
+	packetInfoCmd.Flags().
+		StringP("output", "o", "output.ogg", "Output Ogg file path")
 }
 
 func init() {
