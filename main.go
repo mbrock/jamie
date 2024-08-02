@@ -466,6 +466,7 @@ var packetInfoCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal("Error transcribing", "error", err)
 		}
+		fmt.Println("OK.")
 	},
 }
 
@@ -482,65 +483,6 @@ func init() {
 		StringP("end", "t", time.Now().Format(time.RFC3339), "End time (RFC33339 format)")
 	packetInfoCmd.Flags().
 		StringP("output", "o", "output.ogg", "Output Ogg file path")
-}
-
-var uploadCmd = &cobra.Command{
-	Use:   "upload [files...]",
-	Short: "Upload files to Gemini API",
-	Long:  `Upload files to Gemini API and save the information in the database. Only uploads files that haven't been uploaded before.`,
-	Args:  cobra.MinimumNArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
-		ctx := context.Background()
-		client, err := genai.NewClient(
-			ctx,
-			option.WithAPIKey(os.Getenv("GEMINI_API_KEY")),
-		)
-		if err != nil {
-			log.Fatal("Error initializing client:", "error", err)
-		}
-		defer client.Close()
-
-		// Connect to PostgreSQL
-		dbpool, err := pgxpool.Connect(
-			context.Background(),
-			os.Getenv("DATABASE_URL"),
-		)
-		if err != nil {
-			log.Fatal("Unable to connect to database", "error", err)
-		}
-		defer dbpool.Close()
-
-		for _, fileName := range args {
-			remoteURI, uploaded, err := uploadFile(
-				ctx,
-				client,
-				dbpool,
-				fileName,
-			)
-			if err != nil {
-				log.Error(
-					"Error processing file",
-					"file",
-					fileName,
-					"error",
-					err,
-				)
-				continue
-			}
-
-			if uploaded {
-				log.Info(
-					"File uploaded successfully",
-					"file",
-					fileName,
-					"remoteURI",
-					remoteURI,
-				)
-			} else {
-				log.Info("File was already uploaded", "file", fileName, "remoteURI", remoteURI)
-			}
-		}
-	},
 }
 
 func uploadFile(
@@ -612,8 +554,6 @@ func convertOggToMp3(inputFile, outputFile string) error {
 		"128k",
 		outputFile,
 	)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 	return cmd.Run()
 }
 

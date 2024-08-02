@@ -40,7 +40,9 @@ func setupGenerativeModel(client *genai.Client) *genai.GenerativeModel {
 	model.GenerationConfig.SetMaxOutputTokens(8192)
 	model.GenerationConfig.SetTemperature(0.1)
 	model.GenerationConfig.SetTopP(1.0)
-	systemPrompt := `Transcribe audio to text.`
+	systemPrompt := `Transcribe this voice chat segment as accurately as possible, with good grammar and punctuation.
+
+		Use double newlines to separate sentences.`
 	model.SystemInstruction = &genai.Content{
 		Parts: []genai.Part{
 			genai.Text(systemPrompt),
@@ -121,12 +123,7 @@ func (tm *TranscriptionManager) TranscribeSegment(
 			return fmt.Errorf("error writing to output: %w", err)
 		}
 		currentSegment.WriteString(chunk)
-
-		// Print the chunk to the terminal
-		fmt.Print(chunk)
 	}
-	// Print a newline after the segment is complete
-	fmt.Println()
 
 	tm.history = append(tm.history, currentSegment.String())
 	tm.previousAudioURI = audioURI
@@ -159,8 +156,9 @@ func previousSegments(history []string, count int) genai.Part {
 
 func audioSegment(uri string) []genai.Part {
 	return []genai.Part{
-		genai.Text("Current audio:\n"),
-		genai.FileData{URI: uri, MIMEType: "audio/opus"},
+		genai.Text("<audio>\n"),
+		genai.FileData{URI: uri, MIMEType: "audio/mp3"},
+		genai.Text("</audio>\n"),
 	}
 }
 
