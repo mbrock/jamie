@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"github.com/charmbracelet/log"
 	pgx "github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/sashabaranov/go-openai"
 	"github.com/spf13/cobra"
 )
 
@@ -211,6 +213,39 @@ func (b *Bot) handleOpusPackets(vc *discordgo.VoiceConnection) {
 			log.Error("Failed to insert opus packet", "error", err)
 		}
 	}
+}
+
+func convertAndTranscribe(inputFile, outputFile string) (string, error) {
+	// Convert to Opus 64kbps
+	cmd := exec.Command(
+		"ffmpeg",
+		"-i",
+		inputFile,
+		"-c:a",
+		"libopus",
+		"-b:a",
+		"64k",
+		outputFile,
+	)
+	err := cmd.Run()
+	if err != nil {
+		return "", fmt.Errorf("failed to convert audio: %w", err)
+	}
+
+	// Initialize OpenAI client
+	client := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
+
+	// Transcribe using Whisper
+	req := openai.AudioRequest{
+		Model:    openai.Whisper1,
+		FilePath: outputFile,
+	}
+	resp, err := client.CreateTranscription(context.Background(), req)
+	if err != nil {
+		return "", fmt.Errorf("failed to transcribe audio: %w", err)
+	}
+
+	return resp.Text, nil
 }
 
 var rootCmd = &cobra.Command{
@@ -422,6 +457,19 @@ var packetInfoCmd = &cobra.Command{
 			}
 			ogg.WritePacket(packet)
 		}
+
+		// Convert and transcribe
+		convertedFile := outputFile + ".ff.ogg"
+		transcription, err := convertAndTranscribe(outputFile, convertedFile)
+		if err != nil {
+			log.Fatal("Error converting and transcribing", "error", err)
+		}
+
+		log.Info("Transcription", "text", transcription)
+
+		// Clean up temporary files
+		os.Remove(outputFile)
+		os.Remove(convertedFile)
 	},
 }
 
