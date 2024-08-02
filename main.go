@@ -409,6 +409,11 @@ var packetInfoCmd = &cobra.Command{
 		var lastPacketTimestamp uint32
 		var gapCount int
 
+		requestedStartTime, err := time.Parse(time.RFC3339, startTime)
+		if err != nil {
+			log.Fatal("Error parsing start time", "error", err)
+		}
+
 		for rows.Next() {
 			var id int
 			var sequence uint16
@@ -429,6 +434,23 @@ var packetInfoCmd = &cobra.Command{
 
 			if packetCount == 0 {
 				firstTimestamp = createdAt
+				// Add silence if the first packet is after the requested start time
+				if createdAt.After(requestedStartTime) {
+					silenceDuration := createdAt.Sub(requestedStartTime)
+					silentFrames := int(silenceDuration.Milliseconds() / 20) // 20ms per frame
+					for i := 0; i < silentFrames; i++ {
+						silentPacket := &rtp.Packet{
+							Header: rtp.Header{
+								Timestamp: timestamp - uint32((silentFrames-i)*960),
+							},
+							Payload: []byte{0xf8, 0xff, 0xfe}, // Empty packet payload
+						}
+						if err := oggWriter.WriteRTP(silentPacket); err != nil {
+							log.Error("Error writing initial silent frame", "error", err)
+						}
+					}
+					log.Info("Added initial silence", "duration", silenceDuration)
+				}
 			} else {
 				timestampDiff := timestamp - lastPacketTimestamp
 				if timestampDiff > 960 { // 960 represents 20ms in the Opus timestamp units
