@@ -14,10 +14,14 @@ import (
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
+	"github.com/google/generative-ai-go/genai"
 	pgx "github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/sashabaranov/go-openai"
 	"github.com/spf13/cobra"
+	"google.golang.org/api/option"
+	"swa.sh/ieva/ievadb"
+	"swa.sh/ieva/transcription"
 )
 
 //go:embed db_init.sql
@@ -215,42 +219,6 @@ func (b *Bot) handleOpusPackets(vc *discordgo.VoiceConnection) {
 	}
 }
 
-func convertAndTranscribe(inputFile, outputFile string) (string, error) {
-	// Convert to mp3
-	cmd := exec.Command(
-		"ffmpeg",
-		"-y",
-		"-i",
-		inputFile,
-		"-acodec",
-		"libmp3lame",
-		"-b:a",
-		"128k",
-		outputFile,
-	)
-	cmd.Stderr = os.Stderr
-	err := cmd.Run()
-	if err != nil {
-		return "", fmt.Errorf("failed to convert audio: %w", err)
-	}
-
-	// Initialize OpenAI client
-	client := openai.NewClient(os.Getenv("OPENAI_API_KEY"))
-
-	// Transcribe using Whisper
-	req := openai.AudioRequest{
-		Model:    openai.Whisper1,
-		FilePath: outputFile,
-		Language: "en",
-		Format:   openai.AudioResponseFormatVerboseJSON,
-	}
-	resp, err := client.CreateTranscription(context.Background(), req)
-	if err != nil {
-		return "", fmt.Errorf("failed to transcribe audio: %w", err)
-	}
-
-	return resp.Text, nil
-}
 
 var rootCmd = &cobra.Command{
 	Use:   "jamie",
@@ -466,14 +434,27 @@ var packetInfoCmd = &cobra.Command{
 			log.Fatal("Error closing Ogg", "error", err)
 		}
 
-		// Convert and transcribe
-		convertedFile := outputFile + ".ff.mp3"
-		transcription, err := convertAndTranscribe(outputFile, convertedFile)
+		// Upload and transcribe
+		ctx := context.Background()
+		client, err := genai.NewClient(
+			ctx,
+			option.WithAPIKey(os.Getenv("GEMINI_API_KEY")),
+		)
 		if err != nil {
-			log.Fatal("Error converting and transcribing", "error", err)
+			log.Fatal("Error initializing Gemini client", "error", err)
+		}
+		defer client.Close()
+
+		remoteURI, _, err := uploadFile(ctx, client, outputFile)
+		if err != nil {
+			log.Fatal("Error uploading file", "error", err)
 		}
 
-		log.Info("Transcription", "text", transcription)
+		tm := transcription.NewTranscriptionManager(client, os.Stdout, nil)
+		err = tm.TranscribeSegment(ctx, remoteURI, false)
+		if err != nil {
+			log.Fatal("Error transcribing", "error", err)
+		}
 	},
 }
 
@@ -494,6 +475,90 @@ func init() {
 func init() {
 	rootCmd.AddCommand(listenCmd)
 	rootCmd.AddCommand(listenPacketsCmd)
+	rootCmd.AddCommand(uploadCmd)
+}
+
+var uploadCmd = &cobra.Command{
+	Use:   "upload [files...]",
+	Short: "Upload files to Gemini API",
+	Long:  `Upload files to Gemini API and save the information in the SQLite database. Only uploads files that haven't been uploaded before.`,
+	Args:  cobra.MinimumNArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		ctx := context.Background()
+		client, err := genai.NewClient(
+			ctx,
+			option.WithAPIKey(os.Getenv("GEMINI_API_KEY")),
+		)
+		if err != nil {
+			log.Fatal("Error initializing client:", "error", err)
+		}
+		defer client.Close()
+
+		ievadb.InitDB()
+		defer ievadb.CloseDB()
+
+		for _, fileName := range args {
+			remoteURI, uploaded, err := uploadFile(ctx, client, fileName)
+			if err != nil {
+				log.Error("Error processing file", "file", fileName, "error", err)
+				continue
+			}
+
+			if uploaded {
+				log.Info("File uploaded successfully", "file", fileName, "remoteURI", remoteURI)
+			} else {
+				log.Info("File was already uploaded", "file", fileName, "remoteURI", remoteURI)
+			}
+		}
+	},
+}
+
+func uploadFile(
+	ctx context.Context,
+	client *genai.Client,
+	fileName string,
+) (string, bool, error) {
+	file, err := os.Open(fileName)
+	if err != nil {
+		return "", false, fmt.Errorf("error opening file: %w", err)
+	}
+	defer file.Close()
+
+	content, err := os.ReadFile(fileName)
+	if err != nil {
+		return "", false, fmt.Errorf("error reading file: %w", err)
+	}
+
+	contentHash := sha256.Sum256(content)
+	hashString := hex.EncodeToString(contentHash[:])
+
+	remoteURI, err := ievadb.GetUploadedFile(hashString)
+	if err != nil {
+		return "", false, fmt.Errorf("error checking for existing file: %w", err)
+	}
+	if remoteURI != "" {
+		return remoteURI, false, nil
+	}
+
+	mimeType := "audio/opus"
+	gfile, err := client.UploadFile(
+		ctx,
+		"",
+		file,
+		&genai.UploadFileOptions{
+			MIMEType:    mimeType,
+			DisplayName: filepath.Base(fileName),
+		},
+	)
+	if err != nil {
+		return "", false, fmt.Errorf("error uploading file: %w", err)
+	}
+
+	if err := ievadb.SaveUploadedFile(hashString, fileName, gfile.URI); err != nil {
+		return "", false, fmt.Errorf("error saving uploaded file info: %w", err)
+	}
+
+	return gfile.URI, true, nil
 }
 
 func main() {
