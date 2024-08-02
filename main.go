@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"time"
@@ -433,6 +434,13 @@ var packetInfoCmd = &cobra.Command{
 			log.Fatal("Error closing Ogg", "error", err)
 		}
 
+		// Convert OGG to MP3
+		mp3OutputFile := strings.TrimSuffix(outputFile, filepath.Ext(outputFile)) + ".mp3"
+		err = convertOggToMp3(outputFile, mp3OutputFile)
+		if err != nil {
+			log.Fatal("Error converting OGG to MP3", "error", err)
+		}
+
 		// Upload and transcribe
 		ctx := context.Background()
 		client, err := genai.NewClient(
@@ -444,7 +452,7 @@ var packetInfoCmd = &cobra.Command{
 		}
 		defer client.Close()
 
-		remoteURI, _, err := uploadFile(ctx, client, dbpool, outputFile)
+		remoteURI, _, err := uploadFile(ctx, client, dbpool, mp3OutputFile)
 		if err != nil {
 			log.Fatal("Error uploading file", "error", err)
 		}
@@ -589,6 +597,13 @@ func uploadFile(
 	}
 
 	return gfile.URI, true, nil
+}
+
+func convertOggToMp3(inputFile, outputFile string) error {
+	cmd := exec.Command("ffmpeg", "-i", inputFile, "-acodec", "libmp3lame", "-b:a", "128k", outputFile)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 func main() {
