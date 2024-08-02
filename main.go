@@ -36,6 +36,23 @@ type Bot struct {
 	SessionID int
 }
 
+func handleError(err error, message string) {
+	if err != nil {
+		log.Fatal(message, "error", err)
+	}
+}
+
+func connectToDatabase() (*pgxpool.Pool, error) {
+	dbpool, err := pgxpool.Connect(
+		context.Background(),
+		os.Getenv("DATABASE_URL"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("unable to connect to database: %w", err)
+	}
+	return dbpool, nil
+}
+
 func (b *Bot) handleEvent(s *discordgo.Session, m *discordgo.Event) {
 	log.Info("message", "op", m.Operation, "type", m.Type)
 }
@@ -233,33 +250,21 @@ var listenCmd = &cobra.Command{
 	Short: "Start listening in Discord voice channels",
 	Long:  `This command starts the Jamie bot and makes it listen in Discord voice channels.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Connect to PostgreSQL
-		dbpool, err := pgxpool.Connect(
-			context.Background(),
-			os.Getenv("DATABASE_URL"),
-		)
-		if err != nil {
-			log.Fatal("Unable to connect to database", "error", err)
-		}
+		dbpool, err := connectToDatabase()
+		handleError(err, "Unable to connect to database")
 		defer dbpool.Close()
 
 		// Read and execute the embedded SQL file to create tables
 		sqlFile, err := sqlFS.ReadFile("db_init.sql")
-		if err != nil {
-			log.Fatal("Failed to read embedded db_init.sql", "error", err)
-		}
+		handleError(err, "Failed to read embedded db_init.sql")
 
 		_, err = dbpool.Exec(context.Background(), string(sqlFile))
-		if err != nil {
-			log.Fatal("Failed to execute embedded db_init.sql", "error", err)
-		}
+		handleError(err, "Failed to execute embedded db_init.sql")
 
 		discord, err := discordgo.New(
 			fmt.Sprintf("Bot %s", os.Getenv("DISCORD_TOKEN")),
 		)
-		if err != nil {
-			log.Fatal("Error creating Discord session", "error", err)
-		}
+		handleError(err, "Error creating Discord session")
 
 		discord.LogLevel = discordgo.LogInformational
 
@@ -275,9 +280,7 @@ var listenCmd = &cobra.Command{
 		discord.AddHandler(bot.handleInteractionCreate)
 
 		err = discord.Open()
-		if err != nil {
-			log.Fatal("Error opening Discord session", "error", err)
-		}
+		handleError(err, "Error opening Discord session")
 
 		defer func() {
 			err := discord.Close()
@@ -289,17 +292,15 @@ var listenCmd = &cobra.Command{
 		log.Info("discord", "status", discord.State.User.Username)
 
 		// Insert a record into the discord_sessions table
-		var sessionID int
 		err = dbpool.QueryRow(
 			context.Background(),
 			`INSERT INTO discord_sessions (bot_token, user_id) VALUES ($1, $2) RETURNING id`,
 			os.Getenv("DISCORD_TOKEN"),
 			discord.State.User.ID,
-		).Scan(&sessionID)
+		).Scan(&bot.SessionID)
 		if err != nil {
 			log.Error("Failed to insert discord session", "error", err)
 		}
-		bot.SessionID = sessionID
 
 		// wait for CTRL-C
 		log.Info("Jamie is now listening. Press CTRL-C to exit.")
@@ -368,6 +369,49 @@ var listenPacketsCmd = &cobra.Command{
 	},
 }
 
+func parseTimeRange(startTimeStr, endTimeStr string) (time.Time, time.Time, error) {
+	startTime, err := time.Parse(time.RFC3339, startTimeStr)
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("error parsing start time: %w", err)
+	}
+
+	endTime, err := time.Parse(time.RFC3339, endTimeStr)
+	if err != nil {
+		return time.Time{}, time.Time{}, fmt.Errorf("error parsing end time: %w", err)
+	}
+
+	return startTime, endTime, nil
+}
+
+func fetchOpusPackets(dbpool *pgxpool.Pool, ssrc int64, startTime, endTime time.Time) (pgx.Rows, error) {
+	return dbpool.Query(context.Background(), `
+		SELECT id, sequence, timestamp, created_at, opus_data
+		FROM opus_packets
+		WHERE ssrc = $1 AND created_at BETWEEN $2 AND $3
+		ORDER BY created_at
+	`, ssrc, startTime, endTime)
+}
+
+func processOpusPackets(rows pgx.Rows, ogg *Ogg) error {
+	defer rows.Close()
+	for rows.Next() {
+		var packet OpusPacket
+		err := rows.Scan(
+			&packet.ID,
+			&packet.Sequence,
+			&packet.Timestamp,
+			&packet.CreatedAt,
+			&packet.OpusData,
+		)
+		if err != nil {
+			log.Error("Error scanning row", "error", err)
+			continue
+		}
+		ogg.WritePacket(packet)
+	}
+	return rows.Err()
+}
+
 var packetInfoCmd = &cobra.Command{
 	Use:   "packetInfo",
 	Short: "Get information about opus packets and generate Ogg file",
@@ -378,86 +422,36 @@ var packetInfoCmd = &cobra.Command{
 		endTimeStr, _ := cmd.Flags().GetString("end")
 		outputFile, _ := cmd.Flags().GetString("output")
 
-		startTime, err := time.Parse(time.RFC3339, startTimeStr)
-		if err != nil {
-			log.Fatal("Error parsing start time", "error", err)
-		}
+		startTime, endTime, err := parseTimeRange(startTimeStr, endTimeStr)
+		handleError(err, "Error parsing time range")
 
-		endTime, err := time.Parse(time.RFC3339, endTimeStr)
-		if err != nil {
-			log.Fatal("Error parsing end time", "error", err)
-		}
-
-		// Connect to PostgreSQL
-		dbpool, err := pgxpool.Connect(
-			context.Background(),
-			os.Getenv("DATABASE_URL"),
-		)
-		if err != nil {
-			log.Fatal("Unable to connect to database", "error", err)
-		}
+		dbpool, err := connectToDatabase()
+		handleError(err, "Unable to connect to database")
 		defer dbpool.Close()
 
-		// Fetch packets from the database
-		rows, err := dbpool.Query(context.Background(), `
-			SELECT id, sequence, timestamp, created_at, opus_data
-			FROM opus_packets
-			WHERE ssrc = $1 AND created_at BETWEEN $2 AND $3
-			ORDER BY created_at
-		`, ssrc, startTime, endTime)
-		if err != nil {
-			log.Fatal("Error querying database", "error", err)
-		}
-		defer rows.Close()
+		rows, err := fetchOpusPackets(dbpool, ssrc, startTime, endTime)
+		handleError(err, "Error querying database")
 
 		ogg, err := NewOgg(ssrc, startTime, endTime, outputFile)
-		if err != nil {
-			log.Fatal("Error creating Ogg", "error", err)
-		}
+		handleError(err, "Error creating Ogg")
 
-		for rows.Next() {
-			var packet OpusPacket
-			err := rows.Scan(
-				&packet.ID,
-				&packet.Sequence,
-				&packet.Timestamp,
-				&packet.CreatedAt,
-				&packet.OpusData,
-			)
-			if err != nil {
-				log.Error("Error scanning row", "error", err)
-				continue
-			}
-			ogg.WritePacket(packet)
-		}
+		err = processOpusPackets(rows, ogg)
+		handleError(err, "Error processing opus packets")
 
 		err = ogg.Close()
-		if err != nil {
-			log.Fatal("Error closing Ogg", "error", err)
-		}
+		handleError(err, "Error closing Ogg")
 
 		// Convert OGG to MP3
-		mp3OutputFile := strings.TrimSuffix(
-			outputFile,
-			filepath.Ext(outputFile),
-		) + ".mp3"
+		mp3OutputFile := strings.TrimSuffix(outputFile, filepath.Ext(outputFile)) + ".mp3"
 		err = convertOggToMp3(outputFile, mp3OutputFile)
-		if err != nil {
-			log.Fatal("Error converting OGG to MP3", "error", err)
-		}
+		handleError(err, "Error converting OGG to MP3")
 
 		// Transcribe
 		ctx := context.Background()
-		transcriptionService, _ := cmd.Flags().
-			GetString("transcription-service")
-		transcription, err := transcribeAudio(
-			ctx,
-			mp3OutputFile,
-			transcriptionService,
-		)
-		if err != nil {
-			log.Fatal("Error transcribing", "error", err)
-		}
+		transcriptionService, _ := cmd.Flags().GetString("transcription-service")
+		transcription, err := transcribeAudio(ctx, mp3OutputFile, transcriptionService)
+		handleError(err, "Error transcribing")
+
 		fmt.Println("Transcription:")
 		fmt.Println(transcription)
 	},
