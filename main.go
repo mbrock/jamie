@@ -557,7 +557,7 @@ func runReport(cmd *cobra.Command, args []string) {
 func uploadFile(
 	ctx context.Context,
 	client *genai.Client,
-	db *sql.DB,
+	queries *db.Queries,
 	fileName string,
 ) (string, bool, error) {
 	file, err := os.Open(fileName)
@@ -574,12 +574,10 @@ func uploadFile(
 	contentHash := sha256.Sum256(content)
 	hashString := hex.EncodeToString(contentHash[:])
 
-	var remoteURI string
-	err = db.QueryRow("SELECT remote_uri FROM uploaded_files WHERE hash = $1", hashString).
-		Scan(&remoteURI)
+	remoteURI, err := queries.GetUploadedFileByHash(ctx, hashString)
 	if err == nil {
 		return remoteURI, false, nil
-	} else if err != sql.ErrNoRows {
+	} else if !errors.Is(err, sql.ErrNoRows) {
 		return "", false, fmt.Errorf("error checking for existing file: %w", err)
 	}
 
@@ -595,12 +593,11 @@ func uploadFile(
 		return "", false, fmt.Errorf("error uploading file: %w", err)
 	}
 
-	_, err = db.Exec(
-		"INSERT INTO uploaded_files (hash, file_name, remote_uri) VALUES ($1, $2, $3)",
-		hashString,
-		fileName,
-		gfile.URI,
-	)
+	err = queries.InsertUploadedFile(ctx, db.InsertUploadedFileParams{
+		Hash:      hashString,
+		FileName:  fileName,
+		RemoteUri: gfile.URI,
+	})
 	if err != nil {
 		return "", false, fmt.Errorf(
 			"error saving uploaded file info: %w",

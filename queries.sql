@@ -84,4 +84,8 @@ SELECT *
 FROM opus_packets
 WHERE ssrc = $1
     AND created_at BETWEEN $2 AND $3
-ORDER BY created_at;
+ORDER BY created_at;-- name: GetUploadedFileByHash :one
+SELECT remote_uri FROM uploaded_files WHERE hash = $1 LIMIT 1;
+
+-- name: InsertUploadedFile :exec
+INSERT INTO uploaded_files (hash, file_name, remote_uri) VALUES ($1, $2, $3);
