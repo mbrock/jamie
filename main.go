@@ -20,8 +20,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
 	"github.com/google/generative-ai-go/genai"
-	pgx "github.com/jackc/pgx/v4"
-	"github.com/jackc/pgx/v4/pgxpool"
+	_ "github.com/lib/pq"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/option"
 	"node.town/db"
@@ -31,11 +30,11 @@ import (
 
 // Define connectToDatabase function
 func connectToDatabase() (*db.Queries, error) {
-	dbpool, err := pgxpool.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	sqlDB, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
 	if err != nil {
 		return nil, err
 	}
-	return db.New(dbpool), nil
+	return db.New(sqlDB), nil
 }
 
 //go:embed db_init.sql
@@ -233,11 +232,11 @@ var listenCmd = &cobra.Command{
 	Short: "Start listening in Discord voice channels",
 	Long:  `This command starts the Jamie bot and makes it listen in Discord voice channels.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		dbpool, err := pgxpool.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+		sqlDB, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
 		handleError(err, "Unable to connect to database")
-		defer dbpool.Close()
+		defer sqlDB.Close()
 
-		queries := db.New(dbpool)
+		queries := db.New(sqlDB)
 
 		// Read and execute the embedded SQL file to create tables
 		sqlFile, err := sqlFS.ReadFile("db_init.sql")
@@ -300,22 +299,13 @@ var listenPacketsCmd = &cobra.Command{
 	Long:  `This command listens for new opus packets and prints information about each new packet.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		// Connect to PostgreSQL
-		dbpool, err := pgxpool.Connect(
-			context.Background(),
-			os.Getenv("DATABASE_URL"),
-		)
+		sqlDB, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
 		if err != nil {
 			log.Fatal("Unable to connect to database", "error", err)
 		}
-		defer dbpool.Close()
+		defer sqlDB.Close()
 
-		conn, err := dbpool.Acquire(context.Background())
-		if err != nil {
-			log.Fatal("Error acquiring connection", "error", err)
-		}
-		defer conn.Release()
-
-		_, err = conn.Exec(context.Background(), "LISTEN new_opus_packet")
+		_, err = sqlDB.Exec("LISTEN new_opus_packet")
 		if err != nil {
 			log.Fatal("Error listening to channel", "error", err)
 		}
@@ -326,15 +316,15 @@ var listenPacketsCmd = &cobra.Command{
 		packetCount := 0
 
 		for {
-			notification, err := conn.Conn().
-				WaitForNotification(context.Background())
+			var notification string
+			err := sqlDB.QueryRow("SELECT pg_notify('new_opus_packet', '')").Scan(&notification)
 			if err != nil {
 				log.Error("Error waiting for notification", "error", err)
 				continue
 			}
 
 			var packet map[string]interface{}
-			err = json.Unmarshal([]byte(notification.Payload), &packet)
+			err = json.Unmarshal([]byte(notification), &packet)
 			if err != nil {
 				log.Error("Error unmarshalling payload", "error", err)
 				continue
@@ -376,11 +366,11 @@ func parseTimeRange(
 }
 
 func fetchOpusPackets(
-	dbpool *pgxpool.Pool,
+	db *sql.DB,
 	ssrc int64,
 	startTime, endTime time.Time,
-) (pgx.Rows, error) {
-	return dbpool.Query(context.Background(), `
+) (*sql.Rows, error) {
+	return db.Query(`
 		SELECT id, sequence, timestamp, created_at, opus_data
 		FROM opus_packets
 		WHERE ssrc = $1 AND created_at BETWEEN $2 AND $3
@@ -388,7 +378,7 @@ func fetchOpusPackets(
 	`, ssrc, startTime, endTime)
 }
 
-func processOpusPackets(rows pgx.Rows, ogg *Ogg) error {
+func processOpusPackets(rows *sql.Rows, ogg *Ogg) error {
 	defer rows.Close()
 	for rows.Next() {
 		var packet OpusPacket
@@ -421,13 +411,13 @@ var packetInfoCmd = &cobra.Command{
 		startTime, endTime, err := parseTimeRange(startTimeStr, endTimeStr)
 		handleError(err, "Error parsing time range")
 
-		dbpool, err := pgxpool.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+		sqlDB, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
 		handleError(err, "Unable to connect to database")
-		defer dbpool.Close()
+		defer sqlDB.Close()
 
-		queries := db.New(dbpool)
+		queries := db.New(sqlDB)
 
-		rows, err := fetchOpusPackets(dbpool, ssrc, startTime, endTime)
+		rows, err := fetchOpusPackets(sqlDB, ssrc, startTime, endTime)
 		handleError(err, "Error querying database")
 
 		ogg, err := NewOgg(ssrc, startTime, endTime, outputFile)
@@ -482,7 +472,7 @@ func init() {
 func uploadFile(
 	ctx context.Context,
 	client *genai.Client,
-	dbpool *pgxpool.Pool,
+	db *sql.DB,
 	fileName string,
 ) (string, bool, error) {
 	file, err := os.Open(fileName)
@@ -500,11 +490,11 @@ func uploadFile(
 	hashString := hex.EncodeToString(contentHash[:])
 
 	var remoteURI string
-	err = dbpool.QueryRow(context.Background(), "SELECT remote_uri FROM uploaded_files WHERE hash = $1", hashString).
+	err = db.QueryRow("SELECT remote_uri FROM uploaded_files WHERE hash = $1", hashString).
 		Scan(&remoteURI)
 	if err == nil {
 		return remoteURI, false, nil
-	} else if err != pgx.ErrNoRows {
+	} else if err != sql.ErrNoRows {
 		return "", false, fmt.Errorf("error checking for existing file: %w", err)
 	}
 
@@ -520,8 +510,7 @@ func uploadFile(
 		return "", false, fmt.Errorf("error uploading file: %w", err)
 	}
 
-	_, err = dbpool.Exec(
-		context.Background(),
+	_, err = db.Exec(
 		"INSERT INTO uploaded_files (hash, file_name, remote_uri) VALUES ($1, $2, $3)",
 		hashString,
 		fileName,
