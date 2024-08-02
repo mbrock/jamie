@@ -75,7 +75,13 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 	}
 
 	rtpPacket := &rtp.Packet{
-		Header:  rtp.Header{Timestamp: packet.Timestamp},
+		Header: rtp.Header{
+			Version:        2,
+			PayloadType:    0x78,
+			SequenceNumber: packet.Sequence,
+			Timestamp:      packet.Timestamp,
+			SSRC:           uint32(o.ssrc),
+		},
 		Payload: packet.OpusData,
 	}
 
@@ -91,8 +97,8 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 }
 
 func (o *Ogg) addInitialSilence(createdAt time.Time, timestamp uint32) {
-	createdAtUTC := createdAt.UTC()
-	startTimeUTC := o.startTime.UTC()
+	createdAtUTC := createdAt
+	startTimeUTC := o.startTime
 	if createdAtUTC.After(startTimeUTC) {
 		silenceDuration := createdAtUTC.Sub(startTimeUTC)
 		silentFrames := int(
@@ -142,7 +148,13 @@ func (o *Ogg) writeSilentFrames(
 			timestamp = startTimestamp + uint32(i*960)
 		}
 		silentPacket := &rtp.Packet{
-			Header:  rtp.Header{Timestamp: timestamp},
+			Header: rtp.Header{
+				Version:        2,
+				PayloadType:    0x78,
+				SequenceNumber: 0, // todo
+				Timestamp:      timestamp,
+				SSRC:           uint32(o.ssrc),
+			},
 			Payload: []byte{0xf8, 0xff, 0xfe}, // Empty packet payload
 		}
 		if err := o.oggWriter.WriteRTP(silentPacket); err != nil {
