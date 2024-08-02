@@ -97,7 +97,7 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 
 	rtpPacket := createRTPPacket(
 		o.sequenceNumber,
-		packet.Timestamp,
+		uint32(o.sequenceNumber) * 960,
 		uint32(o.ssrc),
 		packet.OpusData,
 	)
@@ -158,16 +158,10 @@ func (o *Ogg) writeSilentFrames(
 	isInitial bool,
 ) {
 	for i := 0; i < frames; i++ {
-		var timestamp uint32
-		if isInitial {
-			timestamp = startTimestamp - uint32((frames-i)*960)
-		} else {
-			timestamp = startTimestamp + uint32(i*960)
-		}
 		o.sequenceNumber++ // Increment sequence number
 		silentPacket := createRTPPacket(
 			o.sequenceNumber,
-			timestamp,
+			uint32(o.sequenceNumber) * 960,
 			uint32(o.ssrc),
 			[]byte{0xf8, 0xff, 0xfe},
 		)
