@@ -13,8 +13,11 @@ if [ ! -f "output.ogg" ]; then
     exit 1
 fi
 
-# Convert ogg to mp3
-ffmpeg -i output.ogg -acodec libmp3lame -b:a 128k output.mp3
+# # Convert ogg to mp3
+# ffmpeg -i output.ogg -acodec libmp3lame -b:a 128k output.mp3
+
+# rewrite the ogg as a new ogg opus
+ffmpeg -i output.ogg -c:a libopus -b:a 128k output2.ogg
 
 # Check if conversion was successful
 if [ $? -eq 0 ]; then

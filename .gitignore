@@ -9,6 +9,8 @@ jamie
 /db/db.go
 /db/models.go
 /*.ogg
+/*.opus
+/*.mp3
 /*.bak
 *_templ.go
 /node_modules

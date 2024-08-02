@@ -15,6 +15,10 @@ func createRTPPacket(
 	ssrc uint32,
 	payload []byte,
 ) *rtp.Packet {
+	log.Info("rtp",
+		"seq", sequenceNumber,
+		"ts", timestamp,
+	)
 	return &rtp.Packet{
 		Header: rtp.Header{
 			Version:        2,
@@ -97,7 +101,7 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 
 	rtpPacket := createRTPPacket(
 		o.sequenceNumber,
-		uint32(o.sequenceNumber) * 960,
+		uint32(o.sequenceNumber-1)*960,
 		uint32(o.ssrc),
 		packet.OpusData,
 	)
@@ -161,7 +165,7 @@ func (o *Ogg) writeSilentFrames(
 		o.sequenceNumber++ // Increment sequence number
 		silentPacket := createRTPPacket(
 			o.sequenceNumber,
-			uint32(o.sequenceNumber) * 960,
+			uint32(o.sequenceNumber-1)*960,
 			uint32(o.ssrc),
 			[]byte{0xf8, 0xff, 0xfe},
 		)

@@ -216,17 +216,19 @@ func (b *Bot) handleOpusPackets(vc *discordgo.VoiceConnection) {
 }
 
 func convertAndTranscribe(inputFile, outputFile string) (string, error) {
-	// Convert to Opus 64kbps
+	// Convert to mp3
 	cmd := exec.Command(
 		"ffmpeg",
+		"-y",
 		"-i",
 		inputFile,
-		"-c:a",
-		"libopus",
+		"-acodec",
+		"libmp3lame",
 		"-b:a",
-		"64k",
+		"128k",
 		outputFile,
 	)
+	cmd.Stderr = os.Stderr
 	err := cmd.Run()
 	if err != nil {
 		return "", fmt.Errorf("failed to convert audio: %w", err)
@@ -239,6 +241,8 @@ func convertAndTranscribe(inputFile, outputFile string) (string, error) {
 	req := openai.AudioRequest{
 		Model:    openai.Whisper1,
 		FilePath: outputFile,
+		Language: "en",
+		Format:   openai.AudioResponseFormatVerboseJSON,
 	}
 	resp, err := client.CreateTranscription(context.Background(), req)
 	if err != nil {
@@ -440,7 +444,6 @@ var packetInfoCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal("Error creating Ogg", "error", err)
 		}
-		defer ogg.Close()
 
 		for rows.Next() {
 			var packet OpusPacket
@@ -458,18 +461,19 @@ var packetInfoCmd = &cobra.Command{
 			ogg.WritePacket(packet)
 		}
 
+		err = ogg.Close()
+		if err != nil {
+			log.Fatal("Error closing Ogg", "error", err)
+		}
+
 		// Convert and transcribe
-		convertedFile := outputFile + ".ff.ogg"
+		convertedFile := outputFile + ".ff.mp3"
 		transcription, err := convertAndTranscribe(outputFile, convertedFile)
 		if err != nil {
 			log.Fatal("Error converting and transcribing", "error", err)
 		}
 
 		log.Info("Transcription", "text", transcription)
-
-		// Clean up temporary files
-		os.Remove(outputFile)
-		os.Remove(convertedFile)
 	},
 }
 
@@ -480,7 +484,7 @@ func init() {
 
 	packetInfoCmd.Flags().Int64P("ssrc", "s", 0, "SSRC to filter packets")
 	packetInfoCmd.Flags().
-		StringP("start", "f", time.Now().Add(-10*time.Second).Format(time.RFC3339), "Start time (RFC3339 format)")
+		StringP("start", "f", time.Now().Add(-3*time.Minute).Format(time.RFC3339), "Start time (RFC3339 format)")
 	packetInfoCmd.Flags().
 		StringP("end", "t", time.Now().Format(time.RFC3339), "End time (RFC33339 format)")
 	packetInfoCmd.Flags().

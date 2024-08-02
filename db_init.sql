@@ -2,7 +2,7 @@ CREATE TABLE IF NOT EXISTS discord_sessions (
     id SERIAL PRIMARY KEY,
     bot_token TEXT,
     user_id TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS ssrc_mappings (
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS ssrc_mappings (
     channel_id TEXT,
     user_id TEXT,
     ssrc BIGINT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     session_id INTEGER REFERENCES discord_sessions(id)
 );
 
@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS opus_packets (
     sequence INTEGER,
     timestamp BIGINT,
     opus_data BYTEA,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     session_id INTEGER REFERENCES discord_sessions(id)
 );
 
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS voice_state_events (
     self_video BOOLEAN,
     suppress BOOLEAN,
     request_to_speak_timestamp TIMESTAMP,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS bot_voice_joins (
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS bot_voice_joins (
     guild_id TEXT NOT NULL,
     channel_id TEXT NOT NULL,
     session_id INTEGER REFERENCES discord_sessions(id),
-    joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    joined_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (guild_id, session_id)
 );
 
@@ -62,18 +62,15 @@ END;
 
 $$ LANGUAGE plpgsql;
 
-DO $$ 
-BEGIN 
-    IF NOT EXISTS (
-        SELECT 1
-        FROM pg_trigger
-        WHERE tgname = 'opus_packet_inserted'
-    ) THEN 
-        CREATE TRIGGER opus_packet_inserted
-        AFTER INSERT ON opus_packets 
-        FOR EACH ROW 
-        EXECUTE FUNCTION notify_new_opus_packet();
-    END IF;
+DO $$ BEGIN IF NOT EXISTS (
+    SELECT 1
+    FROM pg_trigger
+    WHERE tgname = 'opus_packet_inserted'
+) THEN CREATE TRIGGER opus_packet_inserted
+AFTER
+INSERT ON opus_packets FOR EACH ROW EXECUTE FUNCTION notify_new_opus_packet();
+
+END IF;
 
 END $$;
 
