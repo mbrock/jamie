@@ -432,6 +432,56 @@ func init() {
 	packetInfoCmd.Flags().StringP("end", "t", time.Now().Format(time.RFC3339), "End time (RFC3339 format)")
 	packetInfoCmd.Flags().StringP("output", "o", "output.ogg", "Output Ogg file path")
 	packetInfoCmd.Flags().StringP("transcription-service", "r", "gemini", "Transcription service to use (gemini or speechmatics)")
+
+	reportCmd := &cobra.Command{
+		Use:   "report",
+		Short: "Generate a voice activity report",
+		Long:  `This command generates a report of voice activity within a specified time range.`,
+		Run:   runReport,
+	}
+	reportCmd.Flags().StringP("start", "s", time.Now().Add(-24*time.Hour).Format(time.RFC3339), "Start time (RFC3339 format)")
+	reportCmd.Flags().StringP("end", "e", time.Now().Format(time.RFC3339), "End time (RFC3339 format)")
+
+	rootCmd.AddCommand(reportCmd)
+}
+
+func runReport(cmd *cobra.Command, args []string) {
+	startTimeStr, _ := cmd.Flags().GetString("start")
+	endTimeStr, _ := cmd.Flags().GetString("end")
+
+	startTime, endTime, err := parseTimeRange(startTimeStr, endTimeStr)
+	handleError(err, "Error parsing time range")
+
+	sqlDB, queries, err := openDatabase()
+	handleError(err, "Failed to open database")
+	defer sqlDB.Close()
+
+	report, err := queries.GetVoiceActivityReport(context.Background(), db.GetVoiceActivityReportParams{
+		CreatedAt:   startTime,
+		CreatedAt_2: endTime,
+	})
+	handleError(err, "Error generating report")
+
+	if len(report) == 0 {
+		fmt.Println("No voice activity found in the specified time range.")
+		return
+	}
+
+	table := tablewriter.NewWriter(os.Stdout)
+	table.SetHeader([]string{"User ID", "Packet Count", "First Packet", "Last Packet", "Total Bytes"})
+
+	for _, r := range report {
+		table.Append([]string{
+			r.UserID,
+			fmt.Sprintf("%d", r.PacketCount),
+			r.FirstPacket.Format(time.RFC3339),
+			r.LastPacket.Format(time.RFC3339),
+			fmt.Sprintf("%d", r.TotalBytes),
+		})
+	}
+
+	fmt.Printf("Voice Activity Report from %s to %s\n\n", startTime.Format(time.RFC3339), endTime.Format(time.RFC3339))
+	table.Render()
 }
 
 func uploadFile(ctx context.Context, client *genai.Client, db *sql.DB, fileName string) (string, bool, error) {
