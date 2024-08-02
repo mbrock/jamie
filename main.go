@@ -460,7 +460,7 @@ var packetInfoCmd = &cobra.Command{
 			GetString("transcription-service")
 		transcription, err := transcribeAudio(
 			ctx,
-			sqlDB,
+			queries,
 			mp3OutputFile,
 			transcriptionService,
 		)
@@ -627,7 +627,7 @@ func main() {
 
 func transcribeAudio(
 	ctx context.Context,
-	sqlDB *sql.DB,
+	queries *db.Queries,
 	audioFilePath string,
 	transcriptionService string,
 ) (string, error) {
@@ -642,7 +642,7 @@ func transcribeAudio(
 		}
 		defer client.Close()
 
-		remoteURI, _, err := uploadFile(ctx, client, sqlDB, audioFilePath)
+		remoteURI, _, err := uploadFile(ctx, client, queries, audioFilePath)
 		if err != nil {
 			return "", fmt.Errorf("error uploading file: %w", err)
 		}
