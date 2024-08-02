@@ -22,7 +22,6 @@ import (
 	"github.com/spf13/cobra"
 	"google.golang.org/api/option"
 	"node.town/transcription"
-	"swa.sh/ieva/ievadb"
 )
 
 //go:embed db_init.sql
@@ -494,11 +493,18 @@ var uploadCmd = &cobra.Command{
 		}
 		defer client.Close()
 
-		ievadb.InitDB()
-		defer ievadb.CloseDB()
+		// Connect to PostgreSQL
+		dbpool, err := pgxpool.Connect(
+			context.Background(),
+			os.Getenv("DATABASE_URL"),
+		)
+		if err != nil {
+			log.Fatal("Unable to connect to database", "error", err)
+		}
+		defer dbpool.Close()
 
 		for _, fileName := range args {
-			remoteURI, uploaded, err := uploadFile(ctx, client, fileName)
+			remoteURI, uploaded, err := uploadFile(ctx, client, dbpool, fileName)
 			if err != nil {
 				log.Error(
 					"Error processing file",
@@ -528,6 +534,7 @@ var uploadCmd = &cobra.Command{
 func uploadFile(
 	ctx context.Context,
 	client *genai.Client,
+	dbpool *pgxpool.Pool,
 	fileName string,
 ) (string, bool, error) {
 	file, err := os.Open(fileName)
@@ -544,15 +551,12 @@ func uploadFile(
 	contentHash := sha256.Sum256(content)
 	hashString := hex.EncodeToString(contentHash[:])
 
-	remoteURI, err := ievadb.GetUploadedFile(hashString)
-	if err != nil {
-		return "", false, fmt.Errorf(
-			"error checking for existing file: %w",
-			err,
-		)
-	}
-	if remoteURI != "" {
+	var remoteURI string
+	err = dbpool.QueryRow(context.Background(), "SELECT remote_uri FROM uploaded_files WHERE hash = $1", hashString).Scan(&remoteURI)
+	if err == nil {
 		return remoteURI, false, nil
+	} else if err != pgx.ErrNoRows {
+		return "", false, fmt.Errorf("error checking for existing file: %w", err)
 	}
 
 	mimeType := "audio/opus"
@@ -569,11 +573,11 @@ func uploadFile(
 		return "", false, fmt.Errorf("error uploading file: %w", err)
 	}
 
-	if err := ievadb.SaveUploadedFile(hashString, fileName, gfile.URI); err != nil {
-		return "", false, fmt.Errorf(
-			"error saving uploaded file info: %w",
-			err,
-		)
+	_, err = dbpool.Exec(context.Background(),
+		"INSERT INTO uploaded_files (hash, file_name, remote_uri) VALUES ($1, $2, $3)",
+		hashString, fileName, gfile.URI)
+	if err != nil {
+		return "", false, fmt.Errorf("error saving uploaded file info: %w", err)
 	}
 
 	return gfile.URI, true, nil
