@@ -448,8 +448,13 @@ var packetInfoCmd = &cobra.Command{
 
 		// Transcribe
 		ctx := context.Background()
-		transcriptionService, _ := cmd.Flags().GetString("transcription-service")
-		transcription, err := transcribeAudio(ctx, mp3OutputFile, transcriptionService)
+		transcriptionService, _ := cmd.Flags().
+			GetString("transcription-service")
+		transcription, err := transcribeAudio(
+			ctx,
+			mp3OutputFile,
+			transcriptionService,
+		)
 		if err != nil {
 			log.Fatal("Error transcribing", "error", err)
 		}
@@ -462,13 +467,12 @@ func init() {
 	rootCmd.AddCommand(listenCmd)
 	rootCmd.AddCommand(listenPacketsCmd)
 	rootCmd.AddCommand(packetInfoCmd)
-	rootCmd.AddCommand(uploadCmd)
 
 	packetInfoCmd.Flags().Int64P("ssrc", "s", 0, "SSRC to filter packets")
 	packetInfoCmd.Flags().
-		StringP("start", "f", time.Now().Add(-10*time.Second).Format(time.RFC3339), "Start time (RFC3339 format)")
+		StringP("start", "f", time.Now().Add(-2*time.Minute).Format(time.RFC3339), "Start time (RFC3339 format)")
 	packetInfoCmd.Flags().
-		StringP("end", "t", time.Now().Format(time.RFC3339), "End time (RFC33339 format)")
+		StringP("end", "t", time.Now().Format(time.RFC3339), "End time (RFC3339 format)")
 	packetInfoCmd.Flags().
 		StringP("output", "o", "output.ogg", "Output Ogg file path")
 	packetInfoCmd.Flags().
@@ -552,10 +556,18 @@ func main() {
 		log.Fatal("Error executing root command", "error", err)
 	}
 }
-func transcribeAudio(ctx context.Context, audioFilePath string, transcriptionService string) (string, error) {
+
+func transcribeAudio(
+	ctx context.Context,
+	audioFilePath string,
+	transcriptionService string,
+) (string, error) {
 	switch transcriptionService {
 	case "gemini":
-		client, err := genai.NewClient(ctx, option.WithAPIKey(os.Getenv("GEMINI_API_KEY")))
+		client, err := genai.NewClient(
+			ctx,
+			option.WithAPIKey(os.Getenv("GEMINI_API_KEY")),
+		)
 		if err != nil {
 			return "", fmt.Errorf("error initializing Gemini client: %w", err)
 		}
@@ -571,9 +583,26 @@ func transcribeAudio(ctx context.Context, audioFilePath string, transcriptionSer
 
 	case "speechmatics":
 		client := speechmatics.NewClient(os.Getenv("SPEECHMATICS_API_KEY"))
-		return client.Transcribe(ctx, audioFilePath)
+		transcription, err := client.SubmitAndWaitForTranscript(
+			ctx,
+			audioFilePath,
+			speechmatics.TranscriptionConfig{
+				Language: "en",
+			},
+			time.Second*1,
+		)
+		if err != nil {
+			return "", fmt.Errorf(
+				"error transcribing with Speechmatics: %w",
+				err,
+			)
+		}
+		return transcription, nil
 
 	default:
-		return "", fmt.Errorf("unknown transcription service: %s", transcriptionService)
+		return "", fmt.Errorf(
+			"unknown transcription service: %s",
+			transcriptionService,
+		)
 	}
 }
