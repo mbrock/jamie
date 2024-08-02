@@ -490,7 +490,7 @@ func init() {
 
 	packetInfoCmd.Flags().Int64P("ssrc", "s", 0, "SSRC to filter packets")
 	packetInfoCmd.Flags().
-		StringP("start", "f", time.Now().Add(-1*time.Minute).Format(time.RFC3339), "Start time (RFC3339 format)")
+		StringP("start", "f", time.Now().Add(-10*time.Second).Format(time.RFC3339), "Start time (RFC3339 format)")
 	packetInfoCmd.Flags().
 		StringP("end", "t", time.Now().Format(time.RFC3339), "End time (RFC3339 format)")
 	packetInfoCmd.Flags().
