@@ -444,7 +444,7 @@ var packetInfoCmd = &cobra.Command{
 		}
 		defer client.Close()
 
-		remoteURI, _, err := uploadFile(ctx, client, outputFile)
+		remoteURI, _, err := uploadFile(ctx, client, dbpool, outputFile)
 		if err != nil {
 			log.Fatal("Error uploading file", "error", err)
 		}
@@ -461,26 +461,21 @@ func init() {
 	rootCmd.AddCommand(listenCmd)
 	rootCmd.AddCommand(listenPacketsCmd)
 	rootCmd.AddCommand(packetInfoCmd)
+	rootCmd.AddCommand(uploadCmd)
 
 	packetInfoCmd.Flags().Int64P("ssrc", "s", 0, "SSRC to filter packets")
 	packetInfoCmd.Flags().
-		StringP("start", "f", time.Now().Add(-3*time.Minute).Format(time.RFC3339), "Start time (RFC3339 format)")
+		StringP("start", "f", time.Now().Add(-10*time.Second).Format(time.RFC3339), "Start time (RFC3339 format)")
 	packetInfoCmd.Flags().
 		StringP("end", "t", time.Now().Format(time.RFC3339), "End time (RFC33339 format)")
 	packetInfoCmd.Flags().
 		StringP("output", "o", "output.ogg", "Output Ogg file path")
 }
 
-func init() {
-	rootCmd.AddCommand(listenCmd)
-	rootCmd.AddCommand(listenPacketsCmd)
-	rootCmd.AddCommand(uploadCmd)
-}
-
 var uploadCmd = &cobra.Command{
 	Use:   "upload [files...]",
 	Short: "Upload files to Gemini API",
-	Long:  `Upload files to Gemini API and save the information in the SQLite database. Only uploads files that haven't been uploaded before.`,
+	Long:  `Upload files to Gemini API and save the information in the database. Only uploads files that haven't been uploaded before.`,
 	Args:  cobra.MinimumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
@@ -504,7 +499,12 @@ var uploadCmd = &cobra.Command{
 		defer dbpool.Close()
 
 		for _, fileName := range args {
-			remoteURI, uploaded, err := uploadFile(ctx, client, dbpool, fileName)
+			remoteURI, uploaded, err := uploadFile(
+				ctx,
+				client,
+				dbpool,
+				fileName,
+			)
 			if err != nil {
 				log.Error(
 					"Error processing file",
@@ -552,7 +552,8 @@ func uploadFile(
 	hashString := hex.EncodeToString(contentHash[:])
 
 	var remoteURI string
-	err = dbpool.QueryRow(context.Background(), "SELECT remote_uri FROM uploaded_files WHERE hash = $1", hashString).Scan(&remoteURI)
+	err = dbpool.QueryRow(context.Background(), "SELECT remote_uri FROM uploaded_files WHERE hash = $1", hashString).
+		Scan(&remoteURI)
 	if err == nil {
 		return remoteURI, false, nil
 	} else if err != pgx.ErrNoRows {
@@ -573,11 +574,18 @@ func uploadFile(
 		return "", false, fmt.Errorf("error uploading file: %w", err)
 	}
 
-	_, err = dbpool.Exec(context.Background(),
+	_, err = dbpool.Exec(
+		context.Background(),
 		"INSERT INTO uploaded_files (hash, file_name, remote_uri) VALUES ($1, $2, $3)",
-		hashString, fileName, gfile.URI)
+		hashString,
+		fileName,
+		gfile.URI,
+	)
 	if err != nil {
-		return "", false, fmt.Errorf("error saving uploaded file info: %w", err)
+		return "", false, fmt.Errorf(
+			"error saving uploaded file info: %w",
+			err,
+		)
 	}
 
 	return gfile.URI, true, nil
