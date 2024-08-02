@@ -1,0 +1,20 @@
+-- name: UpsertBotVoiceJoin :exec
+INSERT INTO bot_voice_joins (guild_id, channel_id, session_id)
+VALUES ($1, $2, $3)
+ON CONFLICT (guild_id, session_id)
+DO UPDATE SET channel_id = EXCLUDED.channel_id, joined_at = CURRENT_TIMESTAMP;
+
+-- name: UpsertSSRCMapping :exec
+INSERT INTO ssrc_mappings (guild_id, channel_id, user_id, ssrc, session_id)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (guild_id, channel_id, user_id, ssrc)
+DO UPDATE SET session_id = EXCLUDED.session_id;
+
+-- name: InsertOpusPacket :exec
+INSERT INTO opus_packets (guild_id, channel_id, ssrc, sequence, timestamp, opus_data, session_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7);
+
+-- name: InsertDiscordSession :one
+INSERT INTO discord_sessions (bot_token, user_id)
+VALUES ($1, $2)
+RETURNING id;
