@@ -572,13 +572,11 @@ func uploadFile(
 		return "", false, fmt.Errorf("error checking for existing file: %w", err)
 	}
 
-	mimeType := "audio/opus"
 	gfile, err := client.UploadFile(
 		ctx,
 		"",
 		file,
 		&genai.UploadFileOptions{
-			MIMEType:    mimeType,
 			DisplayName: filepath.Base(fileName),
 		},
 	)
