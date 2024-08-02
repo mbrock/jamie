@@ -377,36 +377,29 @@ func parseTimeRange(
 }
 
 func fetchOpusPackets(
-	db *sql.DB,
+	queries *db.Queries,
 	ssrc int64,
 	startTime, endTime time.Time,
-) (*sql.Rows, error) {
-	return db.Query(`
-		SELECT id, sequence, timestamp, created_at, opus_data
-		FROM opus_packets
-		WHERE ssrc = $1 AND created_at BETWEEN $2 AND $3
-		ORDER BY created_at
-	`, ssrc, startTime, endTime)
+) ([]db.OpusPacket, error) {
+	return queries.GetOpusPackets(context.Background(), db.GetOpusPacketsParams{
+		Ssrc:      ssrc,
+		CreatedAt: startTime,
+		CreatedAt_2: endTime,
+	})
 }
 
-func processOpusPackets(rows *sql.Rows, ogg *Ogg) error {
-	defer rows.Close()
-	for rows.Next() {
-		var packet OpusPacket
-		err := rows.Scan(
-			&packet.ID,
-			&packet.Sequence,
-			&packet.Timestamp,
-			&packet.CreatedAt,
-			&packet.OpusData,
-		)
-		if err != nil {
-			log.Error("Error scanning row", "error", err)
-			continue
+func processOpusPackets(packets []db.OpusPacket, ogg *Ogg) error {
+	for _, dbPacket := range packets {
+		packet := OpusPacket{
+			ID:        int(dbPacket.ID),
+			Sequence:  uint16(dbPacket.Sequence),
+			Timestamp: uint32(dbPacket.Timestamp),
+			CreatedAt: dbPacket.CreatedAt,
+			OpusData:  dbPacket.OpusData,
 		}
 		ogg.WritePacket(packet)
 	}
-	return rows.Err()
+	return nil
 }
 
 var packetInfoCmd = &cobra.Command{
@@ -428,13 +421,13 @@ var packetInfoCmd = &cobra.Command{
 
 		queries := db.New(sqlDB)
 
-		rows, err := fetchOpusPackets(sqlDB, ssrc, startTime, endTime)
+		packets, err := fetchOpusPackets(queries, ssrc, startTime, endTime)
 		handleError(err, "Error querying database")
 
 		ogg, err := NewOgg(ssrc, startTime, endTime, outputFile)
 		handleError(err, "Error creating Ogg")
 
-		err = processOpusPackets(rows, ogg)
+		err = processOpusPackets(packets, ogg)
 		handleError(err, "Error processing opus packets")
 
 		err = ogg.Close()
