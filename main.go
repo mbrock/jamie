@@ -15,8 +15,8 @@ import (
 	"github.com/charmbracelet/log"
 	pgx "github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
-	"github.com/pion/opus"
-	"github.com/pion/opus/oggwriter"
+	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
+	"github.com/pion/rtp"
 	"github.com/spf13/cobra"
 )
 
@@ -401,7 +401,7 @@ var packetInfoCmd = &cobra.Command{
 		defer oggFile.Close()
 
 		// Create OggWriter
-		oggWriter, err := oggwriter.New(oggFile, 48000, 2)
+		oggWriter, err := oggwriter.New(oggFile, oggwriter.Options{})
 		if err != nil {
 			log.Fatal("Error creating OggWriter", "error", err)
 		}
@@ -409,13 +409,13 @@ var packetInfoCmd = &cobra.Command{
 
 		var packetCount int
 		var firstTimestamp, lastTimestamp time.Time
-		var lastPacketTimestamp int64
+		var lastPacketTimestamp uint32
 		var gapCount int
 
 		for rows.Next() {
 			var id int
-			var sequence int
-			var timestamp int64
+			var sequence uint16
+			var timestamp uint32
 			var createdAt time.Time
 			var opusData []byte
 			err := rows.Scan(&id, &sequence, &timestamp, &createdAt, &opusData)
@@ -441,17 +441,36 @@ var packetInfoCmd = &cobra.Command{
 					// Insert silent frames
 					silentFrames := int(timestampDiff / 960)
 					for i := 0; i < silentFrames; i++ {
-						silentFrame := make([]byte, 2) // Minimum Opus frame size
-						if err := oggWriter.WriteOpusPacket(silentFrame); err != nil {
+						silentPacket := &rtp.Packet{
+							Header: rtp.Header{
+								Version:        2,
+								PayloadType:    111, // Opus payload type
+								SequenceNumber: sequence + uint16(i),
+								Timestamp:      lastPacketTimestamp + uint32(i*960),
+							},
+							Payload: make([]byte, 2), // Minimum Opus frame size
+						}
+						if err := oggWriter.WriteRTP(silentPacket); err != nil {
 							log.Error("Error writing silent frame", "error", err)
 						}
 					}
 				}
 			}
 
-			// Write the actual Opus packet
-			if err := oggWriter.WriteOpusPacket(opusData); err != nil {
-				log.Error("Error writing Opus packet", "error", err)
+			// Create RTP packet from the database row
+			rtpPacket := &rtp.Packet{
+				Header: rtp.Header{
+					Version:        2,
+					PayloadType:    111, // Opus payload type
+					SequenceNumber: sequence,
+					Timestamp:      timestamp,
+				},
+				Payload: opusData,
+			}
+
+			// Write the actual RTP packet
+			if err := oggWriter.WriteRTP(rtpPacket); err != nil {
+				log.Error("Error writing RTP packet", "error", err)
 			}
 
 			lastTimestamp = createdAt
