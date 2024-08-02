@@ -447,7 +447,7 @@ var packetInfoCmd = &cobra.Command{
 							Header: rtp.Header{
 								Timestamp: lastPacketTimestamp + uint32(i*960),
 							},
-							Payload: make([]byte, 2), // Minimum Opus frame size
+							Payload: []byte{0xf8, 0xff, 0xfe}, // Empty packet payload
 						}
 						if err := oggWriter.WriteRTP(silentPacket); err != nil {
 							log.Error("Error writing silent frame", "error", err)
