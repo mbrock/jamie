@@ -15,8 +15,8 @@ import (
 	"github.com/charmbracelet/log"
 	pgx "github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
-	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
 	"github.com/pion/rtp"
+	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
 	"github.com/spf13/cobra"
 )
 
@@ -393,19 +393,16 @@ var packetInfoCmd = &cobra.Command{
 		}
 		defer rows.Close()
 
-		// Create Ogg file
-		oggFile, err := os.Create(outputFile)
-		if err != nil {
-			log.Fatal("Error creating Ogg file", "error", err)
-		}
-		defer oggFile.Close()
-
 		// Create OggWriter
-		oggWriter, err := oggwriter.New(oggFile, oggwriter.Options{})
+		oggWriter, err := oggwriter.New(outputFile, 48000, 2)
 		if err != nil {
 			log.Fatal("Error creating OggWriter", "error", err)
 		}
-		defer oggWriter.Close()
+		defer func() {
+			if err := oggWriter.Close(); err != nil {
+				log.Error("Error closing OggWriter", "error", err)
+			}
+		}()
 
 		var packetCount int
 		var firstTimestamp, lastTimestamp time.Time
@@ -418,7 +415,13 @@ var packetInfoCmd = &cobra.Command{
 			var timestamp uint32
 			var createdAt time.Time
 			var opusData []byte
-			err := rows.Scan(&id, &sequence, &timestamp, &createdAt, &opusData)
+			err := rows.Scan(
+				&id,
+				&sequence,
+				&timestamp,
+				&createdAt,
+				&opusData,
+			)
 			if err != nil {
 				log.Error("Error scanning row", "error", err)
 				continue
@@ -426,7 +429,6 @@ var packetInfoCmd = &cobra.Command{
 
 			if packetCount == 0 {
 				firstTimestamp = createdAt
-				lastPacketTimestamp = timestamp
 			} else {
 				timestampDiff := timestamp - lastPacketTimestamp
 				if timestampDiff > 960 { // 960 represents 20ms in the Opus timestamp units
@@ -443,10 +445,7 @@ var packetInfoCmd = &cobra.Command{
 					for i := 0; i < silentFrames; i++ {
 						silentPacket := &rtp.Packet{
 							Header: rtp.Header{
-								Version:        2,
-								PayloadType:    111, // Opus payload type
-								SequenceNumber: sequence + uint16(i),
-								Timestamp:      lastPacketTimestamp + uint32(i*960),
+								Timestamp: lastPacketTimestamp + uint32(i*960),
 							},
 							Payload: make([]byte, 2), // Minimum Opus frame size
 						}
@@ -460,10 +459,7 @@ var packetInfoCmd = &cobra.Command{
 			// Create RTP packet from the database row
 			rtpPacket := &rtp.Packet{
 				Header: rtp.Header{
-					Version:        2,
-					PayloadType:    111, // Opus payload type
-					SequenceNumber: sequence,
-					Timestamp:      timestamp,
+					Timestamp: timestamp,
 				},
 				Payload: opusData,
 			}
@@ -494,7 +490,7 @@ func init() {
 
 	packetInfoCmd.Flags().Int64P("ssrc", "s", 0, "SSRC to filter packets")
 	packetInfoCmd.Flags().
-		StringP("start", "f", time.Now().Add(-10*time.Minute).Format(time.RFC3339), "Start time (RFC3339 format)")
+		StringP("start", "f", time.Now().Add(-1*time.Minute).Format(time.RFC3339), "Start time (RFC3339 format)")
 	packetInfoCmd.Flags().
 		StringP("end", "t", time.Now().Format(time.RFC3339), "End time (RFC3339 format)")
 	packetInfoCmd.Flags().
