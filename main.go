@@ -391,8 +391,31 @@ var packetInfoCmd = &cobra.Command{
 		}
 		defer dbpool.Close()
 
-		ogg := NewOgg(dbpool, ssrc, startTime, endTime, outputFile)
-		if err := ogg.ProcessPackets(); err != nil {
+		// Fetch packets from the database
+		rows, err := dbpool.Query(context.Background(), `
+			SELECT id, sequence, timestamp, created_at, opus_data
+			FROM opus_packets
+			WHERE ssrc = $1 AND created_at BETWEEN $2 AND $3
+			ORDER BY created_at
+		`, ssrc, startTime, endTime)
+		if err != nil {
+			log.Fatal("Error querying database", "error", err)
+		}
+		defer rows.Close()
+
+		var packets []OpusPacket
+		for rows.Next() {
+			var packet OpusPacket
+			err := rows.Scan(&packet.ID, &packet.Sequence, &packet.Timestamp, &packet.CreatedAt, &packet.OpusData)
+			if err != nil {
+				log.Error("Error scanning row", "error", err)
+				continue
+			}
+			packets = append(packets, packet)
+		}
+
+		ogg := NewOgg(ssrc, startTime, endTime, outputFile)
+		if err := ogg.ProcessPackets(packets); err != nil {
 			log.Fatal("Error processing packets", "error", err)
 		}
 	},

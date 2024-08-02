@@ -1,26 +1,30 @@
 package main
 
 import (
-	"context"
 	"time"
 
 	"github.com/charmbracelet/log"
-	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
 )
 
+type OpusPacket struct {
+	ID        int
+	Sequence  uint16
+	Timestamp uint32
+	CreatedAt time.Time
+	OpusData  []byte
+}
+
 type Ogg struct {
-	dbpool     *pgxpool.Pool
 	ssrc       int64
 	startTime  time.Time
 	endTime    time.Time
 	outputFile string
 }
 
-func NewOgg(dbpool *pgxpool.Pool, ssrc int64, startTime, endTime time.Time, outputFile string) *Ogg {
+func NewOgg(ssrc int64, startTime, endTime time.Time, outputFile string) *Ogg {
 	return &Ogg{
-		dbpool:     dbpool,
 		ssrc:       ssrc,
 		startTime:  startTime,
 		endTime:    endTime,
@@ -28,18 +32,7 @@ func NewOgg(dbpool *pgxpool.Pool, ssrc int64, startTime, endTime time.Time, outp
 	}
 }
 
-func (o *Ogg) ProcessPackets() error {
-	rows, err := o.dbpool.Query(context.Background(), `
-		SELECT id, sequence, timestamp, created_at, opus_data
-		FROM opus_packets
-		WHERE ssrc = $1 AND created_at BETWEEN $2 AND $3
-		ORDER BY created_at
-	`, o.ssrc, o.startTime, o.endTime)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
+func (o *Ogg) ProcessPackets(packets []OpusPacket) error {
 	oggWriter, err := oggwriter.New(o.outputFile, 48000, 2)
 	if err != nil {
 		return err
@@ -51,36 +44,25 @@ func (o *Ogg) ProcessPackets() error {
 	var lastPacketTimestamp uint32
 	var gapCount int
 
-	for rows.Next() {
-		var id int
-		var sequence uint16
-		var timestamp uint32
-		var createdAt time.Time
-		var opusData []byte
-		err := rows.Scan(&id, &sequence, &timestamp, &createdAt, &opusData)
-		if err != nil {
-			log.Error("Error scanning row", "error", err)
-			continue
-		}
-
+	for _, packet := range packets {
 		if packetCount == 0 {
-			firstTimestamp = createdAt
-			o.addInitialSilence(oggWriter, createdAt, timestamp)
+			firstTimestamp = packet.CreatedAt
+			o.addInitialSilence(oggWriter, packet.CreatedAt, packet.Timestamp)
 		} else {
-			gapCount += o.handleGap(oggWriter, timestamp, lastPacketTimestamp, id, createdAt)
+			gapCount += o.handleGap(oggWriter, packet.Timestamp, lastPacketTimestamp, packet.ID, packet.CreatedAt)
 		}
 
 		rtpPacket := &rtp.Packet{
-			Header:  rtp.Header{Timestamp: timestamp},
-			Payload: opusData,
+			Header:  rtp.Header{Timestamp: packet.Timestamp},
+			Payload: packet.OpusData,
 		}
 
 		if err := oggWriter.WriteRTP(rtpPacket); err != nil {
 			log.Error("Error writing RTP packet", "error", err)
 		}
 
-		lastTimestamp = createdAt
-		lastPacketTimestamp = timestamp
+		lastTimestamp = packet.CreatedAt
+		lastPacketTimestamp = packet.Timestamp
 		packetCount++
 	}
 
