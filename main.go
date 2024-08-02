@@ -403,19 +403,8 @@ var packetInfoCmd = &cobra.Command{
 		}
 		defer rows.Close()
 
-		var packets []OpusPacket
-		for rows.Next() {
-			var packet OpusPacket
-			err := rows.Scan(&packet.ID, &packet.Sequence, &packet.Timestamp, &packet.CreatedAt, &packet.OpusData)
-			if err != nil {
-				log.Error("Error scanning row", "error", err)
-				continue
-			}
-			packets = append(packets, packet)
-		}
-
 		ogg := NewOgg(ssrc, startTime, endTime, outputFile)
-		if err := ogg.ProcessPackets(packets); err != nil {
+		if err := ogg.ProcessPackets(rows); err != nil {
 			log.Fatal("Error processing packets", "error", err)
 		}
 	},

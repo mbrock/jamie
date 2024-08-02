@@ -1,9 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/charmbracelet/log"
+	"github.com/jackc/pgx/v4"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
 )
@@ -32,7 +34,7 @@ func NewOgg(ssrc int64, startTime, endTime time.Time, outputFile string) *Ogg {
 	}
 }
 
-func (o *Ogg) ProcessPackets(packets []OpusPacket) error {
+func (o *Ogg) ProcessPackets(rows pgx.Rows) error {
 	oggWriter, err := oggwriter.New(o.outputFile, 48000, 2)
 	if err != nil {
 		return err
@@ -44,7 +46,14 @@ func (o *Ogg) ProcessPackets(packets []OpusPacket) error {
 	var lastPacketTimestamp uint32
 	var gapCount int
 
-	for _, packet := range packets {
+	for rows.Next() {
+		var packet OpusPacket
+		err := rows.Scan(&packet.ID, &packet.Sequence, &packet.Timestamp, &packet.CreatedAt, &packet.OpusData)
+		if err != nil {
+			log.Error("Error scanning row", "error", err)
+			continue
+		}
+
 		if packetCount == 0 {
 			firstTimestamp = packet.CreatedAt
 			o.addInitialSilence(oggWriter, packet.CreatedAt, packet.Timestamp)
@@ -64,6 +73,10 @@ func (o *Ogg) ProcessPackets(packets []OpusPacket) error {
 		lastTimestamp = packet.CreatedAt
 		lastPacketTimestamp = packet.Timestamp
 		packetCount++
+	}
+
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("error iterating over rows: %w", err)
 	}
 
 	log.Info("Summary",
