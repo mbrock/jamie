@@ -42,8 +42,8 @@ func NewOgg(
 
 	return &Ogg{
 		ssrc:       ssrc,
-		startTime:  startTime,
-		endTime:    endTime,
+		startTime:  startTime.UTC(),
+		endTime:    endTime.UTC(),
 		outputFile: outputFile,
 		oggWriter:  oggWriter,
 	}, nil
@@ -91,15 +91,17 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 }
 
 func (o *Ogg) addInitialSilence(createdAt time.Time, timestamp uint32) {
-	if createdAt.After(o.startTime) {
-		silenceDuration := createdAt.Sub(o.startTime)
+	createdAtUTC := createdAt.UTC()
+	startTimeUTC := o.startTime.UTC()
+	if createdAtUTC.After(startTimeUTC) {
+		silenceDuration := createdAtUTC.Sub(startTimeUTC)
 		silentFrames := int(
 			silenceDuration.Milliseconds() / 20,
 		) // 20ms per frame
 		o.writeSilentFrames(silentFrames, timestamp, true)
 		log.Info("Added initial silence", "duration", silenceDuration,
-			"created_at", createdAt,
-			"start_time", o.startTime,
+			"created_at", createdAtUTC,
+			"start_time", startTimeUTC,
 		)
 	}
 }
