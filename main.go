@@ -43,17 +43,6 @@ func handleError(err error, message string) {
 	}
 }
 
-func connectToDatabase() (*db.Queries, error) {
-	dbpool, err := pgxpool.Connect(
-		context.Background(),
-		os.Getenv("DATABASE_URL"),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("unable to connect to database: %w", err)
-	}
-	return db.New(dbpool), nil
-}
-
 func (b *Bot) handleEvent(s *discordgo.Session, m *discordgo.Event) {
 	log.Info("message", "op", m.Operation, "type", m.Type)
 }
@@ -181,11 +170,14 @@ func (b *Bot) handleInteractionCreate(
 	go b.handleOpusPackets(vc)
 
 	// Save or update the channel join information
-	err = b.Queries.UpsertBotVoiceJoin(context.Background(), db.UpsertBotVoiceJoinParams{
-		GuildID:   m.GuildID,
-		ChannelID: m.ChannelID,
-		SessionID: b.SessionID,
-	})
+	err = b.Queries.UpsertBotVoiceJoin(
+		context.Background(),
+		db.UpsertBotVoiceJoinParams{
+			GuildID:   m.GuildID,
+			ChannelID: m.ChannelID,
+			SessionID: b.SessionID,
+		},
+	)
 	if err != nil {
 		log.Error("Failed to upsert bot voice join", "error", err)
 	}
@@ -195,13 +187,16 @@ func (b *Bot) handleVoiceSpeakingUpdate(
 	vc *discordgo.VoiceConnection,
 	m *discordgo.VoiceSpeakingUpdate,
 ) {
-	err := b.Queries.UpsertSSRCMapping(context.Background(), db.UpsertSSRCMappingParams{
-		GuildID:   vc.GuildID,
-		ChannelID: vc.ChannelID,
-		UserID:    m.UserID,
-		Ssrc:      int64(m.SSRC),
-		SessionID: b.SessionID,
-	})
+	err := b.Queries.UpsertSSRCMapping(
+		context.Background(),
+		db.UpsertSSRCMappingParams{
+			GuildID:   vc.GuildID,
+			ChannelID: vc.ChannelID,
+			UserID:    m.UserID,
+			Ssrc:      int64(m.SSRC),
+			SessionID: b.SessionID,
+		},
+	)
 	if err != nil {
 		log.Error("Failed to insert/update SSRC mapping", "error", err)
 	}
@@ -209,15 +204,18 @@ func (b *Bot) handleVoiceSpeakingUpdate(
 
 func (b *Bot) handleOpusPackets(vc *discordgo.VoiceConnection) {
 	for pkt := range vc.OpusRecv {
-		err := b.Queries.InsertOpusPacket(context.Background(), db.InsertOpusPacketParams{
-			GuildID:   vc.GuildID,
-			ChannelID: vc.ChannelID,
-			Ssrc:      int64(pkt.SSRC),
-			Sequence:  int32(pkt.Sequence),
-			Timestamp: int64(pkt.Timestamp),
-			OpusData:  pkt.Opus,
-			SessionID: b.SessionID,
-		})
+		err := b.Queries.InsertOpusPacket(
+			context.Background(),
+			db.InsertOpusPacketParams{
+				GuildID:   vc.GuildID,
+				ChannelID: vc.ChannelID,
+				Ssrc:      int64(pkt.SSRC),
+				Sequence:  int32(pkt.Sequence),
+				Timestamp: int64(pkt.Timestamp),
+				OpusData:  pkt.Opus,
+				SessionID: b.SessionID,
+			},
+		)
 
 		if err != nil {
 			log.Error("Failed to insert opus packet", "error", err)
@@ -277,10 +275,13 @@ var listenCmd = &cobra.Command{
 		log.Info("discord", "status", discord.State.User.Username)
 
 		// Insert a record into the discord_sessions table
-		sessionID, err := bot.Queries.InsertDiscordSession(context.Background(), db.InsertDiscordSessionParams{
-			BotToken: os.Getenv("DISCORD_TOKEN"),
-			UserID:   discord.State.User.ID,
-		})
+		sessionID, err := bot.Queries.InsertDiscordSession(
+			context.Background(),
+			db.InsertDiscordSessionParams{
+				BotToken: os.Getenv("DISCORD_TOKEN"),
+				UserID:   discord.State.User.ID,
+			},
+		)
 		if err != nil {
 			log.Error("Failed to insert discord session", "error", err)
 		}
@@ -353,21 +354,33 @@ var listenPacketsCmd = &cobra.Command{
 	},
 }
 
-func parseTimeRange(startTimeStr, endTimeStr string) (time.Time, time.Time, error) {
+func parseTimeRange(
+	startTimeStr, endTimeStr string,
+) (time.Time, time.Time, error) {
 	startTime, err := time.Parse(time.RFC3339, startTimeStr)
 	if err != nil {
-		return time.Time{}, time.Time{}, fmt.Errorf("error parsing start time: %w", err)
+		return time.Time{}, time.Time{}, fmt.Errorf(
+			"error parsing start time: %w",
+			err,
+		)
 	}
 
 	endTime, err := time.Parse(time.RFC3339, endTimeStr)
 	if err != nil {
-		return time.Time{}, time.Time{}, fmt.Errorf("error parsing end time: %w", err)
+		return time.Time{}, time.Time{}, fmt.Errorf(
+			"error parsing end time: %w",
+			err,
+		)
 	}
 
 	return startTime, endTime, nil
 }
 
-func fetchOpusPackets(dbpool *pgxpool.Pool, ssrc int64, startTime, endTime time.Time) (pgx.Rows, error) {
+func fetchOpusPackets(
+	dbpool *pgxpool.Pool,
+	ssrc int64,
+	startTime, endTime time.Time,
+) (pgx.Rows, error) {
 	return dbpool.Query(context.Background(), `
 		SELECT id, sequence, timestamp, created_at, opus_data
 		FROM opus_packets
@@ -426,14 +439,22 @@ var packetInfoCmd = &cobra.Command{
 		handleError(err, "Error closing Ogg")
 
 		// Convert OGG to MP3
-		mp3OutputFile := strings.TrimSuffix(outputFile, filepath.Ext(outputFile)) + ".mp3"
+		mp3OutputFile := strings.TrimSuffix(
+			outputFile,
+			filepath.Ext(outputFile),
+		) + ".mp3"
 		err = convertOggToMp3(outputFile, mp3OutputFile)
 		handleError(err, "Error converting OGG to MP3")
 
 		// Transcribe
 		ctx := context.Background()
-		transcriptionService, _ := cmd.Flags().GetString("transcription-service")
-		transcription, err := transcribeAudio(ctx, mp3OutputFile, transcriptionService)
+		transcriptionService, _ := cmd.Flags().
+			GetString("transcription-service")
+		transcription, err := transcribeAudio(
+			ctx,
+			mp3OutputFile,
+			transcriptionService,
+		)
 		handleError(err, "Error transcribing")
 
 		fmt.Println("Transcription:")
