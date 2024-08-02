@@ -44,14 +44,33 @@ func handleError(err error, message string) {
 	}
 }
 
+func openDatabase() (*sql.DB, *db.Queries, error) {
+	sqlDB, err := sql.Open("postgres", os.Getenv("DATABASE_URL")+"?sslmode=disable")
+	if err != nil {
+		return nil, nil, fmt.Errorf("unable to connect to database: %w", err)
+	}
+
+	queries := db.New(sqlDB)
+
+	// Read and execute the embedded SQL file to create tables
+	sqlFile, err := sqlFS.ReadFile("db_init.sql")
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to read embedded db_init.sql: %w", err)
+	}
+
+	_, err = sqlDB.ExecContext(context.Background(), string(sqlFile))
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to execute embedded db_init.sql: %w", err)
+	}
+
+	return sqlDB, queries, nil
+}
+
 func (b *Bot) handleEvent(s *discordgo.Session, m *discordgo.Event) {
 	log.Info("message", "op", m.Operation, "type", m.Type)
 }
 
-func (b *Bot) handleGuildCreate(
-	s *discordgo.Session,
-	m *discordgo.GuildCreate,
-) {
+func (b *Bot) handleGuildCreate(s *discordgo.Session, m *discordgo.GuildCreate) {
 	log.Info("guild", "id", m.ID, "name", m.Name)
 	for _, channel := range m.Guild.Channels {
 		log.Info("channel", "id", channel.ID, "name", channel.Name)
@@ -107,10 +126,7 @@ func (b *Bot) handleGuildCreate(
 	}
 }
 
-func (b *Bot) handleVoiceStateUpdate(
-	s *discordgo.Session,
-	m *discordgo.VoiceStateUpdate,
-) {
+func (b *Bot) handleVoiceStateUpdate(s *discordgo.Session, m *discordgo.VoiceStateUpdate) {
 	log.Info("voice", "user", m.UserID, "channel", m.ChannelID)
 
 	err := b.Queries.InsertVoiceStateEvent(
@@ -135,17 +151,11 @@ func (b *Bot) handleVoiceStateUpdate(
 	}
 }
 
-func (b *Bot) handleVoiceServerUpdate(
-	s *discordgo.Session,
-	m *discordgo.VoiceServerUpdate,
-) {
+func (b *Bot) handleVoiceServerUpdate(s *discordgo.Session, m *discordgo.VoiceServerUpdate) {
 	log.Info("voice", "server", m.Endpoint, "token", m.Token)
 }
 
-func (b *Bot) handleInteractionCreate(
-	s *discordgo.Session,
-	m *discordgo.InteractionCreate,
-) {
+func (b *Bot) handleInteractionCreate(s *discordgo.Session, m *discordgo.InteractionCreate) {
 	s.InteractionRespond(
 		m.Interaction,
 		&discordgo.InteractionResponse{
@@ -177,10 +187,7 @@ func (b *Bot) handleInteractionCreate(
 	}
 }
 
-func (b *Bot) handleVoiceSpeakingUpdate(
-	vc *discordgo.VoiceConnection,
-	m *discordgo.VoiceSpeakingUpdate,
-) {
+func (b *Bot) handleVoiceSpeakingUpdate(vc *discordgo.VoiceConnection, m *discordgo.VoiceSpeakingUpdate) {
 	err := b.Queries.UpsertSSRCMapping(
 		context.Background(),
 		db.UpsertSSRCMappingParams{
@@ -228,25 +235,11 @@ var listenCmd = &cobra.Command{
 	Short: "Start listening in Discord voice channels",
 	Long:  `This command starts the Jamie bot and makes it listen in Discord voice channels.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		sqlDB, err := sql.Open(
-			"postgres",
-			os.Getenv("DATABASE_URL")+"?sslmode=disable",
-		)
-		handleError(err, "Unable to connect to database")
+		sqlDB, queries, err := openDatabase()
+		handleError(err, "Failed to open database")
 		defer sqlDB.Close()
 
-		queries := db.New(sqlDB)
-
-		// Read and execute the embedded SQL file to create tables
-		sqlFile, err := sqlFS.ReadFile("db_init.sql")
-		handleError(err, "Failed to read embedded db_init.sql")
-
-		_, err = sqlDB.ExecContext(context.Background(), string(sqlFile))
-		handleError(err, "Failed to execute embedded db_init.sql")
-
-		discord, err := discordgo.New(
-			fmt.Sprintf("Bot %s", os.Getenv("DISCORD_TOKEN")),
-		)
+		discord, err := discordgo.New(fmt.Sprintf("Bot %s", os.Getenv("DISCORD_TOKEN")))
 		handleError(err, "Error creating Discord session")
 
 		discord.LogLevel = discordgo.LogInformational
@@ -279,7 +272,7 @@ var listenCmd = &cobra.Command{
 			context.Background(),
 			db.InsertDiscordSessionParams{
 				BotToken: os.Getenv("DISCORD_TOKEN"),
-				UserID:   discord.State.User.ID,
+				UserID: discord.State.User.ID,
 			},
 		)
 
@@ -301,13 +294,9 @@ var listenPacketsCmd = &cobra.Command{
 	Short: "Listen for new opus packets",
 	Long:  `This command listens for new opus packets and prints information about each new packet.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		// Connect to PostgreSQL
-		sqlDB, err := sql.Open(
-			"postgres",
-			os.Getenv("DATABASE_URL")+"?sslmode=disable",
-		)
+		sqlDB, _, err := openDatabase()
 		if err != nil {
-			log.Fatal("Unable to connect to database", "error", err)
+			log.Fatal("Failed to open database", "error", err)
 		}
 		defer sqlDB.Close()
 
@@ -323,8 +312,7 @@ var listenPacketsCmd = &cobra.Command{
 
 		for {
 			var notification string
-			err := sqlDB.QueryRow("SELECT pg_notify('new_opus_packet', '')").
-				Scan(&notification)
+			err := sqlDB.QueryRow("SELECT pg_notify('new_opus_packet', '')").Scan(&notification)
 			if err != nil {
 				log.Error("Error waiting for notification", "error", err)
 				continue
@@ -340,8 +328,7 @@ var listenPacketsCmd = &cobra.Command{
 			packetCount++
 			now := time.Now()
 
-			if lastPrintTime.IsZero() ||
-				now.Sub(lastPrintTime) >= time.Second {
+			if lastPrintTime.IsZero() || now.Sub(lastPrintTime) >= time.Second {
 				log.Info("Opus packets received", "count", packetCount)
 				lastPrintTime = now
 				packetCount = 0
@@ -350,33 +337,21 @@ var listenPacketsCmd = &cobra.Command{
 	},
 }
 
-func parseTimeRange(
-	startTimeStr, endTimeStr string,
-) (time.Time, time.Time, error) {
+func parseTimeRange(startTimeStr, endTimeStr string) (time.Time, time.Time, error) {
 	startTime, err := time.Parse(time.RFC3339, startTimeStr)
 	if err != nil {
-		return time.Time{}, time.Time{}, fmt.Errorf(
-			"error parsing start time: %w",
-			err,
-		)
+		return time.Time{}, time.Time{}, fmt.Errorf("error parsing start time: %w", err)
 	}
 
 	endTime, err := time.Parse(time.RFC3339, endTimeStr)
 	if err != nil {
-		return time.Time{}, time.Time{}, fmt.Errorf(
-			"error parsing end time: %w",
-			err,
-		)
+		return time.Time{}, time.Time{}, fmt.Errorf("error parsing end time: %w", err)
 	}
 
 	return startTime, endTime, nil
 }
 
-func fetchOpusPackets(
-	queries *db.Queries,
-	ssrc int64,
-	startTime, endTime time.Time,
-) ([]db.OpusPacket, error) {
+func fetchOpusPackets(queries *db.Queries, ssrc int64, startTime, endTime time.Time) ([]db.OpusPacket, error) {
 	return queries.GetOpusPackets(
 		context.Background(),
 		db.GetOpusPacketsParams{
@@ -414,11 +389,9 @@ var packetInfoCmd = &cobra.Command{
 		startTime, endTime, err := parseTimeRange(startTimeStr, endTimeStr)
 		handleError(err, "Error parsing time range")
 
-		sqlDB, err := sql.Open("postgres", os.Getenv("DATABASE_URL"))
-		handleError(err, "Unable to connect to database")
+		sqlDB, queries, err := openDatabase()
+		handleError(err, "Failed to open database")
 		defer sqlDB.Close()
-
-		queries := db.New(sqlDB)
 
 		packets, err := fetchOpusPackets(queries, ssrc, startTime, endTime)
 		handleError(err, "Error querying database")
@@ -433,22 +406,14 @@ var packetInfoCmd = &cobra.Command{
 		handleError(err, "Error closing Ogg")
 
 		// Convert OGG to MP3
-		mp3OutputFile := strings.TrimSuffix(
-			outputFile,
-			filepath.Ext(outputFile),
-		) + ".mp3"
+		mp3OutputFile := strings.TrimSuffix(outputFile, filepath.Ext(outputFile)) + ".mp3"
 		err = convertOggToMp3(outputFile, mp3OutputFile)
 		handleError(err, "Error converting OGG to MP3")
 
 		// Transcribe
 		ctx := context.Background()
-		transcriptionService, _ := cmd.Flags().
-			GetString("transcription-service")
-		transcription, err := transcribeAudio(
-			ctx,
-			mp3OutputFile,
-			transcriptionService,
-		)
+		transcriptionService, _ := cmd.Flags().GetString("transcription-service")
+		transcription, err := transcribeAudio(ctx, mp3OutputFile, transcriptionService)
 		handleError(err, "Error transcribing")
 
 		fmt.Println("Transcription:")
@@ -462,22 +427,13 @@ func init() {
 	rootCmd.AddCommand(packetInfoCmd)
 
 	packetInfoCmd.Flags().Int64P("ssrc", "s", 0, "SSRC to filter packets")
-	packetInfoCmd.Flags().
-		StringP("start", "f", time.Now().Add(-2*time.Minute).Format(time.RFC3339), "Start time (RFC3339 format)")
-	packetInfoCmd.Flags().
-		StringP("end", "t", time.Now().Format(time.RFC3339), "End time (RFC3339 format)")
-	packetInfoCmd.Flags().
-		StringP("output", "o", "output.ogg", "Output Ogg file path")
-	packetInfoCmd.Flags().
-		StringP("transcription-service", "r", "gemini", "Transcription service to use (gemini or speechmatics)")
+	packetInfoCmd.Flags().StringP("start", "f", time.Now().Add(-2*time.Minute).Format(time.RFC3339), "Start time (RFC3339 format)")
+	packetInfoCmd.Flags().StringP("end", "t", time.Now().Format(time.RFC3339), "End time (RFC3339 format)")
+	packetInfoCmd.Flags().StringP("output", "o", "output.ogg", "Output Ogg file path")
+	packetInfoCmd.Flags().StringP("transcription-service", "r", "gemini", "Transcription service to use (gemini or speechmatics)")
 }
 
-func uploadFile(
-	ctx context.Context,
-	client *genai.Client,
-	db *sql.DB,
-	fileName string,
-) (string, bool, error) {
+func uploadFile(ctx context.Context, client *genai.Client, db *sql.DB, fileName string) (string, bool, error) {
 	file, err := os.Open(fileName)
 	if err != nil {
 		return "", false, fmt.Errorf("error opening file: %w", err)
@@ -493,8 +449,7 @@ func uploadFile(
 	hashString := hex.EncodeToString(contentHash[:])
 
 	var remoteURI string
-	err = db.QueryRow("SELECT remote_uri FROM uploaded_files WHERE hash = $1", hashString).
-		Scan(&remoteURI)
+	err = db.QueryRow("SELECT remote_uri FROM uploaded_files WHERE hash = $1", hashString).Scan(&remoteURI)
 	if err == nil {
 		return remoteURI, false, nil
 	} else if err != sql.ErrNoRows {
@@ -520,10 +475,7 @@ func uploadFile(
 		gfile.URI,
 	)
 	if err != nil {
-		return "", false, fmt.Errorf(
-			"error saving uploaded file info: %w",
-			err,
-		)
+		return "", false, fmt.Errorf("error saving uploaded file info: %w", err)
 	}
 
 	return gfile.URI, true, nil
@@ -532,12 +484,9 @@ func uploadFile(
 func convertOggToMp3(inputFile, outputFile string) error {
 	cmd := exec.Command(
 		"ffmpeg", "-y",
-		"-i",
-		inputFile,
-		"-acodec",
-		"libmp3lame",
-		"-b:a",
-		"128k",
+		"-i", inputFile,
+		"-acodec", "libmp3lame",
+		"-b:a", "128k",
 		outputFile,
 	)
 	return cmd.Run()
@@ -549,17 +498,10 @@ func main() {
 	}
 }
 
-func transcribeAudio(
-	ctx context.Context,
-	audioFilePath string,
-	transcriptionService string,
-) (string, error) {
+func transcribeAudio(ctx context.Context, audioFilePath string, transcriptionService string) (string, error) {
 	switch transcriptionService {
 	case "gemini":
-		client, err := genai.NewClient(
-			ctx,
-			option.WithAPIKey(os.Getenv("GEMINI_API_KEY")),
-		)
+		client, err := genai.NewClient(ctx, option.WithAPIKey(os.Getenv("GEMINI_API_KEY")))
 		if err != nil {
 			return "", fmt.Errorf("error initializing Gemini client: %w", err)
 		}
@@ -584,17 +526,11 @@ func transcribeAudio(
 			time.Second*1,
 		)
 		if err != nil {
-			return "", fmt.Errorf(
-				"error transcribing with Speechmatics: %w",
-				err,
-			)
+			return "", fmt.Errorf("error transcribing with Speechmatics: %w", err)
 		}
 		return transcription, nil
 
 	default:
-		return "", fmt.Errorf(
-			"unknown transcription service: %s",
-			transcriptionService,
-		)
+		return "", fmt.Errorf("unknown transcription service: %s", transcriptionService)
 	}
 }
