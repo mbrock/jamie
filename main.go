@@ -15,8 +15,6 @@ import (
 	"github.com/charmbracelet/log"
 	pgx "github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
-	"github.com/pion/rtp"
-	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
 	"github.com/spf13/cobra"
 )
 
@@ -403,9 +401,26 @@ var packetInfoCmd = &cobra.Command{
 		}
 		defer rows.Close()
 
-		ogg := NewOgg(ssrc, startTime, endTime, outputFile)
-		if err := ogg.ProcessPackets(rows); err != nil {
-			log.Fatal("Error processing packets", "error", err)
+		ogg, err := NewOgg(ssrc, startTime, endTime, outputFile)
+		if err != nil {
+			log.Fatal("Error creating Ogg", "error", err)
+		}
+		defer ogg.Close()
+
+		for rows.Next() {
+			var packet OpusPacket
+			err := rows.Scan(
+				&packet.ID,
+				&packet.Sequence,
+				&packet.Timestamp,
+				&packet.CreatedAt,
+				&packet.OpusData,
+			)
+			if err != nil {
+				log.Error("Error scanning row", "error", err)
+				continue
+			}
+			ogg.WritePacket(packet)
 		}
 	},
 }
@@ -419,7 +434,7 @@ func init() {
 	packetInfoCmd.Flags().
 		StringP("start", "f", time.Now().Add(-10*time.Second).Format(time.RFC3339), "Start time (RFC3339 format)")
 	packetInfoCmd.Flags().
-		StringP("end", "t", time.Now().Format(time.RFC3339), "End time (RFC3339 format)")
+		StringP("end", "t", time.Now().Format(time.RFC3339), "End time (RFC33339 format)")
 	packetInfoCmd.Flags().
 		StringP("output", "o", "output.ogg", "Output Ogg file path")
 }
