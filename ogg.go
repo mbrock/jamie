@@ -28,6 +28,7 @@ type Ogg struct {
 	lastTimestamp       time.Time
 	lastPacketTimestamp uint32
 	gapCount            int
+	sequenceNumber      uint16
 }
 
 func NewOgg(
@@ -70,15 +71,18 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 	if o.packetCount == 0 {
 		o.firstTimestamp = packet.CreatedAt
 		o.addInitialSilence(packet.CreatedAt, packet.Timestamp)
+		o.sequenceNumber = 0 // Start from 0
 	} else {
 		o.gapCount += o.handleGap(packet.Timestamp, o.lastPacketTimestamp, packet.ID, packet.CreatedAt)
 	}
+
+	o.sequenceNumber++ // Increment sequence number
 
 	rtpPacket := &rtp.Packet{
 		Header: rtp.Header{
 			Version:        2,
 			PayloadType:    0x78,
-			SequenceNumber: packet.Sequence,
+			SequenceNumber: o.sequenceNumber,
 			Timestamp:      packet.Timestamp,
 			SSRC:           uint32(o.ssrc),
 		},
