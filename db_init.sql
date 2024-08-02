@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS ssrc_mappings (
     user_id TEXT NOT NULL,
     ssrc BIGINT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
-    session_id INTEGER NOT NULL REFERENCES discord_sessions(id)
+    session_id INTEGER NOT NULL REFERENCES discord_sessions(id),
+    UNIQUE (guild_id, channel_id, user_id, ssrc)
 );
 
 CREATE TABLE IF NOT EXISTS opus_packets (
