@@ -29,6 +29,15 @@ import (
 	"node.town/transcription"
 )
 
+// Define connectToDatabase function
+func connectToDatabase() (*db.Queries, error) {
+	dbpool, err := pgxpool.Connect(context.Background(), os.Getenv("DATABASE_URL"))
+	if err != nil {
+		return nil, err
+	}
+	return db.New(dbpool), nil
+}
+
 //go:embed db_init.sql
 var sqlFS embed.FS
 
@@ -75,11 +84,10 @@ func (b *Bot) handleGuildCreate(
 
 	// Check if we should join a voice channel in this guild
 	var channelID string
-	err = b.Queries.GetLastJoinedChannel(context.Background(),
-		db.GetLastJoinedChannelParams{
-			GuildID:  m.ID,
-			BotToken: os.Getenv("DISCORD_TOKEN"),
-		}).Scan(&channelID)
+	err = b.Queries.GetLastJoinedChannel(context.Background(), db.GetLastJoinedChannelParams{
+		GuildID:  m.ID,
+		BotToken: os.Getenv("DISCORD_TOKEN"),
+	}).Scan(&channelID)
 
 	if err == nil && channelID != "" {
 		// We have a record of joining a channel in this guild, so let's join it
@@ -112,21 +120,20 @@ func (b *Bot) handleVoiceStateUpdate(
 ) {
 	log.Info("voice", "user", m.UserID, "channel", m.ChannelID)
 
-	err := b.Queries.InsertVoiceStateEvent(context.Background(),
-		db.InsertVoiceStateEventParams{
-			GuildID:                  m.GuildID,
-			ChannelID:                m.ChannelID,
-			UserID:                   m.UserID,
-			SessionID:                b.SessionID,
-			Deaf:                     m.Deaf,
-			Mute:                     m.Mute,
-			SelfDeaf:                 m.SelfDeaf,
-			SelfMute:                 m.SelfMute,
-			SelfStream:               m.SelfStream,
-			SelfVideo:                m.SelfVideo,
-			Suppress:                 m.Suppress,
-			RequestToSpeakTimestamp:  m.RequestToSpeakTimestamp,
-		})
+	err := b.Queries.InsertVoiceStateEvent(context.Background(), db.InsertVoiceStateEventParams{
+		GuildID:                 m.GuildID,
+		ChannelID:               m.ChannelID,
+		UserID:                  m.UserID,
+		SessionID:               int32(b.SessionID),
+		Deaf:                    m.Deaf,
+		Mute:                    m.Mute,
+		SelfDeaf:                m.SelfDeaf,
+		SelfMute:                m.SelfMute,
+		SelfStream:              m.SelfStream,
+		SelfVideo:               m.SelfVideo,
+		Suppress:                m.Suppress,
+		RequestToSpeakTimestamp: m.RequestToSpeakTimestamp,
+	})
 
 	if err != nil {
 		log.Error("Failed to insert voice state event", "error", err)
@@ -226,8 +233,11 @@ var listenCmd = &cobra.Command{
 	Short: "Start listening in Discord voice channels",
 	Long:  `This command starts the Jamie bot and makes it listen in Discord voice channels.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		queries, err := connectToDatabase()
+		dbpool, err := pgxpool.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 		handleError(err, "Unable to connect to database")
+		defer dbpool.Close()
+
+		queries := db.New(dbpool)
 
 		// Read and execute the embedded SQL file to create tables
 		sqlFile, err := sqlFS.ReadFile("db_init.sql")
@@ -267,13 +277,10 @@ var listenCmd = &cobra.Command{
 		log.Info("discord", "status", discord.State.User.Username)
 
 		// Insert a record into the discord_sessions table
-		sessionID, err := bot.Queries.InsertDiscordSession(
-			context.Background(),
-			db.InsertDiscordSessionParams{
-				BotToken: os.Getenv("DISCORD_TOKEN"),
-				UserID:   discord.State.User.ID,
-			},
-		)
+		sessionID, err := bot.Queries.InsertDiscordSession(context.Background(), db.InsertDiscordSessionParams{
+			BotToken: sql.NullString{String: os.Getenv("DISCORD_TOKEN"), Valid: true},
+			UserID:   sql.NullString{String: discord.State.User.ID, Valid: true},
+		})
 		if err != nil {
 			log.Error("Failed to insert discord session", "error", err)
 		}
@@ -414,9 +421,11 @@ var packetInfoCmd = &cobra.Command{
 		startTime, endTime, err := parseTimeRange(startTimeStr, endTimeStr)
 		handleError(err, "Error parsing time range")
 
-		dbpool, err := connectToDatabase()
+		dbpool, err := pgxpool.Connect(context.Background(), os.Getenv("DATABASE_URL"))
 		handleError(err, "Unable to connect to database")
 		defer dbpool.Close()
+
+		queries := db.New(dbpool)
 
 		rows, err := fetchOpusPackets(dbpool, ssrc, startTime, endTime)
 		handleError(err, "Error querying database")
