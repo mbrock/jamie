@@ -1,0 +1,13 @@
+version: "2"
+sql:
+  - engine: "postgresql"
+    queries: "sqlc/queries.sql"
+    schema: "db_init.sql"
+    gen:
+      go:
+        package: "db"
+        out: "db"
+        emit_json_tags: true
+        emit_prepared_queries: false
+        emit_interface: false
+        emit_exact_table_names: false

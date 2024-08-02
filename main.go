@@ -23,6 +23,7 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/option"
+	"node.town/db"
 	"node.town/speechmatics"
 	"node.town/transcription"
 )
@@ -32,8 +33,8 @@ var sqlFS embed.FS
 
 type Bot struct {
 	Discord   *discordgo.Session
-	DBPool    *pgxpool.Pool
-	SessionID int
+	Queries   *db.Queries
+	SessionID int32
 }
 
 func handleError(err error, message string) {
@@ -42,7 +43,7 @@ func handleError(err error, message string) {
 	}
 }
 
-func connectToDatabase() (*pgxpool.Pool, error) {
+func connectToDatabase() (*db.Queries, error) {
 	dbpool, err := pgxpool.Connect(
 		context.Background(),
 		os.Getenv("DATABASE_URL"),
@@ -50,7 +51,7 @@ func connectToDatabase() (*pgxpool.Pool, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to connect to database: %w", err)
 	}
-	return dbpool, nil
+	return db.New(dbpool), nil
 }
 
 func (b *Bot) handleEvent(s *discordgo.Session, m *discordgo.Event) {
