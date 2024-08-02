@@ -605,7 +605,7 @@ func uploadFile(
 
 func convertOggToMp3(inputFile, outputFile string) error {
 	cmd := exec.Command(
-		"ffmpeg",
+		"ffmpeg", "-y",
 		"-i",
 		inputFile,
 		"-acodec",
