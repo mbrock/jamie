@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"encoding/hex"
@@ -435,7 +436,10 @@ var packetInfoCmd = &cobra.Command{
 		}
 
 		// Convert OGG to MP3
-		mp3OutputFile := strings.TrimSuffix(outputFile, filepath.Ext(outputFile)) + ".mp3"
+		mp3OutputFile := strings.TrimSuffix(
+			outputFile,
+			filepath.Ext(outputFile),
+		) + ".mp3"
 		err = convertOggToMp3(outputFile, mp3OutputFile)
 		if err != nil {
 			log.Fatal("Error converting OGG to MP3", "error", err)
@@ -600,7 +604,16 @@ func uploadFile(
 }
 
 func convertOggToMp3(inputFile, outputFile string) error {
-	cmd := exec.Command("ffmpeg", "-i", inputFile, "-acodec", "libmp3lame", "-b:a", "128k", outputFile)
+	cmd := exec.Command(
+		"ffmpeg",
+		"-i",
+		inputFile,
+		"-acodec",
+		"libmp3lame",
+		"-b:a",
+		"128k",
+		outputFile,
+	)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

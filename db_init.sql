@@ -75,7 +75,9 @@ END IF;
 END $$;
 
 -- Create an index on the opus_packets table
-CREATE INDEX IF NOT EXISTS idx_opus_packets_ssrc_created_at ON opus_packets (ssrc, created_at);CREATE TABLE IF NOT EXISTS uploaded_files (
+CREATE INDEX IF NOT EXISTS idx_opus_packets_ssrc_created_at ON opus_packets (ssrc, created_at);
+
+CREATE TABLE IF NOT EXISTS uploaded_files (
     id SERIAL PRIMARY KEY,
     hash TEXT UNIQUE NOT NULL,
     file_name TEXT NOT NULL,
