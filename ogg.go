@@ -90,15 +90,7 @@ func (o *Ogg) addInitialSilence(createdAt time.Time, timestamp uint32) {
 	if createdAt.After(o.startTime) {
 		silenceDuration := createdAt.Sub(o.startTime)
 		silentFrames := int(silenceDuration.Milliseconds() / 20) // 20ms per frame
-		for i := 0; i < silentFrames; i++ {
-			silentPacket := &rtp.Packet{
-				Header:  rtp.Header{Timestamp: timestamp - uint32((silentFrames-i)*960)},
-				Payload: []byte{0xf8, 0xff, 0xfe}, // Empty packet payload
-			}
-			if err := o.oggWriter.WriteRTP(silentPacket); err != nil {
-				log.Error("Error writing initial silent frame", "error", err)
-			}
-		}
+		o.writeSilentFrames(silentFrames, timestamp, true)
 		log.Info("Added initial silence", "duration", silenceDuration)
 	}
 }
@@ -113,18 +105,27 @@ func (o *Ogg) handleGap(timestamp, lastPacketTimestamp uint32, id int, createdAt
 			"created_at", createdAt,
 		)
 
-		// Insert silent frames
 		silentFrames := int(timestampDiff / 960)
-		for i := 0; i < silentFrames; i++ {
-			silentPacket := &rtp.Packet{
-				Header:  rtp.Header{Timestamp: lastPacketTimestamp + uint32(i*960)},
-				Payload: []byte{0xf8, 0xff, 0xfe}, // Empty packet payload
-			}
-			if err := o.oggWriter.WriteRTP(silentPacket); err != nil {
-				log.Error("Error writing silent frame", "error", err)
-			}
-		}
+		o.writeSilentFrames(silentFrames, lastPacketTimestamp, false)
 		return 1
 	}
 	return 0
+}
+
+func (o *Ogg) writeSilentFrames(frames int, startTimestamp uint32, isInitial bool) {
+	for i := 0; i < frames; i++ {
+		var timestamp uint32
+		if isInitial {
+			timestamp = startTimestamp - uint32((frames-i)*960)
+		} else {
+			timestamp = startTimestamp + uint32(i*960)
+		}
+		silentPacket := &rtp.Packet{
+			Header:  rtp.Header{Timestamp: timestamp},
+			Payload: []byte{0xf8, 0xff, 0xfe}, // Empty packet payload
+		}
+		if err := o.oggWriter.WriteRTP(silentPacket); err != nil {
+			log.Error("Error writing silent frame", "error", err)
+		}
+	}
 }
