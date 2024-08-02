@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
-	"github.com/jackc/pgx/v4"
 	"github.com/pion/rtp"
 	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
 )
@@ -19,77 +18,75 @@ type OpusPacket struct {
 }
 
 type Ogg struct {
-	ssrc       int64
-	startTime  time.Time
-	endTime    time.Time
-	outputFile string
+	ssrc           int64
+	startTime      time.Time
+	endTime        time.Time
+	outputFile     string
+	oggWriter      *oggwriter.OggWriter
+	packetCount    int
+	firstTimestamp time.Time
+	lastTimestamp  time.Time
+	lastPacketTimestamp uint32
+	gapCount       int
 }
 
-func NewOgg(ssrc int64, startTime, endTime time.Time, outputFile string) *Ogg {
+func NewOgg(ssrc int64, startTime, endTime time.Time, outputFile string) (*Ogg, error) {
+	oggWriter, err := oggwriter.New(outputFile, 48000, 2)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create OggWriter: %w", err)
+	}
+
 	return &Ogg{
 		ssrc:       ssrc,
 		startTime:  startTime,
 		endTime:    endTime,
 		outputFile: outputFile,
-	}
+		oggWriter:  oggWriter,
+	}, nil
 }
 
-func (o *Ogg) ProcessPackets(rows pgx.Rows) error {
-	oggWriter, err := oggwriter.New(o.outputFile, 48000, 2)
-	if err != nil {
-		return err
-	}
-	defer oggWriter.Close()
-
-	var packetCount int
-	var firstTimestamp, lastTimestamp time.Time
-	var lastPacketTimestamp uint32
-	var gapCount int
-
-	for rows.Next() {
-		var packet OpusPacket
-		err := rows.Scan(&packet.ID, &packet.Sequence, &packet.Timestamp, &packet.CreatedAt, &packet.OpusData)
-		if err != nil {
-			log.Error("Error scanning row", "error", err)
-			continue
+func (o *Ogg) Close() error {
+	if o.oggWriter != nil {
+		if err := o.oggWriter.Close(); err != nil {
+			return fmt.Errorf("failed to close OggWriter: %w", err)
 		}
-
-		if packetCount == 0 {
-			firstTimestamp = packet.CreatedAt
-			o.addInitialSilence(oggWriter, packet.CreatedAt, packet.Timestamp)
-		} else {
-			gapCount += o.handleGap(oggWriter, packet.Timestamp, lastPacketTimestamp, packet.ID, packet.CreatedAt)
-		}
-
-		rtpPacket := &rtp.Packet{
-			Header:  rtp.Header{Timestamp: packet.Timestamp},
-			Payload: packet.OpusData,
-		}
-
-		if err := oggWriter.WriteRTP(rtpPacket); err != nil {
-			log.Error("Error writing RTP packet", "error", err)
-		}
-
-		lastTimestamp = packet.CreatedAt
-		lastPacketTimestamp = packet.Timestamp
-		packetCount++
-	}
-
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("error iterating over rows: %w", err)
 	}
 
 	log.Info("Summary",
-		"total_packets", packetCount,
-		"time_range", lastTimestamp.Sub(firstTimestamp),
-		"gap_count", gapCount,
+		"total_packets", o.packetCount,
+		"time_range", o.lastTimestamp.Sub(o.firstTimestamp),
+		"gap_count", o.gapCount,
 		"output_file", o.outputFile,
 	)
 
 	return nil
 }
 
-func (o *Ogg) addInitialSilence(oggWriter *oggwriter.OggWriter, createdAt time.Time, timestamp uint32) {
+func (o *Ogg) WritePacket(packet OpusPacket) error {
+	if o.packetCount == 0 {
+		o.firstTimestamp = packet.CreatedAt
+		o.addInitialSilence(packet.CreatedAt, packet.Timestamp)
+	} else {
+		o.gapCount += o.handleGap(packet.Timestamp, o.lastPacketTimestamp, packet.ID, packet.CreatedAt)
+	}
+
+	rtpPacket := &rtp.Packet{
+		Header:  rtp.Header{Timestamp: packet.Timestamp},
+		Payload: packet.OpusData,
+	}
+
+	if err := o.oggWriter.WriteRTP(rtpPacket); err != nil {
+		return fmt.Errorf("error writing RTP packet: %w", err)
+	}
+
+	o.lastTimestamp = packet.CreatedAt
+	o.lastPacketTimestamp = packet.Timestamp
+	o.packetCount++
+
+	return nil
+}
+
+func (o *Ogg) addInitialSilence(createdAt time.Time, timestamp uint32) {
 	if createdAt.After(o.startTime) {
 		silenceDuration := createdAt.Sub(o.startTime)
 		silentFrames := int(silenceDuration.Milliseconds() / 20) // 20ms per frame
@@ -98,7 +95,7 @@ func (o *Ogg) addInitialSilence(oggWriter *oggwriter.OggWriter, createdAt time.T
 				Header:  rtp.Header{Timestamp: timestamp - uint32((silentFrames-i)*960)},
 				Payload: []byte{0xf8, 0xff, 0xfe}, // Empty packet payload
 			}
-			if err := oggWriter.WriteRTP(silentPacket); err != nil {
+			if err := o.oggWriter.WriteRTP(silentPacket); err != nil {
 				log.Error("Error writing initial silent frame", "error", err)
 			}
 		}
@@ -106,7 +103,7 @@ func (o *Ogg) addInitialSilence(oggWriter *oggwriter.OggWriter, createdAt time.T
 	}
 }
 
-func (o *Ogg) handleGap(oggWriter *oggwriter.OggWriter, timestamp, lastPacketTimestamp uint32, id int, createdAt time.Time) int {
+func (o *Ogg) handleGap(timestamp, lastPacketTimestamp uint32, id int, createdAt time.Time) int {
 	timestampDiff := timestamp - lastPacketTimestamp
 	if timestampDiff > 960 { // 960 represents 20ms in the Opus timestamp units
 		gapDuration := time.Duration(timestampDiff) * time.Millisecond / 48 // Convert to real time (Opus uses 48kHz)
@@ -123,7 +120,7 @@ func (o *Ogg) handleGap(oggWriter *oggwriter.OggWriter, timestamp, lastPacketTim
 				Header:  rtp.Header{Timestamp: lastPacketTimestamp + uint32(i*960)},
 				Payload: []byte{0xf8, 0xff, 0xfe}, // Empty packet payload
 			}
-			if err := oggWriter.WriteRTP(silentPacket); err != nil {
+			if err := o.oggWriter.WriteRTP(silentPacket); err != nil {
 				log.Error("Error writing silent frame", "error", err)
 			}
 		}
