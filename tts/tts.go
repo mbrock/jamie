@@ -50,25 +50,25 @@ func runStream(cmd *cobra.Command, args []string) {
 	useUI, _ := cmd.Flags().GetBool("ui")
 
 	if useUI {
-		initFileLogger()
-		defer closeFileLogger()
+		InitLogger()
+		defer CloseLogger()
 	}
 
-	getLogger().Info(
+	log.Info(
 		"Listening for demuxed Opus packet streams. Press CTRL-C to exit.",
 	)
 
 	if transcribe {
-		getLogger().Info("Real-time transcription enabled")
+		log.Info("Real-time transcription enabled")
 	}
 
 	if useUI {
-		getLogger().Info("UI enabled")
+		log.Info("UI enabled")
 		transcriptChan := make(chan string, 100)
 		go func() {
 			err := StartUI(transcriptChan)
 			if err != nil {
-				getLogger().Error("UI error", "error", err)
+				log.Error("UI error", "error", err)
 			}
 		}()
 
