@@ -27,7 +27,9 @@ func (wb *WordBuilder) WriteWord(word TranscriptWord, isPartial bool) {
 			}
 			style := lipgloss.NewStyle()
 			if isPartial {
-				style = style.Foreground(lipgloss.Color("240")) // Dark gray foreground for partial transcripts
+				style = style.Foreground(
+					lipgloss.Color("240"),
+				) // Dark gray foreground for partial transcripts
 			} else {
 				style = style.Foreground(getConfidenceColor(alt.Confidence))
 			}
@@ -110,7 +112,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "tab":
 			m.showLog = !m.showLog
 			m.viewport.SetContent(m.contentView())
-			return m, nil
 		}
 
 	case tea.WindowSizeMsg:
@@ -146,16 +147,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			formatTranscriptWords(msg.Words))
 		m.logEntries = append(m.logEntries, logEntry)
 
-		return m, waitForTranscript(m.transcripts)
+		cmds = append(cmds, waitForTranscript(m.transcripts))
 	}
 
 	m.viewport, cmd = m.viewport.Update(msg)
 	cmds = append(cmds, cmd)
-
-	// Check for new messages from the transcripts channel
-	cmds = append(cmds, func() tea.Msg {
-		return <-m.transcripts
-	})
 
 	return m, tea.Batch(cmds...)
 }

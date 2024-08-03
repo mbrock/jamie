@@ -479,7 +479,7 @@ func handleStreamWithTranscription(
 				if !ok {
 					return
 				}
-				handleTranscript(ctx, transcript, sessionID, queries)
+				handleTranscript(ctx, transcript, sessionID, queries, pool)
 			case err := <-errChan:
 				log.Error("Received error from Speechmatics", "error", err)
 			case <-ctx.Done():

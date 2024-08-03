@@ -706,7 +706,6 @@ func (c *Client) ReceiveTranscript(
 			case <-ctx.Done():
 				return
 			default:
-				log.Info("Reading transcript")
 				if c.WSConn == nil {
 					log.Fatal("WebSocket connection not established")
 				}
