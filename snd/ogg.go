@@ -48,10 +48,9 @@ type Ogg struct {
 	packetCount         int
 	firstTimestamp      time.Time
 	lastTimestamp       time.Time
-	lastSegmentNumber   uint32
+	lastSegmentNumber   uint64
 	gapCount            int
-	sequenceNumber      uint16
-	segmentNumber       uint32
+	segmentNumber       uint64
 }
 
 func NewOgg(
@@ -139,7 +138,7 @@ func (o *Ogg) addInitialSilence(createdAt time.Time) {
 	}
 }
 
-func (o *Ogg) handleGap(segmentNumber uint32, createdAt time.Time) time.Duration {
+func (o *Ogg) handleGap(segmentNumber uint64, createdAt time.Time) time.Duration {
 	segmentDiff := segmentNumber - o.lastSegmentNumber
 	if segmentDiff > 1 { // If there's a gap of more than one segment
 		gapDuration := time.Duration(segmentDiff-1) * 20 * time.Millisecond // Each segment is 20ms
@@ -174,11 +173,10 @@ func (o *Ogg) writeSilentFrames(frames int) error {
 }
 
 func (o *Ogg) writeRTPPacket(payload []byte) error {
-	o.sequenceNumber++
 	o.segmentNumber++
 	rtpPacket := createRTPPacket(
-		o.sequenceNumber,
-		o.segmentNumber*960, // Use segment number for timestamp
+		uint16(o.segmentNumber), // Use lower 16 bits of segment number for sequence number
+		o.segmentNumber*960,     // Use segment number for timestamp
 		uint32(o.ssrc),
 		payload,
 	)
