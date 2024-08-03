@@ -36,14 +36,17 @@ func NewClient(apiKey string) *Client {
 	}
 }
 
-type RTConfig struct {
-	Language         string
-	EnablePartials   bool
-	MaxDelay         float64
-	Diarization      bool
-	AdditionalVocab  []AdditionalVocab
-	AudioFormat      AudioFormat
-	PunctuationConfig PunctuationConfig
+type TranscriptionConfig struct {
+	Language                 string            `json:"language"`
+	Domain                   string            `json:"domain,omitempty"`
+	OutputLocale             string            `json:"output_locale,omitempty"`
+	OperatingPoint           OperatingPoint    `json:"operating_point,omitempty"`
+	AdditionalVocab          []AdditionalVocab `json:"additional_vocab,omitempty"`
+	Diarization              string            `json:"diarization,omitempty"`
+	SpeakerChangeSensitivity float64           `json:"speaker_change_sensitivity,omitempty"`
+	EnablePartials           bool              `json:"enable_partials,omitempty"`
+	MaxDelay                 float64           `json:"max_delay,omitempty"`
+	PunctuationEnabled       bool              `json:"punctuation_enabled,omitempty"`
 }
 
 type AudioFormat struct {
@@ -52,14 +55,10 @@ type AudioFormat struct {
 	SampleRate int    `json:"sample_rate"`
 }
 
-type PunctuationConfig struct {
-	Enabled bool `json:"enabled"`
-}
-
 type StartRecognitionMessage struct {
-	Message             string                `json:"message"`
-	AudioFormat         AudioFormat           `json:"audio_format"`
-	TranscriptionConfig TranscriptionConfig   `json:"transcription_config"`
+	Message             string              `json:"message"`
+	AudioFormat         AudioFormat         `json:"audio_format"`
+	TranscriptionConfig TranscriptionConfig `json:"transcription_config"`
 }
 
 type EndOfStreamMessage struct {
@@ -84,16 +83,6 @@ type JobConfig struct {
 	Type                string               `json:"type"`
 	TranscriptionConfig *TranscriptionConfig `json:"transcription_config,omitempty"`
 	AlignmentConfig     *AlignmentConfig     `json:"alignment_config,omitempty"`
-}
-
-type TranscriptionConfig struct {
-	Language                 string            `json:"language"`
-	Domain                   string            `json:"domain,omitempty"`
-	OutputLocale             string            `json:"output_locale,omitempty"`
-	OperatingPoint           OperatingPoint    `json:"operating_point,omitempty"`
-	AdditionalVocab          []AdditionalVocab `json:"additional_vocab,omitempty"`
-	Diarization              string            `json:"diarization,omitempty"`
-	SpeakerChangeSensitivity float64           `json:"speaker_change_sensitivity,omitempty"`
 }
 
 type OperatingPoint string
@@ -583,7 +572,7 @@ func (c *Client) ListJobs(ctx context.Context) ([]JobDetails, error) {
 	return response.Jobs, nil
 }
 
-func (c *Client) ConnectWebSocket(ctx context.Context, config RTConfig) error {
+func (c *Client) ConnectWebSocket(ctx context.Context, config TranscriptionConfig, audioFormat AudioFormat) error {
 	dialer := websocket.DefaultDialer
 	header := http.Header{}
 	header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
@@ -599,15 +588,9 @@ func (c *Client) ConnectWebSocket(ctx context.Context, config RTConfig) error {
 	go c.keepAlive(ctx)
 
 	startMsg := StartRecognitionMessage{
-		Message:     "StartRecognition",
-		AudioFormat: config.AudioFormat,
-		TranscriptionConfig: TranscriptionConfig{
-			Language:        config.Language,
-			EnablePartials:  config.EnablePartials,
-			MaxDelay:        config.MaxDelay,
-			Diarization:     config.Diarization,
-			AdditionalVocab: config.AdditionalVocab,
-		},
+		Message:             "StartRecognition",
+		AudioFormat:         audioFormat,
+		TranscriptionConfig: config,
 	}
 
 	err = c.WSConn.WriteJSON(startMsg)
