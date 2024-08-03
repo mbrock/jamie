@@ -11,10 +11,7 @@ import (
 
 type model struct {
 	viewport    viewport.Model
-	messages    []struct {
-		words      []TranscriptWord
-		attachesTo string
-	}
+	messages    [][]TranscriptWord
 	currentLine []TranscriptWord
 	ready       bool
 	transcripts chan TranscriptMessage
@@ -22,7 +19,7 @@ type model struct {
 
 func initialModel(transcripts chan TranscriptMessage) model {
 	return model{
-		messages:    []struct{words []TranscriptWord; attachesTo string}{},
+		messages:    [][]TranscriptWord{},
 		currentLine: []TranscriptWord{},
 		ready:       false,
 		transcripts: transcripts,
@@ -65,15 +62,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.currentLine = msg.Words
 		} else {
 			// For final transcripts
-			if msg.AttachesTo == "previous" {
-				m = m.updatePreviousLine(msg.Words)
+			if msg.AttachesTo == "previous" && len(m.messages) > 0 {
+				lastIndex := len(m.messages) - 1
+				m.messages[lastIndex] = append(m.messages[lastIndex], TranscriptWord{Content: "[ATTACHED]"})
+				m.messages[lastIndex] = append(m.messages[lastIndex], msg.Words...)
 			} else {
 				// Update the current line and add it to messages
 				m.currentLine = msg.Words
-				m.messages = append(m.messages, struct {
-					words      []TranscriptWord
-					attachesTo string
-				}{words: m.currentLine, attachesTo: msg.AttachesTo})
+				m.messages = append(m.messages, m.currentLine)
 				// Start a new empty current line
 				m.currentLine = []TranscriptWord{}
 			}
@@ -126,12 +122,7 @@ func (m model) footerView() string {
 func (m model) contentView() string {
 	var content strings.Builder
 	for _, msg := range m.messages {
-		prefix := "[NEW] "
-		if msg.attachesTo == "previous" {
-			prefix = "[ATT] "
-		}
-		content.WriteString(prefix)
-		content.WriteString(formatWords(msg.words))
+		content.WriteString(formatWords(msg))
 		content.WriteString("\n")
 	}
 	if len(m.currentLine) > 0 {
@@ -169,19 +160,6 @@ func max(a, b int) int {
 	return b
 }
 
-func (m model) updatePreviousLine(words []TranscriptWord) model {
-	if len(m.messages) > 0 {
-		lastIndex := len(m.messages) - 1
-		m.messages[lastIndex].words = words
-	} else {
-		// If there are no previous messages, treat it as a new message
-		m.messages = append(m.messages, struct {
-			words      []TranscriptWord
-			attachesTo string
-		}{words: words, attachesTo: "previous"})
-	}
-	return m
-}
 
 type transcriptMsg TranscriptMessage
 
