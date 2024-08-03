@@ -278,13 +278,15 @@ func ListenForTranscriptionChanges(
 				continue
 			}
 
-			log.Info("update", "update", update)
+			log.Info("Received update", "update", update)
 
 			select {
 			case updateChan <- update:
-				log.Info("sent")
+				log.Debug("Sent update to channel", "update", update)
 			case <-ctx.Done():
 				return
+			default:
+				log.Warn("Update channel full, dropping update", "update", update)
 			}
 		}
 	}()
