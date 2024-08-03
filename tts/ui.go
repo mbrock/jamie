@@ -169,12 +169,17 @@ func (m model) logView() string {
 
 func formatWords(words []TranscriptWord) string {
 	var line strings.Builder
-	for _, word := range words {
+	for i, word := range words {
 		color := getConfidenceColor(word.Confidence)
+		if i > 0 && word.Type == "word" {
+			line.WriteString(" ")
+		}
 		line.WriteString(
 			lipgloss.NewStyle().Foreground(color).Render(word.Content),
 		)
-		line.WriteString(" ")
+		if word.IsEOS {
+			line.WriteString(" ")
+		}
 	}
 	return strings.TrimSpace(line.String())
 }
