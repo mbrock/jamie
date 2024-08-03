@@ -189,12 +189,16 @@ func formatWords(words []TranscriptWord, bgColor lipgloss.Color) string {
 		if !lastWasEOS && word.Type == "word" {
 			line.WriteString(" ")
 		}
-		line.WriteString(
-			lipgloss.NewStyle().
-				Foreground(color).
-				Background(bgColor).
-				Render(word.Content),
-		)
+		style := lipgloss.NewStyle().
+			Foreground(color).
+			Background(bgColor)
+		
+		if word.AttachesTo == "previous" {
+			style = style.Underline(true)
+		}
+		
+		line.WriteString(style.Render(word.Content))
+		
 		if word.IsEOS {
 			line.WriteString("\n")
 			lastWasEOS = true

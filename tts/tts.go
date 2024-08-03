@@ -335,6 +335,7 @@ func handleTranscriptAndErrorsWithUI(
 						EndTime:    result.EndTime,
 						IsEOS:      result.IsEOS,
 						Type:       result.Type,
+						AttachesTo: result.AttachesTo,
 					}
 					words = append(words, word)
 				}
@@ -347,9 +348,8 @@ func handleTranscriptAndErrorsWithUI(
 					"isPartial", transcript.IsPartial(),
 				)
 				uiChan <- TranscriptMessage{
-					Words:      words,
-					IsPartial:  transcript.IsPartial(),
-					AttachesTo: transcript.Results[0].AttachesTo,
+					Words:     words,
+					IsPartial: transcript.IsPartial(),
 				}
 			}
 		case err, ok := <-errChan:
@@ -390,12 +390,12 @@ type TranscriptWord struct {
 	EndTime    float64
 	IsEOS      bool
 	Type       string
+	AttachesTo string
 }
 
 type TranscriptMessage struct {
-	Words      []TranscriptWord
-	IsPartial  bool
-	AttachesTo string
+	Words     []TranscriptWord
+	IsPartial bool
 }
 
 func handleStreamWithTranscription(
