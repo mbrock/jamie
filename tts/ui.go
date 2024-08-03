@@ -66,24 +66,33 @@ func (wb *WordBuilder) String() string {
 	return wb.builder.String()
 }
 
+func (wb *WordBuilder) Reset() {
+	wb.builder.Reset()
+	wb.lastWasEOS = true
+}
+
+type SessionTranscript struct {
+	FinalTranscripts  [][]TranscriptWord
+	CurrentTranscript []TranscriptWord
+	LastStartTime     float64
+}
+
 type model struct {
-	viewport          viewport.Model
-	finalTranscripts  [][]TranscriptWord
-	currentTranscript []TranscriptWord
-	logEntries        []string
-	ready             bool
-	transcripts       chan TranscriptMessage
-	showLog           bool
+	viewport    viewport.Model
+	sessions    map[int64]*SessionTranscript
+	logEntries  []string
+	ready       bool
+	transcripts chan TranscriptMessage
+	showLog     bool
 }
 
 func initialModel(transcripts chan TranscriptMessage) model {
 	m := model{
-		finalTranscripts:  [][]TranscriptWord{},
-		currentTranscript: []TranscriptWord{},
-		logEntries:        []string{},
-		ready:             false,
-		transcripts:       transcripts,
-		showLog:           false,
+		sessions:    make(map[int64]*SessionTranscript),
+		logEntries:  []string{},
+		ready:       false,
+		transcripts: transcripts,
+		showLog:     false,
 	}
 	return m
 }
@@ -130,19 +139,31 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case TranscriptMessage:
-		if msg.IsPartial {
-			m.currentTranscript = msg.Words
-		} else {
-			m.finalTranscripts = append(m.finalTranscripts, msg.Words)
-			m.currentTranscript = []TranscriptWord{}
+		session, ok := m.sessions[msg.SessionID]
+		if !ok {
+			session = &SessionTranscript{}
+			m.sessions[msg.SessionID] = session
 		}
+
+		if msg.IsPartial {
+			session.CurrentTranscript = msg.Words
+		} else {
+			session.FinalTranscripts = append(session.FinalTranscripts, msg.Words)
+			session.CurrentTranscript = []TranscriptWord{}
+		}
+
+		if len(msg.Words) > 0 {
+			session.LastStartTime = msg.Words[0].StartTime
+		}
+
 		m.viewport.SetContent(m.contentView())
 		m.viewport.GotoBottom()
 
 		// Add log entry
 		prefix := getLogPrefix(msg.IsPartial)
-		logEntry := fmt.Sprintf("%s %d \"%s\"",
+		logEntry := fmt.Sprintf("%s Session %d: %d words \"%s\"",
 			prefix,
+			msg.SessionID,
 			len(msg.Words),
 			formatTranscriptWords(msg.Words))
 		m.logEntries = append(m.logEntries, logEntry)
@@ -199,14 +220,44 @@ func (m model) contentView() string {
 }
 
 func (m model) transcriptView() string {
-	wb := &WordBuilder{lastWasEOS: true}
-	for _, transcript := range m.finalTranscripts {
-		wb.AppendWords(transcript, false) // Final transcripts
+	type lineInfo struct {
+		content   string
+		startTime float64
 	}
-	if len(m.currentTranscript) > 0 {
-		wb.AppendWords(m.currentTranscript, true) // Partial transcript
+
+	var lines []lineInfo
+
+	for sessionID, session := range m.sessions {
+		wb := &WordBuilder{lastWasEOS: true}
+		for _, transcript := range session.FinalTranscripts {
+			wb.AppendWords(transcript, false) // Final transcripts
+			lines = append(lines, lineInfo{
+				content:   fmt.Sprintf("Session %d: %s", sessionID, wb.String()),
+				startTime: transcript[0].StartTime,
+			})
+			wb.Reset()
+		}
+		if len(session.CurrentTranscript) > 0 {
+			wb.AppendWords(session.CurrentTranscript, true) // Partial transcript
+			lines = append(lines, lineInfo{
+				content:   fmt.Sprintf("Session %d (partial): %s", sessionID, wb.String()),
+				startTime: session.CurrentTranscript[0].StartTime,
+			})
+		}
 	}
-	return wb.String()
+
+	// Sort lines by start time
+	sort.Slice(lines, func(i, j int) bool {
+		return lines[i].startTime < lines[j].startTime
+	})
+
+	var result strings.Builder
+	for _, line := range lines {
+		result.WriteString(line.content)
+		result.WriteString("\n")
+	}
+
+	return result.String()
 }
 
 func (m model) logView() string {
