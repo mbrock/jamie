@@ -22,7 +22,7 @@ type model struct {
 
 func initialModel(transcripts chan TranscriptMessage) model {
 	return model{
-		messages:    [][]TranscriptWord{},
+		messages:    []struct{words []TranscriptWord; attachesTo string}{},
 		currentLine: []TranscriptWord{},
 		ready:       false,
 		transcripts: transcripts,
