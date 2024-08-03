@@ -327,18 +327,27 @@ func handleTranscriptAndErrorsWithUI(
 			}
 			var words []TranscriptWord
 			for _, result := range transcript.Results {
-				if len(result.Alternatives) > 0 {
-					word := TranscriptWord{
-						Content:    result.Alternatives[0].Content,
-						Confidence: result.Alternatives[0].Confidence,
-						StartTime:  result.StartTime,
-						EndTime:    result.EndTime,
-						IsEOS:      result.IsEOS,
-						Type:       result.Type,
-						AttachesTo: result.AttachesTo,
-					}
-					words = append(words, word)
+				word := TranscriptWord{
+					StartTime:  result.StartTime,
+					EndTime:    result.EndTime,
+					IsEOS:      result.IsEOS,
+					Type:       result.Type,
+					AttachesTo: result.AttachesTo,
 				}
+				
+				for _, alt := range result.Alternatives {
+					word.Alternatives = append(word.Alternatives, Alternative{
+						Content:    alt.Content,
+						Confidence: alt.Confidence,
+					})
+				}
+				
+				if len(word.Alternatives) > 0 {
+					word.Content = word.Alternatives[0].Content
+					word.Confidence = word.Alternatives[0].Confidence
+				}
+				
+				words = append(words, word)
 			}
 			if len(words) > 0 {
 				transcriptText := formatTranscriptWords(words)
@@ -384,13 +393,19 @@ func formatTranscriptWords(words []TranscriptWord) string {
 }
 
 type TranscriptWord struct {
+	Content     string
+	Confidence  float64
+	StartTime   float64
+	EndTime     float64
+	IsEOS       bool
+	Type        string
+	AttachesTo  string
+	Alternatives []Alternative
+}
+
+type Alternative struct {
 	Content    string
 	Confidence float64
-	StartTime  float64
-	EndTime    float64
-	IsEOS      bool
-	Type       string
-	AttachesTo string
 }
 
 type TranscriptMessage struct {

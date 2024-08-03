@@ -19,7 +19,18 @@ func (wb *WordBuilder) WriteWord(word TranscriptWord, style lipgloss.Style) {
 		wb.builder.WriteString(" ")
 	}
 
-	wb.builder.WriteString(style.Render(word.Content))
+	if len(word.Alternatives) > 1 {
+		wb.builder.WriteString("[")
+		for i, alt := range word.Alternatives {
+			if i > 0 {
+				wb.builder.WriteString("|")
+			}
+			wb.builder.WriteString(style.Render(alt.Content))
+		}
+		wb.builder.WriteString("]")
+	} else {
+		wb.builder.WriteString(style.Render(word.Content))
+	}
 
 	wb.lastWasEOS = word.IsEOS
 
