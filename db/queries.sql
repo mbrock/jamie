@@ -144,10 +144,11 @@ WHERE ts.is_final = false
 ORDER BY ts.session_id, ts.id DESC, tw.id, wa.confidence DESC;
 
 -- name: GetTranscriptSegment :many
-SELECT ts.id, ts.session_id, ts.is_final, tw.id as word_id, tw.start_time, tw.duration, tw.is_eos, wa.content, wa.confidence
+SELECT DISTINCT ON (tw.id)
+    ts.id, ts.session_id, ts.is_final, tw.id as word_id, tw.start_time, tw.duration, tw.is_eos, wa.content, wa.confidence
 FROM transcription_segments ts
 JOIN transcription_words tw ON ts.id = tw.segment_id AND ts.version = tw.version
 JOIN word_alternatives wa ON tw.id = wa.word_id
 WHERE ts.id = $1
-ORDER BY tw.start_time, wa.confidence DESC;
+ORDER BY tw.id, tw.start_time, wa.confidence DESC;
 
