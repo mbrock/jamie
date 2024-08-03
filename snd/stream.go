@@ -2,23 +2,26 @@ package snd
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"sync"
 
 	"github.com/charmbracelet/log"
 	"github.com/jackc/pgx/v5"
+	"node.town/db"
 )
 
 type SSRCUserIDCache struct {
-	mu    sync.RWMutex
-	cache map[int64]string
-	db    *pgx.Conn
+	mu      sync.RWMutex
+	cache   map[int64]string
+	queries *db.Queries
 }
 
-func NewSSRCUserIDCache(db *pgx.Conn) *SSRCUserIDCache {
+func NewSSRCUserIDCache(queries *db.Queries) *SSRCUserIDCache {
 	return &SSRCUserIDCache{
-		cache: make(map[int64]string),
-		db:    db,
+		cache:   make(map[int64]string),
+		queries: queries,
 	}
 }
 
@@ -32,10 +35,9 @@ func (c *SSRCUserIDCache) Get(ssrc int64) (string, error) {
 	}
 
 	// If not in cache, look up in the database
-	var dbUserID string
-	err := c.db.QueryRow(context.Background(), "SELECT user_id FROM opus_packets WHERE ssrc = $1 LIMIT 1", ssrc).Scan(&dbUserID)
+	dbUserID, err := c.queries.GetUserIDBySSRC(context.Background(), ssrc)
 	if err != nil {
-		if err == pgx.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return "", nil // No error, but no user ID found
 		}
 		return "", err
@@ -73,6 +75,7 @@ type OpusPacketNotification struct {
 func StreamOpusPackets(
 	ctx context.Context,
 	conn *pgx.Conn,
+	queries *db.Queries,
 ) (<-chan OpusPacketNotification, *SSRCUserIDCache, error) {
 	_, err := conn.Exec(ctx, "LISTEN new_opus_packet")
 	if err != nil {
@@ -80,7 +83,7 @@ func StreamOpusPackets(
 	}
 
 	packetChan := make(chan OpusPacketNotification)
-	cache := NewSSRCUserIDCache(conn)
+	cache := NewSSRCUserIDCache(queries)
 
 	go func() {
 		defer close(packetChan)
@@ -139,7 +142,7 @@ func DemuxOpusPackets(
 				if !exists {
 					streamChan = make(
 						chan OpusPacketNotification,
-						100,
+						1000,
 					) // Buffer size of 100, adjust as needed
 					streams[packet.Ssrc] = streamChan
 					outputChan <- streamChan
@@ -147,10 +150,18 @@ func DemuxOpusPackets(
 					// Log the new stream with UserID from cache
 					userID := getUserIDFromCache(cache, packet.Ssrc)
 					if userID != "" {
-						log.Info("New stream started", "ssrc", packet.Ssrc, "userID", userID)
+						log.Info(
+							"New stream started",
+							"ssrc",
+							packet.Ssrc,
+							"userID",
+							userID,
+						)
 					} else {
 						log.Info("New stream started", "ssrc", packet.Ssrc, "userID", "unknown")
 					}
+
+					streamChan <- packet
 				}
 
 				select {
