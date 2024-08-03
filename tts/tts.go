@@ -656,39 +656,18 @@ func handleStreamWithTranscription(
 ) {
 	log.Info("Starting handleStreamWithTranscription")
 
-	var client interface {
-		ConnectWebSocket(context.Context, interface{}, interface{}) error
-		CloseWebSocket() error
-		ReceiveTranscript(context.Context) (<-chan interface{}, <-chan error)
-		SendAudio([]byte) error
-		EndStream(int) error
-	}
-
-	if useSpeechmatics {
-		client = speechmatics.NewClient(viper.GetString("SPEECHMATICS_API_KEY"))
-	} else {
-		var err error
-		client, err = genai.NewClient(
-			ctx,
-			option.WithAPIKey(viper.GetString("GEMINI_API_KEY")),
-		)
-		if err != nil {
-			log.Error("Failed to initialize Gemini client", "error", err)
-			return
-		}
-	}
-
+	client := speechmatics.NewClient(viper.GetString("SPEECHMATICS_API_KEY"))
 	config := speechmatics.TranscriptionConfig{
 		Language:       "en",
 		EnablePartials: true,
 	}
 	audioFormat := speechmatics.AudioFormat{
-		Type: "raw",
+		Type: "file",
 	}
 
 	err := client.ConnectWebSocket(ctx, config, audioFormat)
 	if err != nil {
-		log.Error("Failed to connect to WebSocket", "error", err)
+		log.Error("Failed to connect to Speechmatics WebSocket", "error", err)
 		return
 	}
 	defer client.CloseWebSocket()
@@ -698,8 +677,34 @@ func handleStreamWithTranscription(
 	var sessionID int64
 	var sessionStarted bool
 
+	tmpDir := "tmp"
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		log.Error("Failed to create tmp directory", "error", err)
+		return
+	}
+
+	var oggWriter *snd.Ogg
 	var buffer bytes.Buffer
+	var oggFile *os.File
 	var seqNo int
+	var lastPacketTime time.Time
+	silenceTimer := time.NewTicker(100 * time.Millisecond)
+	defer silenceTimer.Stop()
+
+	defer func() {
+		if oggFile != nil {
+			err := oggFile.Close()
+			if err != nil {
+				log.Error("Failed to close Ogg file", "error", err)
+			}
+		}
+		if oggWriter != nil {
+			err := oggWriter.Close()
+			if err != nil {
+				log.Error("Failed to close Ogg writer", "error", err)
+			}
+		}
+	}()
 
 	go func() {
 		for {
@@ -710,7 +715,7 @@ func handleStreamWithTranscription(
 				}
 				handleTranscript(ctx, transcript, sessionID, queries)
 			case err := <-errChan:
-				log.Error("Received error from transcription service", "error", err)
+				log.Error("Received error from Speechmatics", "error", err)
 			case <-ctx.Done():
 				return
 			}
@@ -725,12 +730,12 @@ func handleStreamWithTranscription(
 				if buffer.Len() > 0 {
 					err = client.SendAudio(buffer.Bytes())
 					if err != nil {
-						log.Error("Failed to send final audio", "error", err)
+						log.Error("Failed to send final audio to Speechmatics", "error", err)
 					}
 				}
 				err = client.EndStream(seqNo)
 				if err != nil {
-					log.Error("Failed to end stream", "error", err)
+					log.Error("Failed to end Speechmatics stream", "error", err)
 				}
 				return
 			}
@@ -757,30 +762,88 @@ func handleStreamWithTranscription(
 				sessionStarted = true
 			}
 
-			buffer.Write([]byte(packet.OpusData))
-
-			if buffer.Len() >= 1024 { // Send audio in chunks
-				err = client.SendAudio(buffer.Bytes())
+			if oggWriter == nil {
+				oggFilePath := filepath.Join(tmpDir, fmt.Sprintf("%d.ogg", packet.Ssrc))
+				oggFile, err = os.Create(oggFilePath)
 				if err != nil {
-					log.Error("Failed to send audio", "error", err)
+					log.Error("Failed to create Ogg file", "error", err)
+					return
+				}
+
+				oggWriter, err = snd.NewOgg(
+					packet.Ssrc,
+					time.Now(),
+					time.Now().Add(24*time.Hour),
+					io.MultiWriter(oggFile, &buffer),
+				)
+				if err != nil {
+					log.Error("Failed to create Ogg writer", "error", err)
+					return
+				}
+
+				log.Info("Created Ogg file", "path", oggFilePath)
+			}
+
+			createdAt, err := time.Parse(time.RFC3339Nano, packet.CreatedAt)
+			if err != nil {
+				log.Error("Failed to parse createdAt", "error", err)
+				continue
+			}
+			opusPacket := snd.OpusPacket{
+				ID:        int(packet.ID),
+				Sequence:  uint16(packet.Sequence),
+				Timestamp: uint32(packet.Timestamp),
+				CreatedAt: createdAt,
+				OpusData:  []byte(packet.OpusData),
+			}
+
+			err = oggWriter.WritePacket(opusPacket)
+			if err != nil {
+				log.Error("Failed to write packet to Ogg", "error", err)
+				return
+			}
+
+			err = client.SendAudio(buffer.Bytes())
+			log.Debug("Sent audio to Speechmatics", "bytes", buffer.Len())
+			if err != nil {
+				log.Error("Failed to send audio to Speechmatics", "error", err)
+				return
+			}
+			buffer.Reset()
+
+			seqNo++
+			lastPacketTime = time.Now()
+
+		case <-silenceTimer.C:
+			if time.Since(lastPacketTime) >= 100*time.Millisecond {
+				err = oggWriter.WriteSilence(time.Since(lastPacketTime))
+				if err != nil {
+					log.Error("Failed to write silence to Ogg", "error", err)
+					return
+				}
+
+				err = client.SendAudio(buffer.Bytes())
+				log.Debug("Sent silence to Speechmatics", "bytes", buffer.Len())
+				if err != nil {
+					log.Error("Failed to send silence to Speechmatics", "error", err)
 					return
 				}
 				buffer.Reset()
-			}
 
-			seqNo++
+				lastPacketTime = time.Now()
+			}
 
 		case <-ctx.Done():
 			log.Info("Context cancelled, ending transcription")
 			if buffer.Len() > 0 {
 				err = client.SendAudio(buffer.Bytes())
 				if err != nil {
-					log.Error("Failed to send final audio", "error", err)
+					log.Error("Failed to send final audio to Speechmatics", "error", err)
 				}
 			}
 			err = client.EndStream(seqNo)
 			if err != nil {
-				log.Error("Failed to end stream", "error", err)
+				log.Error("Failed to end Speechmatics stream", "error", err)
 			}
 			return
 		}
