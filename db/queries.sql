@@ -97,4 +97,4 @@ INSERT INTO uploaded_files (hash, file_name, remote_uri)
 VALUES ($1, $2, $3);
 
 -- name: GetUserIDBySSRC :one
-SELECT user_id FROM opus_packets WHERE ssrc = $1 LIMIT 1;
+SELECT user_id FROM ssrc_mappings WHERE ssrc = $1 LIMIT 1;
