@@ -11,6 +11,7 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/log"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"node.town/db"
 )
@@ -77,12 +78,18 @@ type OpusPacketNotification struct {
 
 func StreamOpusPackets(
 	ctx context.Context,
-	conn db.DBTX,
+	pool *pgxpool.Pool,
 	queries *db.Queries,
 ) (<-chan OpusPacketNotification, *SSRCUserIDCache, error) {
-	_, err := conn.Exec(ctx, "LISTEN new_opus_packet")
+	conn, err := pool.Acquire(ctx)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, fmt.Errorf("failed to acquire database connection: %w", err)
+	}
+
+	_, err = conn.Exec(ctx, "LISTEN new_opus_packet")
+	if err != nil {
+		conn.Release()
+		return nil, nil, fmt.Errorf("failed to listen for new_opus_packet: %w", err)
 	}
 
 	packetChan := make(chan OpusPacketNotification)
@@ -90,10 +97,14 @@ func StreamOpusPackets(
 
 	go func() {
 		defer close(packetChan)
+		defer conn.Release()
 
 		for {
-			notification, err := conn.(*pgxpool.Pool).WaitForNotification(ctx)
+			notification, err := conn.Conn().WaitForNotification(ctx)
 			if err != nil {
+				if err == context.Canceled {
+					return
+				}
 				log.Error("Error waiting for notification", "error", err)
 				return
 			}
