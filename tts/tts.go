@@ -39,7 +39,7 @@ func runStream(cmd *cobra.Command, args []string) {
 	if err != nil {
 		log.Fatal("Failed to open database", "error", err)
 	}
-	defer sqlDB.Close(context.Background())
+	defer sqlDB.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -561,7 +561,13 @@ func handleStreamWithTranscription(
 		log.Error("Failed to connect to Speechmatics WebSocket", "error", err)
 		return
 	}
-	defer client.CloseWebSocket()
+	defer func(client *speechmatics.Client) {
+		log.Info("Closing connection to Speechmatics WebSocket")
+		err := client.CloseWebSocket()
+		if err != nil {
+			log.Error("Failed to close WebSocket", "error", err)
+		}
+	}(client)
 
 	transcriptChan, errChan := client.ReceiveTranscript(ctx)
 
