@@ -27,11 +27,21 @@ import (
 
 	_ "github.com/lib/pq"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"google.golang.org/api/option"
 	"node.town/db"
 	"node.town/gemini"
 	"node.town/speechmatics"
 )
+
+func initConfig() {
+	viper.SetConfigFile(".env")
+	viper.AutomaticEnv()
+
+	if err := viper.ReadInConfig(); err != nil {
+		log.Warn("Error reading config file", "error", err)
+	}
+}
 
 func handleError(err error, message string) {
 	if err != nil {
@@ -55,7 +65,7 @@ var listenCmd = &cobra.Command{
 		defer sqlDB.Close(context.Background())
 
 		discord, err := discordgo.New(
-			fmt.Sprintf("Bot %s", os.Getenv("DISCORD_TOKEN")),
+			fmt.Sprintf("Bot %s", viper.GetString("DISCORD_TOKEN")),
 		)
 		handleError(err, "Error creating Discord session")
 
@@ -88,7 +98,7 @@ var listenCmd = &cobra.Command{
 		sessionID, err := bot.Queries.InsertDiscordSession(
 			context.Background(),
 			db.InsertDiscordSessionParams{
-				BotToken: os.Getenv("DISCORD_TOKEN"),
+				BotToken: viper.GetString("DISCORD_TOKEN"),
 				UserID:   discord.State.User.ID,
 			},
 		)
@@ -413,6 +423,7 @@ func convertOggToMp3(inputFile, outputFile string) error {
 }
 
 func main() {
+	initConfig()
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal("Error executing root command", "error", err)
 	}
