@@ -596,6 +596,12 @@ func (c *Client) ConnectWebSocket(
 		TranscriptionConfig: config,
 	}
 
+	startMsgJSON, err := json.Marshal(startMsg)
+	if err != nil {
+		return fmt.Errorf("failed to marshal StartRecognition message: %w", err)
+	}
+	log.Info("Sending StartRecognition message", "message", string(startMsgJSON))
+
 	err = c.WSConn.WriteJSON(startMsg)
 	if err != nil {
 		return fmt.Errorf("failed to send StartRecognition message: %w", err)
