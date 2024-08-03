@@ -108,11 +108,21 @@ VALUES ($1, $2, $3, $4, $5)
 RETURNING id;
 
 -- name: UpsertTranscriptionSegment :one
-SELECT upsert_transcription_segment ($1, $2, $3, $4) AS id;
+SELECT upsert_transcription_segment (
+        sqlc.arg(session_id),
+        sqlc.arg(is_final),
+        sqlc.arg(start_offset),
+        sqlc.arg(end_offset)
+    ) AS id;
 
 -- name: InsertTranscriptionWord :one
 INSERT INTO transcription_words (segment_id, start_time, duration, is_eos)
-VALUES ($1, make_interval(secs => $2), make_interval(secs => $3), $4)
+VALUES (
+        $1,
+        make_interval(secs => $2),
+        make_interval(secs => $3),
+        $4
+    )
 RETURNING id;
 
 -- name: InsertWordAlternative :exec
