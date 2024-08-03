@@ -123,7 +123,7 @@ func (m model) headerView() string {
 		Render("Real-time Transcription")
 	line := strings.Repeat(
 		"─",
-		max(0, m.viewport.Width-lipgloss.Width(title)),
+		max(0, m.leftViewport.Width-lipgloss.Width(title)),
 	)
 	return lipgloss.JoinHorizontal(lipgloss.Center, title, line)
 }
@@ -134,7 +134,10 @@ func (m model) footerView() string {
 		Background(lipgloss.Color("#25A065")).
 		Padding(0, 1).
 		Render("Press q to quit")
-	line := strings.Repeat("─", max(0, m.viewport.Width-lipgloss.Width(info)))
+	line := strings.Repeat(
+		"─",
+		max(0, m.leftViewport.Width-lipgloss.Width(info)),
+	)
 	return lipgloss.JoinHorizontal(lipgloss.Center, line, info)
 }
 
@@ -164,7 +167,9 @@ func formatWords(words []TranscriptWord) string {
 	var line strings.Builder
 	for _, word := range words {
 		color := getConfidenceColor(word.Confidence)
-		line.WriteString(lipgloss.NewStyle().Foreground(color).Render(word.Content))
+		line.WriteString(
+			lipgloss.NewStyle().Foreground(color).Render(word.Content),
+		)
 		line.WriteString(" ")
 	}
 	return strings.TrimSpace(line.String())
@@ -187,7 +192,6 @@ func max(a, b int) int {
 	}
 	return b
 }
-
 
 type transcriptMsg TranscriptMessage
 
