@@ -86,6 +86,42 @@ CREATE TABLE IF NOT EXISTS uploaded_files (
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS transcription_sessions (
+    id SERIAL PRIMARY KEY,
+    ssrc BIGINT NOT NULL,
+    start_time TIMESTAMPTZ NOT NULL,
+    guild_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS transcription_segments (
+    id SERIAL PRIMARY KEY,
+    session_id INTEGER NOT NULL REFERENCES transcription_sessions(id),
+    is_final BOOLEAN NOT NULL,
+    start_offset INTEGER NOT NULL,
+    end_offset INTEGER NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS transcription_words (
+    id SERIAL PRIMARY KEY,
+    segment_id INTEGER NOT NULL REFERENCES transcription_segments(id),
+    start_time INTEGER NOT NULL,
+    duration INTEGER NOT NULL,
+    is_eos BOOLEAN NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS word_alternatives (
+    id SERIAL PRIMARY KEY,
+    word_id INTEGER NOT NULL REFERENCES transcription_words(id),
+    content TEXT NOT NULL,
+    confidence FLOAT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Function to upsert transcription segment
 CREATE OR REPLACE FUNCTION upsert_transcription_segment(
     p_session_id BIGINT,
