@@ -92,11 +92,13 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 	if o.packetCount == 0 {
 		o.firstTimestamp = packet.CreatedAt
 		o.addInitialSilence(packet.CreatedAt)
+		o.lastTimestamp = packet.CreatedAt
+		o.lastPacketTimestamp = packet.Timestamp
 	} else {
 		gapDuration := o.handleGap(packet.Timestamp, packet.CreatedAt)
-		if gapDuration > 0 {
-			o.lastTimestamp = o.lastTimestamp.Add(gapDuration)
-			o.lastPacketTimestamp += uint32(gapDuration.Milliseconds() * 48) // Convert to Opus timestamp units
+		if gapDuration == 0 {
+			o.lastTimestamp = packet.CreatedAt
+			o.lastPacketTimestamp = packet.Timestamp
 		}
 	}
 
@@ -105,8 +107,6 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 		return err
 	}
 
-	o.lastTimestamp = packet.CreatedAt
-	o.lastPacketTimestamp = packet.Timestamp
 	o.packetCount++
 
 	return nil
