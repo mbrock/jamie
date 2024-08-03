@@ -3,7 +3,9 @@ package tts
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -87,12 +89,26 @@ func handleStreamWithTranscription(
 
 	go handleTranscriptAndErrors(ctx, transcriptChan, errChan)
 
+	tmpDir := "tmp"
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		log.Error("Failed to create tmp directory", "error", err)
+		return
+	}
+
+	oggFilePath := filepath.Join(tmpDir, fmt.Sprintf("%d.ogg", packet.Ssrc))
+	oggFile, err := os.Create(oggFilePath)
+	if err != nil {
+		log.Error("Failed to create Ogg file", "error", err)
+		return
+	}
+	defer oggFile.Close()
+
 	var buffer bytes.Buffer
 	oggWriter, err := snd.NewOgg(
-		0,
+		packet.Ssrc,
 		time.Now(),
 		time.Now().Add(24*time.Hour),
-		&buffer,
+		io.MultiWriter(oggFile, &buffer),
 		4096,
 	)
 	if err != nil {
@@ -100,6 +116,8 @@ func handleStreamWithTranscription(
 		return
 	}
 	defer oggWriter.Close()
+
+	log.Info("Created Ogg file", "path", oggFilePath)
 
 	seqNo := 0
 	for packet := range stream {
