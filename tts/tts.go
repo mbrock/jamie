@@ -2,12 +2,14 @@ package tts
 
 import (
 	"context"
+	"os"
 	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"node.town/db"
 	"node.town/snd"
+	"node.town/speechmatics"
 )
 
 var StreamCmd = &cobra.Command{
@@ -18,7 +20,8 @@ var StreamCmd = &cobra.Command{
 }
 
 func init() {
-	StreamCmd.Flags().Bool("transcribe", false, "Enable real-time transcription using Speechmatics API")
+	StreamCmd.Flags().
+		Bool("transcribe", false, "Enable real-time transcription using Speechmatics API")
 }
 
 func runStream(cmd *cobra.Command, args []string) {
@@ -59,16 +62,17 @@ func runStream(cmd *cobra.Command, args []string) {
 	<-ctx.Done()
 }
 
-func handleStreamWithTranscription(ctx context.Context, stream <-chan snd.OpusPacketNotification) {
+func handleStreamWithTranscription(
+	ctx context.Context,
+	stream <-chan snd.OpusPacketNotification,
+) {
 	client := speechmatics.NewClient(os.Getenv("SPEECHMATICS_API_KEY"))
 	config := speechmatics.TranscriptionConfig{
 		Language:       "en",
 		EnablePartials: true,
 	}
 	audioFormat := speechmatics.AudioFormat{
-		Type:       "raw",
-		Encoding:   "opus",
-		SampleRate: 48000,
+		Type: "file",
 	}
 
 	err := client.ConnectWebSocket(ctx, config, audioFormat)
@@ -89,7 +93,11 @@ func handleStreamWithTranscription(ctx context.Context, stream <-chan snd.OpusPa
 				}
 				for _, result := range transcript.Results {
 					if len(result.Alternatives) > 0 {
-						log.Info("Transcription", "text", result.Alternatives[0].Content)
+						log.Info(
+							"Transcription",
+							"text",
+							result.Alternatives[0].Content,
+						)
 					}
 				}
 			case err, ok := <-errChan:
@@ -105,7 +113,7 @@ func handleStreamWithTranscription(ctx context.Context, stream <-chan snd.OpusPa
 
 	seqNo := 0
 	for packet := range stream {
-		err := client.SendAudio(packet.OpusData)
+		err := client.SendAudio([]byte(packet.OpusData))
 		if err != nil {
 			log.Error("Failed to send audio to Speechmatics", "error", err)
 			return
