@@ -14,7 +14,7 @@ type WordBuilder struct {
 	lastWasEOS bool
 }
 
-func (wb *WordBuilder) WriteWord(word TranscriptWord, style lipgloss.Style) {
+func (wb *WordBuilder) WriteWord(word TranscriptWord, isPartial bool) {
 	if !wb.lastWasEOS && word.AttachesTo != "previous" {
 		wb.builder.WriteString(" ")
 	}
@@ -25,10 +25,22 @@ func (wb *WordBuilder) WriteWord(word TranscriptWord, style lipgloss.Style) {
 			if i > 0 {
 				wb.builder.WriteString("|")
 			}
+			style := lipgloss.NewStyle()
+			if isPartial {
+				style = style.Foreground(lipgloss.Color("240")) // Dark gray foreground for partial transcripts
+			} else {
+				style = style.Foreground(getConfidenceColor(alt.Confidence))
+			}
 			wb.builder.WriteString(style.Render(alt.Content))
 		}
 		wb.builder.WriteString("]")
 	} else {
+		style := lipgloss.NewStyle()
+		if isPartial {
+			style = style.Foreground(lipgloss.Color("240")) // Dark gray foreground for partial transcripts
+		} else {
+			style = style.Foreground(getConfidenceColor(word.Confidence))
+		}
 		wb.builder.WriteString(style.Render(word.Content))
 	}
 
@@ -41,17 +53,10 @@ func (wb *WordBuilder) WriteWord(word TranscriptWord, style lipgloss.Style) {
 
 func (wb *WordBuilder) AppendWords(
 	words []TranscriptWord,
-	color lipgloss.Color,
 	isPartial bool,
 ) {
 	for _, word := range words {
-		var style lipgloss.Style
-		if isPartial {
-			style = lipgloss.NewStyle().Foreground(color)
-		} else {
-			style = lipgloss.NewStyle().Foreground(getConfidenceColor(word.Confidence))
-		}
-		wb.WriteWord(word, style)
+		wb.WriteWord(word, isPartial)
 	}
 }
 
@@ -186,18 +191,10 @@ func (m model) contentView() string {
 func (m model) transcriptView() string {
 	wb := &WordBuilder{lastWasEOS: true}
 	for _, transcript := range m.finalTranscripts {
-		wb.AppendWords(
-			transcript,
-			lipgloss.Color("0"),
-			false,
-		) // No color change for final transcripts
+		wb.AppendWords(transcript, false) // Final transcripts
 	}
 	if len(m.currentTranscript) > 0 {
-		wb.AppendWords(
-			m.currentTranscript,
-			lipgloss.Color("240"),
-			true,
-		) // Dark gray foreground for current transcript
+		wb.AppendWords(m.currentTranscript, true) // Partial transcript
 	}
 	return wb.String()
 }
