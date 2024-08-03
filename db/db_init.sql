@@ -151,6 +151,8 @@ END $$;
 CREATE INDEX IF NOT EXISTS idx_transcription_segments_session_id ON transcription_segments(session_id);
 CREATE INDEX IF NOT EXISTS idx_transcription_words_segment_id ON transcription_words(segment_id);
 CREATE INDEX IF NOT EXISTS idx_word_alternatives_word_id ON word_alternatives(word_id);
+CREATE INDEX IF NOT EXISTS idx_transcription_words_version ON transcription_words(version);
+CREATE INDEX IF NOT EXISTS idx_transcription_segments_version ON transcription_segments(version);
 
 -- Function to upsert transcription segment
 DO $$
