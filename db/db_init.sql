@@ -126,13 +126,15 @@ CREATE OR REPLACE FUNCTION notify_transcription_change() RETURNS TRIGGER AS $$
 DECLARE
     segment_id BIGINT;
     session_id BIGINT;
+    is_final BOOLEAN;
 BEGIN
     IF TG_TABLE_NAME = 'transcription_segments' THEN
         segment_id := NEW.id;
         session_id := NEW.session_id;
+        is_final := NEW.is_final;
     ELSIF TG_TABLE_NAME = 'word_alternatives' THEN
-        SELECT tw.segment_id, ts.session_id
-        INTO segment_id, session_id
+        SELECT tw.segment_id, ts.session_id, ts.is_final
+        INTO segment_id, session_id, is_final
         FROM transcription_words tw
         JOIN transcription_segments ts ON tw.segment_id = ts.id
         WHERE tw.id = NEW.word_id;
@@ -141,7 +143,8 @@ BEGIN
     PERFORM pg_notify('transcription_change', json_build_object(
         'operation', TG_OP,
         'id', segment_id,
-        'session_id', session_id
+        'session_id', session_id,
+        'is_final', is_final
     )::text);
     RETURN NEW;
 END;
