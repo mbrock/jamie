@@ -29,18 +29,7 @@ type Transcript struct {
 
 func ParseTranscript(jsonData []byte) (*Transcript, error) {
 	var rawTranscript struct {
-		Results []struct {
-			Alternatives []struct {
-				Confidence float64 `json:"confidence"`
-				Content    string  `json:"content"`
-				Language   string  `json:"language"`
-				Speaker    string  `json:"speaker"`
-			} `json:"alternatives"`
-			StartTime float64 `json:"start_time"`
-			EndTime   float64 `json:"end_time"`
-			Type      string  `json:"type"`
-			IsEos     bool    `json:"is_eos"`
-		} `json:"results"`
+		Results []TranscriptResult `json:"results"`
 	}
 
 	err := json.Unmarshal(jsonData, &rawTranscript)

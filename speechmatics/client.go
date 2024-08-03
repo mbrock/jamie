@@ -66,18 +66,21 @@ type EndOfStreamMessage struct {
 	LastSeqNo int    `json:"last_seq_no"`
 }
 
+type TranscriptResult struct {
+	Alternatives []struct {
+		Confidence float64 `json:"confidence"`
+		Content    string  `json:"content"`
+	} `json:"alternatives"`
+	StartTime  float64 `json:"start_time"`
+	EndTime    float64 `json:"end_time"`
+	AttachesTo string  `json:"attaches_to,omitempty"`
+	Type       string  `json:"type"`
+	IsEOS      bool    `json:"is_eos"`
+}
+
 type RTTranscriptResponse struct {
-	Message string `json:"message"`
-	Results []struct {
-		Alternatives []struct {
-			Confidence float64 `json:"confidence"`
-			Content    string  `json:"content"`
-		} `json:"alternatives"`
-		StartTime  float64 `json:"start_time"`
-		EndTime    float64 `json:"end_time"`
-		AttachesTo string  `json:"attaches_to,omitempty"`
-		Type      string  `json:"type"`
-	} `json:"results"`
+	Message string             `json:"message"`
+	Results []TranscriptResult `json:"results"`
 }
 
 func (r *RTTranscriptResponse) IsPartial() bool {
