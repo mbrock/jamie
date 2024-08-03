@@ -111,7 +111,7 @@ RETURNING id;
 SELECT upsert_transcription_segment ($1, $2, $3, $4) AS id;
 
 -- name: InsertTranscriptionWord :one
-INSERT INTO transcription_words (segment_id, OFFSET, duration, is_eos)
+INSERT INTO transcription_words (segment_id, start_time, duration, is_eos)
 VALUES ($1, $2, $3, $4)
 RETURNING id;
 
