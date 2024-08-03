@@ -11,8 +11,8 @@ import (
 
 type model struct {
 	viewport    viewport.Model
-	messages    [][]TranscriptWord
-	currentLine []TranscriptWord
+	sentences   [][]TranscriptWord
+	currentSentence []TranscriptWord
 	logEntries  []string
 	ready       bool
 	transcripts chan TranscriptMessage
@@ -21,12 +21,12 @@ type model struct {
 
 func initialModel(transcripts chan TranscriptMessage) model {
 	return model{
-		messages:    [][]TranscriptWord{},
-		currentLine: []TranscriptWord{},
-		logEntries:  []string{},
-		ready:       false,
-		transcripts: transcripts,
-		showLog:     false,
+		sentences:       [][]TranscriptWord{},
+		currentSentence: []TranscriptWord{},
+		logEntries:      []string{},
+		ready:           false,
+		transcripts:     transcripts,
+		showLog:         false,
 	}
 }
 
@@ -68,20 +68,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case transcriptMsg:
 		if msg.IsPartial {
-			m.currentLine = msg.Words
+			m.currentSentence = msg.Words
 		} else {
 			// For final transcripts
-			if msg.AttachesTo == "previous" && len(m.messages) > 0 {
-				// Update the previous line
-				lastIndex := len(m.messages) - 1
-				m.messages[lastIndex] = append(m.messages[lastIndex], msg.Words...)
+			if msg.AttachesTo == "previous" && len(m.sentences) > 0 {
+				// Update the previous sentence
+				lastIndex := len(m.sentences) - 1
+				m.sentences[lastIndex] = append(m.sentences[lastIndex], msg.Words...)
 			} else {
-				// Update the current line and add it to messages
-				m.currentLine = msg.Words
-				m.messages = append(m.messages, m.currentLine)
+				// Update the current sentence and add it to sentences
+				m.currentSentence = append(m.currentSentence, msg.Words...)
 			}
-			// Start a new empty current line
-			m.currentLine = []TranscriptWord{}
+			
+			// Check for end of sentence
+			for i, word := range m.currentSentence {
+				if word.IsEOS {
+					m.sentences = append(m.sentences, m.currentSentence[:i+1])
+					m.currentSentence = m.currentSentence[i+1:]
+				}
+			}
 		}
 		m.viewport.SetContent(m.contentView())
 		m.viewport.GotoBottom()
@@ -148,12 +153,12 @@ func (m model) contentView() string {
 
 func (m model) transcriptView() string {
 	var content strings.Builder
-	for _, msg := range m.messages {
-		content.WriteString(formatWords(msg))
+	for _, sentence := range m.sentences {
+		content.WriteString(formatWords(sentence))
 		content.WriteString("\n")
 	}
-	if len(m.currentLine) > 0 {
-		content.WriteString(formatWords(m.currentLine))
+	if len(m.currentSentence) > 0 {
+		content.WriteString(formatWords(m.currentSentence))
 	}
 	return content.String()
 }
