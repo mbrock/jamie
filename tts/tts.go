@@ -343,8 +343,9 @@ func handleTranscriptAndErrorsWithUI(
 					"isPartial", transcript.IsPartial(),
 				)
 				uiChan <- TranscriptMessage{
-					Words:     words,
-					IsPartial: transcript.IsPartial(),
+					Words:      words,
+					IsPartial:  transcript.IsPartial(),
+					AttachesTo: fmt.Sprintf("%d", packet.Ssrc),
 				}
 			}
 		case err, ok := <-errChan:
@@ -384,8 +385,9 @@ type TranscriptWord struct {
 }
 
 type TranscriptMessage struct {
-	Words     []TranscriptWord
-	IsPartial bool
+	Words      []TranscriptWord
+	IsPartial  bool
+	AttachesTo string
 }
 
 func handleStreamWithTranscription(

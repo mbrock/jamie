@@ -11,8 +11,14 @@ import (
 
 type model struct {
 	viewport    viewport.Model
-	messages    [][]TranscriptWord
-	currentLine []TranscriptWord
+	messages    []struct {
+		Words      []TranscriptWord
+		AttachesTo string
+	}
+	currentLine struct {
+		Words      []TranscriptWord
+		AttachesTo string
+	}
 	logEntries  []string
 	ready       bool
 	transcripts chan TranscriptMessage
@@ -68,14 +74,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case transcriptMsg:
 		if msg.IsPartial {
-			m.currentLine = msg.Words
+			m.currentLine.Words = msg.Words
+			m.currentLine.AttachesTo = msg.AttachesTo
 		} else {
 			// For final transcripts
 			// Update the current line and add it to messages
-			m.currentLine = msg.Words
+			m.currentLine.Words = msg.Words
+			m.currentLine.AttachesTo = msg.AttachesTo
 			m.messages = append(m.messages, m.currentLine)
 			// Start a new empty current line
-			m.currentLine = []TranscriptWord{}
+			m.currentLine = struct {
+				Words      []TranscriptWord
+				AttachesTo string
+			}{}
 		}
 		m.viewport.SetContent(m.contentView())
 		m.viewport.GotoBottom()
@@ -139,12 +150,13 @@ func (m model) contentView() string {
 func (m model) transcriptView() string {
 	var content strings.Builder
 	for _, msg := range m.messages {
-		content.WriteString(formatWords(msg))
+		content.WriteString(fmt.Sprintf("[SSRC %s] ", msg.AttachesTo))
+		content.WriteString(formatWords(msg.Words))
 		content.WriteString("\n")
 	}
-	if len(m.currentLine) > 0 {
-		content.WriteString("[CUR] ")
-		content.WriteString(formatWords(m.currentLine))
+	if len(m.currentLine.Words) > 0 {
+		content.WriteString(fmt.Sprintf("[CUR SSRC %s] ", m.currentLine.AttachesTo))
+		content.WriteString(formatWords(m.currentLine.Words))
 	}
 	return content.String()
 }
