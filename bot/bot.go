@@ -2,12 +2,12 @@ package bot
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"os"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"node.town/db"
 )
@@ -74,7 +74,7 @@ func (b *Bot) HandleGuildCreate(
 			vc.AddHandler(b.HandleVoiceSpeakingUpdate)
 			go b.HandleOpusPackets(vc)
 		}
-	} else if errors.Is(err, sql.ErrNoRows) {
+	} else if errors.Is(err, pgx.ErrNoRows) {
 		log.Info("No bot voice joins found for guild", "guild", m.ID)
 	} else {
 		log.Error("Failed to query bot voice joins", "error", err)
