@@ -12,15 +12,21 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
+	"github.com/gorilla/websocket"
 )
 
 const (
-	BaseURL = "https://asr.api.speechmatics.com/v2"
+	BaseURL           = "https://asr.api.speechmatics.com/v2"
+	WebSocketBaseURL  = "wss://eu2.rt.speechmatics.com/v2"
+	PingInterval      = 30 * time.Second
+	PongTimeout       = 60 * time.Second
+	MaxReconnectDelay = 60 * time.Second
 )
 
 type Client struct {
 	APIKey     string
 	HTTPClient *http.Client
+	WSConn     *websocket.Conn
 }
 
 func NewClient(apiKey string) *Client {
@@ -28,6 +34,50 @@ func NewClient(apiKey string) *Client {
 		APIKey:     apiKey,
 		HTTPClient: &http.Client{},
 	}
+}
+
+type RTConfig struct {
+	Language         string
+	EnablePartials   bool
+	MaxDelay         float64
+	Diarization      bool
+	AdditionalVocab  []AdditionalVocab
+	AudioFormat      AudioFormat
+	PunctuationConfig PunctuationConfig
+}
+
+type AudioFormat struct {
+	Type       string `json:"type"`
+	Encoding   string `json:"encoding"`
+	SampleRate int    `json:"sample_rate"`
+}
+
+type PunctuationConfig struct {
+	Enabled bool `json:"enabled"`
+}
+
+type StartRecognitionMessage struct {
+	Message             string                `json:"message"`
+	AudioFormat         AudioFormat           `json:"audio_format"`
+	TranscriptionConfig TranscriptionConfig   `json:"transcription_config"`
+}
+
+type EndOfStreamMessage struct {
+	Message   string `json:"message"`
+	LastSeqNo int    `json:"last_seq_no"`
+}
+
+type RTTranscriptResponse struct {
+	Message string `json:"message"`
+	Results []struct {
+		Alternatives []struct {
+			Confidence float64 `json:"confidence"`
+			Content    string  `json:"content"`
+		} `json:"alternatives"`
+		StartTime float64 `json:"start_time"`
+		EndTime   float64 `json:"end_time"`
+		Type      string  `json:"type"`
+	} `json:"results"`
 }
 
 type JobConfig struct {
@@ -531,4 +581,136 @@ func (c *Client) ListJobs(ctx context.Context) ([]JobDetails, error) {
 	}
 
 	return response.Jobs, nil
+}
+
+func (c *Client) ConnectWebSocket(ctx context.Context, config RTConfig) error {
+	dialer := websocket.DefaultDialer
+	header := http.Header{}
+	header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
+
+	url := fmt.Sprintf("%s/%s", WebSocketBaseURL, config.Language)
+	conn, _, err := dialer.DialContext(ctx, url, header)
+	if err != nil {
+		return fmt.Errorf("failed to connect to WebSocket: %w", err)
+	}
+
+	c.WSConn = conn
+
+	go c.keepAlive(ctx)
+
+	startMsg := StartRecognitionMessage{
+		Message:     "StartRecognition",
+		AudioFormat: config.AudioFormat,
+		TranscriptionConfig: TranscriptionConfig{
+			Language:        config.Language,
+			EnablePartials:  config.EnablePartials,
+			MaxDelay:        config.MaxDelay,
+			Diarization:     config.Diarization,
+			AdditionalVocab: config.AdditionalVocab,
+		},
+	}
+
+	err = c.WSConn.WriteJSON(startMsg)
+	if err != nil {
+		return fmt.Errorf("failed to send StartRecognition message: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Client) keepAlive(ctx context.Context) {
+	ticker := time.NewTicker(PingInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := c.WSConn.WriteControl(websocket.PingMessage, []byte{}, time.Now().Add(PongTimeout)); err != nil {
+				log.Error("Failed to send ping", "error", err)
+				return
+			}
+		}
+	}
+}
+
+func (c *Client) SendAudio(data []byte) error {
+	if c.WSConn == nil {
+		return fmt.Errorf("WebSocket connection not established")
+	}
+
+	err := c.WSConn.WriteMessage(websocket.BinaryMessage, data)
+	if err != nil {
+		return fmt.Errorf("failed to send audio data: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Client) EndStream(lastSeqNo int) error {
+	if c.WSConn == nil {
+		return fmt.Errorf("WebSocket connection not established")
+	}
+
+	endMsg := EndOfStreamMessage{
+		Message:   "EndOfStream",
+		LastSeqNo: lastSeqNo,
+	}
+
+	err := c.WSConn.WriteJSON(endMsg)
+	if err != nil {
+		return fmt.Errorf("failed to send EndOfStream message: %w", err)
+	}
+
+	return nil
+}
+
+func (c *Client) ReceiveTranscript(ctx context.Context) (chan RTTranscriptResponse, chan error) {
+	transcriptChan := make(chan RTTranscriptResponse)
+	errChan := make(chan error)
+
+	go func() {
+		defer close(transcriptChan)
+		defer close(errChan)
+
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				var response RTTranscriptResponse
+				err := c.WSConn.ReadJSON(&response)
+				if err != nil {
+					if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+						errChan <- fmt.Errorf("WebSocket closed unexpectedly: %w", err)
+					}
+					return
+				}
+
+				transcriptChan <- response
+			}
+		}
+	}()
+
+	return transcriptChan, errChan
+}
+
+func (c *Client) CloseWebSocket() error {
+	if c.WSConn == nil {
+		return nil
+	}
+
+	err := c.WSConn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+	if err != nil {
+		return fmt.Errorf("failed to send close message: %w", err)
+	}
+
+	err = c.WSConn.Close()
+	if err != nil {
+		return fmt.Errorf("failed to close WebSocket connection: %w", err)
+	}
+
+	c.WSConn = nil
+	return nil
 }
