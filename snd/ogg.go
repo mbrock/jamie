@@ -48,7 +48,7 @@ type Ogg struct {
 	packetCount         int
 	firstTimestamp      time.Time
 	lastTimestamp       time.Time
-	lastPacketTimestamp uint32
+	lastSegmentNumber   uint32
 	gapCount            int
 	sequenceNumber      uint16
 	segmentNumber       uint32
@@ -93,10 +93,9 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 		o.firstTimestamp = packet.CreatedAt
 		o.addInitialSilence(packet.CreatedAt)
 	} else {
-		gapDuration := o.handleGap(packet.Timestamp, packet.CreatedAt)
+		gapDuration := o.handleGap(o.segmentNumber, packet.CreatedAt)
 		if gapDuration > 0 {
 			packet.CreatedAt = packet.CreatedAt.Add(gapDuration)
-			packet.Timestamp += uint32(gapDuration.Milliseconds() * 48) // Convert to Opus timestamp units
 		}
 	}
 
@@ -106,7 +105,7 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 	}
 
 	o.lastTimestamp = packet.CreatedAt
-	o.lastPacketTimestamp = packet.Timestamp
+	o.lastSegmentNumber = o.segmentNumber
 	o.packetCount++
 
 	return nil
@@ -140,18 +139,16 @@ func (o *Ogg) addInitialSilence(createdAt time.Time) {
 	}
 }
 
-func (o *Ogg) handleGap(timestamp uint32, createdAt time.Time) time.Duration {
-	timestampDiff := timestamp - o.lastPacketTimestamp
-	if timestampDiff > 960 { // 960 represents 20ms in the Opus timestamp units
-		gapDuration := time.Duration(
-			timestampDiff,
-		) * time.Millisecond / 48 // Convert to real time (Opus uses 48kHz)
+func (o *Ogg) handleGap(segmentNumber uint32, createdAt time.Time) time.Duration {
+	segmentDiff := segmentNumber - o.lastSegmentNumber
+	if segmentDiff > 1 { // If there's a gap of more than one segment
+		gapDuration := time.Duration(segmentDiff-1) * 20 * time.Millisecond // Each segment is 20ms
 		log.Info("Audio gap detected",
 			"gap_duration", gapDuration,
 			"created_at", createdAt,
 		)
 
-		silentFrames := int(timestampDiff / 960)
+		silentFrames := int(segmentDiff - 1)
 		err := o.writeSilentFrames(silentFrames)
 		if err != nil {
 			log.Error("Error handling gap", "error", err)
