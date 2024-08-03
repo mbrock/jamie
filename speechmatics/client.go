@@ -706,8 +706,8 @@ func (c *Client) ReceiveTranscript(
 					return
 				}
 
-				// Print the raw JSON message
-				log.Info("Received raw JSON from Speechmatics", "json", string(message))
+				// Log the raw JSON message using debug level
+				log.Debug("Received raw JSON from Speechmatics", "json", string(message))
 
 				var response RTTranscriptResponse
 				err = json.Unmarshal(message, &response)
