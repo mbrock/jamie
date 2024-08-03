@@ -182,13 +182,13 @@ BEGIN
         -- Insert a new segment
         INSERT INTO transcription_segments (session_id, is_final, version)
         VALUES (p_session_id, p_is_final, 1)
-        RETURNING id, version INTO v_segment_id, v_current_version;
+        RETURNING transcription_segments.id, transcription_segments.version INTO v_segment_id, v_current_version;
     ELSE
         -- Update the existing segment
         UPDATE transcription_segments ts
         SET is_final = p_is_final, version = ts.version + 1
         WHERE ts.id = v_segment_id
-        RETURNING version INTO v_current_version;
+        RETURNING ts.version INTO v_current_version;
     END IF;
 
     RETURN QUERY SELECT v_segment_id AS segment_id, v_current_version AS version;
