@@ -10,23 +10,23 @@ import (
 )
 
 type model struct {
-	viewport    viewport.Model
-	sentences   [][]TranscriptWord
-	currentSentence []TranscriptWord
-	logEntries  []string
-	ready       bool
-	transcripts chan TranscriptMessage
-	showLog     bool
+	viewport         viewport.Model
+	finalTranscripts [][]TranscriptWord
+	currentTranscript []TranscriptWord
+	logEntries       []string
+	ready            bool
+	transcripts      chan TranscriptMessage
+	showLog          bool
 }
 
 func initialModel(transcripts chan TranscriptMessage) model {
 	return model{
-		sentences:       [][]TranscriptWord{},
-		currentSentence: []TranscriptWord{},
-		logEntries:      []string{},
-		ready:           false,
-		transcripts:     transcripts,
-		showLog:         false,
+		finalTranscripts:  [][]TranscriptWord{},
+		currentTranscript: []TranscriptWord{},
+		logEntries:        []string{},
+		ready:             false,
+		transcripts:       transcripts,
+		showLog:           false,
 	}
 }
 
@@ -68,30 +68,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case transcriptMsg:
 		if msg.IsPartial {
-			m.currentSentence = msg.Words
+			m.currentTranscript = msg.Words
 		} else {
 			// For final transcripts
-			if msg.AttachesTo == "previous" && len(m.sentences) > 0 {
-				// Update the previous sentence
-				lastIndex := len(m.sentences) - 1
-				m.sentences[lastIndex] = append(m.sentences[lastIndex], msg.Words...)
+			if msg.AttachesTo == "previous" && len(m.finalTranscripts) > 0 {
+				// Update the previous transcript
+				lastIndex := len(m.finalTranscripts) - 1
+				m.finalTranscripts[lastIndex] = append(m.finalTranscripts[lastIndex], msg.Words...)
 			} else {
-				// Update the current sentence and add it to sentences
-				m.currentSentence = append(m.currentSentence, msg.Words...)
+				// Add a new final transcript
+				m.finalTranscripts = append(m.finalTranscripts, msg.Words)
 			}
-			
-			// Check for end of sentence
-			for i, word := range m.currentSentence {
-				if word.IsEOS {
-					m.sentences = append(m.sentences, m.currentSentence[:i+1])
-					if i+1 < len(m.currentSentence) {
-						m.currentSentence = m.currentSentence[i+1:]
-					} else {
-						m.currentSentence = []TranscriptWord{}
-					}
-					break
-				}
-			}
+			m.currentTranscript = []TranscriptWord{}
 		}
 		m.viewport.SetContent(m.contentView())
 		m.viewport.GotoBottom()
@@ -158,14 +146,31 @@ func (m model) contentView() string {
 
 func (m model) transcriptView() string {
 	var content strings.Builder
-	for _, sentence := range m.sentences {
-		content.WriteString(formatWords(sentence))
+	for _, transcript := range m.finalTranscripts {
+		content.WriteString(formatWords(transcript))
 		content.WriteString("\n")
 	}
-	if len(m.currentSentence) > 0 {
-		content.WriteString(formatWords(m.currentSentence))
+	if len(m.currentTranscript) > 0 {
+		content.WriteString(formatWords(m.currentTranscript))
 	}
 	return content.String()
+}
+
+func formatWords(words []TranscriptWord) string {
+	var line strings.Builder
+	for i, word := range words {
+		color := getConfidenceColor(word.Confidence)
+		if i > 0 && word.Type == "word" {
+			line.WriteString(" ")
+		}
+		line.WriteString(
+			lipgloss.NewStyle().Foreground(color).Render(word.Content),
+		)
+		if word.IsEOS {
+			line.WriteString("\n")
+		}
+	}
+	return strings.TrimSpace(line.String())
 }
 
 func (m model) logView() string {
