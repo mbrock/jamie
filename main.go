@@ -277,6 +277,7 @@ func init() {
 	rootCmd.AddCommand(listenCmd)
 	rootCmd.AddCommand(listenPacketsCmd)
 	rootCmd.AddCommand(packetInfoCmd)
+	rootCmd.AddCommand(tts.TranscribeCmd)
 	rootCmd.AddCommand(tts.StreamCmd)
 
 	packetInfoCmd.Flags().Int64P("ssrc", "s", 0, "SSRC to filter packets")

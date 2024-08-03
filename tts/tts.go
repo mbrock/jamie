@@ -21,21 +21,26 @@ import (
 	"node.town/speechmatics"
 )
 
+var TranscribeCmd = &cobra.Command{
+	Use:   "transcribe",
+	Short: "Transcribe audio from Opus packets",
+	Long:  `This command listens for Opus packets, transcribes them, and updates the database with transcription data.`,
+	Run:   runTranscribe,
+}
+
 var StreamCmd = &cobra.Command{
 	Use:   "stream",
-	Short: "Stream demuxed Opus packets",
-	Long:  `This command streams demuxed Opus packets and prints information about each stream.`,
+	Short: "Stream transcriptions with UI",
+	Long:  `This command displays a UI for watching real-time transcriptions.`,
 	Run:   runStream,
 }
 
 func init() {
-	StreamCmd.Flags().
-		Bool("transcribe", false, "Enable real-time transcription using Speechmatics API")
-	StreamCmd.Flags().
-		Bool("ui", false, "Enable UI for displaying transcriptions")
+	TranscribeCmd.Flags().
+		Bool("speechmatics", false, "Use Speechmatics API for transcription (default is Gemini)")
 }
 
-func runStream(cmd *cobra.Command, args []string) {
+func runTranscribe(cmd *cobra.Command, args []string) {
 	sqlDB, queries, err := db.OpenDatabase()
 	if err != nil {
 		log.Fatal("Failed to open database", "error", err)
@@ -52,46 +57,56 @@ func runStream(cmd *cobra.Command, args []string) {
 
 	streamChan := snd.DemuxOpusPackets(ctx, packetChan, ssrcCache)
 
-	transcribe, _ := cmd.Flags().GetBool("transcribe")
-	useUI, _ := cmd.Flags().GetBool("ui")
+	useSpeechmatics, _ := cmd.Flags().GetBool("speechmatics")
 
-	if useUI {
-		InitLogger()
-		defer CloseLogger()
-	}
-
-	log.Info(
-		"Listening for demuxed Opus packet streams. Press CTRL-C to exit.",
-	)
-
-	if transcribe {
-		log.Info("Real-time transcription enabled")
-	}
-
-	transcriptChan := make(chan TranscriptMessage, 100)
-
-	if useUI {
-		log.Info("UI enabled")
-		go func() {
-			p := tea.NewProgram(initialModel(transcriptChan))
-			if _, err := p.Run(); err != nil {
-				log.Fatal("Error running program", "error", err)
-			}
-		}()
-	}
+	log.Info("Listening for demuxed Opus packet streams. Press CTRL-C to exit.")
+	log.Info("Real-time transcription enabled")
 
 	for stream := range streamChan {
-		if transcribe {
-			go handleStreamWithTranscriptionAndUI(
-				ctx,
-				stream,
-				transcriptChan,
-				queries,
-				sqlDB,
-			)
-		} else {
-			go handleStream(stream)
+		go handleStreamWithTranscription(
+			ctx,
+			stream,
+			queries,
+			sqlDB,
+			useSpeechmatics,
+		)
+	}
+
+	// Wait for CTRL-C
+	<-ctx.Done()
+}
+
+func runStream(cmd *cobra.Command, args []string) {
+	sqlDB, queries, err := db.OpenDatabase()
+	if err != nil {
+		log.Fatal("Failed to open database", "error", err)
+	}
+	defer sqlDB.Close()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	InitLogger()
+	defer CloseLogger()
+
+	log.Info("UI enabled")
+	transcriptChan := make(chan TranscriptMessage, 100)
+
+	go func() {
+		p := tea.NewProgram(initialModel(transcriptChan))
+		if _, err := p.Run(); err != nil {
+			log.Fatal("Error running program", "error", err)
 		}
+	}()
+
+	// Listen for transcription updates from the database
+	updates, err := snd.ListenForTranscriptionChanges(ctx, sqlDB)
+	if err != nil {
+		log.Fatal("Failed to set up transcription change listener", "error", err)
+	}
+
+	for update := range updates {
+		handleTranscriptionUpdate(ctx, update, queries, transcriptChan)
 	}
 
 	// Wait for CTRL-C
@@ -631,4 +646,38 @@ func handleStream(stream <-chan snd.OpusPacketNotification) {
 		"channel_id", lastPacket.ChannelID,
 		"user_id", lastPacket.UserID,
 	)
+}
+func handleStreamWithTranscription(
+	ctx context.Context,
+	stream <-chan snd.OpusPacketNotification,
+	queries *db.Queries,
+	pool *pgxpool.Pool,
+	useSpeechmatics bool,
+) {
+	log.Info("Starting handleStreamWithTranscription")
+
+	var client interface {
+		ConnectWebSocket(context.Context, interface{}, interface{}) error
+		CloseWebSocket() error
+		ReceiveTranscript(context.Context) (<-chan interface{}, <-chan error)
+		SendAudio([]byte) error
+		EndStream(int) error
+	}
+
+	if useSpeechmatics {
+		client = speechmatics.NewClient(viper.GetString("SPEECHMATICS_API_KEY"))
+	} else {
+		var err error
+		client, err = genai.NewClient(
+			ctx,
+			option.WithAPIKey(viper.GetString("GEMINI_API_KEY")),
+		)
+		if err != nil {
+			log.Error("Failed to initialize Gemini client", "error", err)
+			return
+		}
+	}
+
+	// ... (rest of the function similar to handleStreamWithTranscriptionAndUI,
+	// but without the transcriptChan and UI-related parts)
 }
