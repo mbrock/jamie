@@ -100,8 +100,6 @@ CREATE TABLE IF NOT EXISTS transcription_segments (
     id BIGSERIAL PRIMARY KEY,
     session_id BIGINT NOT NULL REFERENCES transcription_sessions(id),
     is_final BOOLEAN NOT NULL,
-    start_offset INTEGER NOT NULL,
-    end_offset INTEGER NOT NULL,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -125,44 +123,34 @@ CREATE TABLE IF NOT EXISTS word_alternatives (
 -- Function to upsert transcription segment
 CREATE OR REPLACE FUNCTION upsert_transcription_segment(
         p_session_id BIGINT,
-        p_is_final BOOLEAN,
-        p_start_offset INT,
-        p_end_offset INT
+        p_is_final BOOLEAN
     ) RETURNS BIGINT AS $$
 DECLARE v_segment_id BIGINT;
 
-BEGIN -- Check if the last segment is final
-SELECT id INTO v_segment_id
-FROM transcription_segments
-WHERE session_id = p_session_id
-ORDER BY id DESC
-LIMIT 1;
-
-IF v_segment_id IS NULL
-OR (
-    SELECT is_final
+BEGIN
+    -- Check if the last segment is final
+    SELECT id INTO v_segment_id
     FROM transcription_segments
-    WHERE id = v_segment_id
-) THEN -- Insert a new segment
-INSERT INTO transcription_segments (session_id, is_final, start_offset, end_offset)
-VALUES (
-        p_session_id,
-        p_is_final,
-        p_start_offset,
-        p_end_offset
-    )
-RETURNING id INTO v_segment_id;
+    WHERE session_id = p_session_id
+    ORDER BY id DESC
+    LIMIT 1;
 
-ELSE -- Update the existing segment
-UPDATE transcription_segments
-SET end_offset = p_end_offset,
-    is_final = p_is_final
-WHERE id = v_segment_id;
+    IF v_segment_id IS NULL OR (
+        SELECT is_final
+        FROM transcription_segments
+        WHERE id = v_segment_id
+    ) THEN
+        -- Insert a new segment
+        INSERT INTO transcription_segments (session_id, is_final)
+        VALUES (p_session_id, p_is_final)
+        RETURNING id INTO v_segment_id;
+    ELSE
+        -- Update the existing segment
+        UPDATE transcription_segments
+        SET is_final = p_is_final
+        WHERE id = v_segment_id;
+    END IF;
 
-END IF;
-
-RETURN v_segment_id;
-
+    RETURN v_segment_id;
 END;
-
 $$ LANGUAGE plpgsql;

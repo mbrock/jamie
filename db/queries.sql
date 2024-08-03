@@ -110,9 +110,7 @@ RETURNING id;
 -- name: UpsertTranscriptionSegment :one
 SELECT upsert_transcription_segment (
         sqlc.arg(session_id),
-        sqlc.arg(is_final),
-        sqlc.arg(start_offset),
-        sqlc.arg(end_offset)
+        sqlc.arg(is_final)
     ) AS id;
 
 -- name: InsertTranscriptionWord :one
