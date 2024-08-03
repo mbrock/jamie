@@ -61,10 +61,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.IsPartial {
 			m.currentLine = msg.Words
 		} else {
-			if len(m.currentLine) > 0 {
-				m.messages = append(m.messages, m.currentLine)
-			}
-			m.messages = append(m.messages, msg.Words)
+			// For final transcripts, update the current line and add it to messages
+			m.currentLine = msg.Words
+			m.messages = append(m.messages, m.currentLine)
+			// Start a new empty current line
 			m.currentLine = []TranscriptWord{}
 		}
 		m.viewport.SetContent(m.contentView())
