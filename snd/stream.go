@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/log"
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"node.town/db"
 )
 
@@ -77,7 +77,7 @@ type OpusPacketNotification struct {
 
 func StreamOpusPackets(
 	ctx context.Context,
-	conn *pgx.Conn,
+	conn db.DBTX,
 	queries *db.Queries,
 ) (<-chan OpusPacketNotification, *SSRCUserIDCache, error) {
 	_, err := conn.Exec(ctx, "LISTEN new_opus_packet")
@@ -92,7 +92,7 @@ func StreamOpusPackets(
 		defer close(packetChan)
 
 		for {
-			notification, err := conn.WaitForNotification(ctx)
+			notification, err := conn.(*pgxpool.Pool).WaitForNotification(ctx)
 			if err != nil {
 				log.Error("Error waiting for notification", "error", err)
 				return
@@ -106,7 +106,9 @@ func StreamOpusPackets(
 			}
 
 			// Decode the hex-encoded opus data
-			decodedData, err := hex.DecodeString(strings.TrimPrefix(packet.OpusData, "\\x"))
+			decodedData, err := hex.DecodeString(
+				strings.TrimPrefix(packet.OpusData, "\\x"),
+			)
 			if err != nil {
 				log.Fatal("Error decoding hex string", "error", err)
 			}
@@ -114,8 +116,13 @@ func StreamOpusPackets(
 
 			// Log the first few bytes of the decoded opus data
 			if len(packet.OpusData) > 0 {
-				log.Debug("Decoded opus packet data",
-					"first_bytes", fmt.Sprintf("%x", packet.OpusData[:min(4, len(packet.OpusData))]),
+				log.Debug(
+					"Decoded opus packet data",
+					"first_bytes",
+					fmt.Sprintf(
+						"%x",
+						packet.OpusData[:min(4, len(packet.OpusData))],
+					),
 				)
 			}
 
