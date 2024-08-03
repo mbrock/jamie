@@ -5,8 +5,10 @@ go 1.22.0
 require (
 	github.com/bwmarrin/discordgo v0.28.1
 	github.com/charmbracelet/log v0.4.0
+	github.com/jackc/pgx/v5 v5.6.0
 	github.com/lib/pq v1.10.9
 	github.com/pion/rtp v1.8.7
+	github.com/trealla-prolog/go v0.18.4
 	google.golang.org/api v0.190.0
 )
 
@@ -26,8 +28,11 @@ require (
 	github.com/googleapis/enterprise-certificate-proxy v0.3.2 // indirect
 	github.com/googleapis/gax-go/v2 v2.13.0 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
+	github.com/jackc/pgpassfile v1.0.0 // indirect
+	github.com/jackc/pgservicefile v0.0.0-20221227161230-091c0ba34f0a // indirect
 	github.com/pion/randutil v0.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/tetratelabs/wazero v1.7.3 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.51.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.51.0 // indirect
@@ -60,6 +65,7 @@ require (
 	github.com/pion/webrtc/v4 v4.0.0-beta.26
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/spf13/cobra v1.8.1
+	github.com/streamer45/silero-vad-go v0.2.1
 	golang.org/x/crypto v0.25.0 // indirect
 	golang.org/x/exp v0.0.0-20231006140011-7918f672742d // indirect
 	golang.org/x/sys v0.22.0 // indirect

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
-	"embed"
 	"errors"
 	"fmt"
 	"os"
@@ -14,238 +13,29 @@ import (
 	"strings"
 	"time"
 
+	"node.town/bot"
+	"node.town/snd"
+
 	"encoding/hex"
 	"encoding/json"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
 	"github.com/google/generative-ai-go/genai"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/olekukonko/tablewriter"
 
 	_ "github.com/lib/pq"
 	"github.com/spf13/cobra"
 	"google.golang.org/api/option"
 	"node.town/db"
+	"node.town/gemini"
 	"node.town/speechmatics"
-	"node.town/transcription"
 )
-
-//go:embed db_init.sql
-var sqlFS embed.FS
-
-type Bot struct {
-	Discord   *discordgo.Session
-	Queries   *db.Queries
-	SessionID int32
-}
 
 func handleError(err error, message string) {
 	if err != nil {
 		log.Fatal(message, "error", err)
-	}
-}
-
-func openDatabase() (*sql.DB, *db.Queries, error) {
-	sqlDB, err := sql.Open(
-		"postgres",
-		os.Getenv("DATABASE_URL")+"?sslmode=disable",
-	)
-	if err != nil {
-		return nil, nil, fmt.Errorf("unable to connect to database: %w", err)
-	}
-
-	queries := db.New(sqlDB)
-
-	// Read and execute the embedded SQL file to create tables
-	sqlFile, err := sqlFS.ReadFile("db_init.sql")
-	if err != nil {
-		return nil, nil, fmt.Errorf(
-			"failed to read embedded db_init.sql: %w",
-			err,
-		)
-	}
-
-	_, err = sqlDB.ExecContext(context.Background(), string(sqlFile))
-	if err != nil {
-		return nil, nil, fmt.Errorf(
-			"failed to execute embedded db_init.sql: %w",
-			err,
-		)
-	}
-
-	return sqlDB, queries, nil
-}
-
-func (b *Bot) handleEvent(s *discordgo.Session, m *discordgo.Event) {
-	log.Info("message", "op", m.Operation, "type", m.Type)
-}
-
-func (b *Bot) handleGuildCreate(
-	s *discordgo.Session,
-	m *discordgo.GuildCreate,
-) {
-	log.Info("guild", "id", m.ID, "name", m.Name)
-	for _, channel := range m.Guild.Channels {
-		log.Info("channel", "id", channel.ID, "name", channel.Name)
-	}
-	for _, voice := range m.Guild.VoiceStates {
-		log.Info("voice", "id", voice.UserID, "channel", voice.ChannelID)
-	}
-
-	cmd, err := s.ApplicationCommandCreate(
-		b.Discord.State.User.ID,
-		m.ID,
-		&discordgo.ApplicationCommand{
-			Name:        "jamie",
-			Description: "Summon Jamie to this channel",
-		},
-	)
-	if err != nil {
-		log.Error("command", "error", err)
-	}
-	log.Info("app command", "id", cmd.ID)
-
-	// Check if we should join a voice channel in this guild
-	channelID, err := b.Queries.GetLastJoinedChannel(
-		context.Background(),
-		db.GetLastJoinedChannelParams{
-			GuildID:  m.ID,
-			BotToken: os.Getenv("DISCORD_TOKEN"),
-		},
-	)
-
-	if err == nil && channelID != "" {
-		// We have a record of joining a channel in this guild, so let's join it
-		vc, err := s.ChannelVoiceJoin(m.ID, channelID, false, false)
-		if err != nil {
-			log.Error(
-				"Failed to join voice channel",
-				"guild",
-				m.ID,
-				"channel",
-				channelID,
-				"error",
-				err,
-			)
-		} else {
-			log.Info("Rejoined voice channel", "guild", m.ID, "channel", channelID)
-			vc.AddHandler(b.handleVoiceSpeakingUpdate)
-			go b.handleOpusPackets(vc)
-		}
-	} else if errors.Is(err, sql.ErrNoRows) {
-		log.Info("No bot voice joins found for guild", "guild", m.ID)
-	} else {
-		log.Error("Failed to query bot voice joins", "error", err)
-	}
-}
-
-func (b *Bot) handleVoiceStateUpdate(
-	s *discordgo.Session,
-	m *discordgo.VoiceStateUpdate,
-) {
-	log.Info("voice", "user", m.UserID, "channel", m.ChannelID)
-
-	err := b.Queries.InsertVoiceStateEvent(
-		context.Background(),
-		db.InsertVoiceStateEventParams{
-			GuildID:    m.GuildID,
-			ChannelID:  m.ChannelID,
-			UserID:     m.UserID,
-			SessionID:  int32(b.SessionID),
-			Deaf:       m.Deaf,
-			Mute:       m.Mute,
-			SelfDeaf:   m.SelfDeaf,
-			SelfMute:   m.SelfMute,
-			SelfStream: m.SelfStream,
-			SelfVideo:  m.SelfVideo,
-			Suppress:   m.Suppress,
-		},
-	)
-
-	if err != nil {
-		log.Error("Failed to insert voice state event", "error", err)
-	}
-}
-
-func (b *Bot) handleVoiceServerUpdate(
-	s *discordgo.Session,
-	m *discordgo.VoiceServerUpdate,
-) {
-	log.Info("voice", "server", m.Endpoint, "token", m.Token)
-}
-
-func (b *Bot) handleInteractionCreate(
-	s *discordgo.Session,
-	m *discordgo.InteractionCreate,
-) {
-	s.InteractionRespond(
-		m.Interaction,
-		&discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponsePong,
-		},
-	)
-
-	vc, err := s.ChannelVoiceJoin(m.GuildID, m.ChannelID, false, false)
-	if err != nil {
-		log.Error("voice", "error", err)
-		return
-	}
-
-	vc.AddHandler(b.handleVoiceSpeakingUpdate)
-
-	go b.handleOpusPackets(vc)
-
-	// Save or update the channel join information
-	err = b.Queries.UpsertBotVoiceJoin(
-		context.Background(),
-		db.UpsertBotVoiceJoinParams{
-			GuildID:   m.GuildID,
-			ChannelID: m.ChannelID,
-			SessionID: sql.NullInt32{Int32: b.SessionID, Valid: true},
-		},
-	)
-	if err != nil {
-		log.Error("Failed to upsert bot voice join", "error", err)
-	}
-}
-
-func (b *Bot) handleVoiceSpeakingUpdate(
-	vc *discordgo.VoiceConnection,
-	m *discordgo.VoiceSpeakingUpdate,
-) {
-	err := b.Queries.UpsertSSRCMapping(
-		context.Background(),
-		db.UpsertSSRCMappingParams{
-			GuildID:   vc.GuildID,
-			ChannelID: vc.ChannelID,
-			UserID:    m.UserID,
-			Ssrc:      int64(m.SSRC),
-			SessionID: b.SessionID,
-		},
-	)
-	if err != nil {
-		log.Error("Failed to insert/update SSRC mapping", "error", err)
-	}
-}
-
-func (b *Bot) handleOpusPackets(vc *discordgo.VoiceConnection) {
-	for pkt := range vc.OpusRecv {
-		err := b.Queries.InsertOpusPacket(
-			context.Background(),
-			db.InsertOpusPacketParams{
-				GuildID:   vc.GuildID,
-				ChannelID: vc.ChannelID,
-				Ssrc:      int64(pkt.SSRC),
-				Sequence:  int32(pkt.Sequence),
-				Timestamp: int64(pkt.Timestamp),
-				OpusData:  pkt.Opus,
-				SessionID: b.SessionID,
-			},
-		)
-
-		if err != nil {
-			log.Error("Failed to insert opus packet", "error", err)
-		}
 	}
 }
 
@@ -260,9 +50,9 @@ var listenCmd = &cobra.Command{
 	Short: "Start listening in Discord voice channels",
 	Long:  `This command starts the Jamie bot and makes it listen in Discord voice channels.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		sqlDB, queries, err := openDatabase()
+		sqlDB, queries, err := db.OpenDatabase()
 		handleError(err, "Failed to open database")
-		defer sqlDB.Close()
+		defer sqlDB.Close(context.Background())
 
 		discord, err := discordgo.New(
 			fmt.Sprintf("Bot %s", os.Getenv("DISCORD_TOKEN")),
@@ -271,16 +61,16 @@ var listenCmd = &cobra.Command{
 
 		discord.LogLevel = discordgo.LogInformational
 
-		bot := &Bot{
+		bot := &bot.Bot{
 			Discord: discord,
 			Queries: queries,
 		}
 
-		discord.AddHandler(bot.handleEvent)
-		discord.AddHandler(bot.handleGuildCreate)
-		discord.AddHandler(bot.handleVoiceStateUpdate)
-		discord.AddHandler(bot.handleVoiceServerUpdate)
-		discord.AddHandler(bot.handleInteractionCreate)
+		discord.AddHandler(bot.HandleEvent)
+		discord.AddHandler(bot.HandleGuildCreate)
+		discord.AddHandler(bot.HandleVoiceStateUpdate)
+		discord.AddHandler(bot.HandleVoiceServerUpdate)
+		discord.AddHandler(bot.HandleInteractionCreate)
 
 		err = discord.Open()
 		handleError(err, "Error opening Discord session")
@@ -321,13 +111,15 @@ var listenPacketsCmd = &cobra.Command{
 	Short: "Listen for new opus packets",
 	Long:  `This command listens for new opus packets and prints information about each new packet.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		sqlDB, _, err := openDatabase()
+		sqlDB, _, err := db.OpenDatabase()
 		if err != nil {
 			log.Fatal("Failed to open database", "error", err)
 		}
-		defer sqlDB.Close()
 
-		_, err = sqlDB.Exec("LISTEN new_opus_packet")
+		ctx := context.Background()
+		defer sqlDB.Close(ctx)
+
+		_, err = sqlDB.Exec(ctx, "LISTEN new_opus_packet")
 		if err != nil {
 			log.Fatal("Error listening to channel", "error", err)
 		}
@@ -339,7 +131,7 @@ var listenPacketsCmd = &cobra.Command{
 
 		for {
 			var notification string
-			err := sqlDB.QueryRow("SELECT pg_notify('new_opus_packet', '')").
+			err := sqlDB.QueryRow(ctx, "SELECT pg_notify('new_opus_packet', '')").
 				Scan(&notification)
 			if err != nil {
 				log.Error("Error waiting for notification", "error", err)
@@ -397,19 +189,19 @@ func fetchOpusPackets(
 		context.Background(),
 		db.GetOpusPacketsParams{
 			Ssrc:        ssrc,
-			CreatedAt:   startTime,
-			CreatedAt_2: endTime,
+			CreatedAt:   pgtype.Timestamptz{Time: startTime, Valid: true},
+			CreatedAt_2: pgtype.Timestamptz{Time: endTime, Valid: true},
 		},
 	)
 }
 
-func processOpusPackets(packets []db.OpusPacket, ogg *Ogg) error {
+func processOpusPackets(packets []db.OpusPacket, ogg *snd.Ogg) error {
 	for _, dbPacket := range packets {
-		packet := OpusPacket{
+		packet := snd.OpusPacket{
 			ID:        int(dbPacket.ID),
 			Sequence:  uint16(dbPacket.Sequence),
 			Timestamp: uint32(dbPacket.Timestamp),
-			CreatedAt: dbPacket.CreatedAt,
+			CreatedAt: dbPacket.CreatedAt.Time,
 			OpusData:  dbPacket.OpusData,
 		}
 		ogg.WritePacket(packet)
@@ -430,14 +222,14 @@ var packetInfoCmd = &cobra.Command{
 		startTime, endTime, err := parseTimeRange(startTimeStr, endTimeStr)
 		handleError(err, "Error parsing time range")
 
-		sqlDB, queries, err := openDatabase()
+		sqlDB, queries, err := db.OpenDatabase()
 		handleError(err, "Failed to open database")
-		defer sqlDB.Close()
+		defer sqlDB.Close(context.Background())
 
 		packets, err := fetchOpusPackets(queries, ssrc, startTime, endTime)
 		handleError(err, "Error querying database")
 
-		ogg, err := NewOgg(ssrc, startTime, endTime, outputFile)
+		ogg, err := snd.NewOgg(ssrc, startTime, endTime, outputFile)
 		handleError(err, "Error creating Ogg")
 
 		err = processOpusPackets(packets, ogg)
@@ -507,15 +299,15 @@ func runReport(cmd *cobra.Command, args []string) {
 	startTime, endTime, err := parseTimeRange(startTimeStr, endTimeStr)
 	handleError(err, "Error parsing time range")
 
-	sqlDB, queries, err := openDatabase()
+	sqlDB, queries, err := db.OpenDatabase()
 	handleError(err, "Failed to open database")
-	defer sqlDB.Close()
+	defer sqlDB.Close(context.Background())
 
 	report, err := queries.GetVoiceActivityReport(
 		context.Background(),
 		db.GetVoiceActivityReportParams{
-			CreatedAt:   startTime,
-			CreatedAt_2: endTime,
+			CreatedAt:   pgtype.Timestamptz{Time: startTime, Valid: true},
+			CreatedAt_2: pgtype.Timestamptz{Time: endTime, Valid: true},
 		},
 	)
 	handleError(err, "Error generating report")
@@ -540,8 +332,8 @@ func runReport(cmd *cobra.Command, args []string) {
 		table.Append([]string{
 			r.UserID,
 			fmt.Sprintf("%d", r.PacketCount),
-			r.FirstPacket.Format(time.RFC3339),
-			r.LastPacket.Format(time.RFC3339),
+			r.FirstPacket.Time.Format(time.RFC3339),
+			r.LastPacket.Time.Format(time.RFC3339),
 			fmt.Sprintf("%d", r.TotalBytes),
 		})
 	}
@@ -647,7 +439,7 @@ func transcribeAudio(
 			return "", fmt.Errorf("error uploading file: %w", err)
 		}
 
-		tm := transcription.NewTranscriptionManager(client, os.Stdout, nil)
+		tm := gemini.New(client, os.Stdout, nil)
 		var transcription strings.Builder
 		err = tm.TranscribeSegment(ctx, remoteURI, true, &transcription)
 		if err != nil {

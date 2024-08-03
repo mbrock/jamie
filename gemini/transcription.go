@@ -1,7 +1,8 @@
-package transcription
+package gemini
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -11,24 +12,24 @@ import (
 	"google.golang.org/api/iterator"
 )
 
-type TranscriptionManager struct {
+type Secretary struct {
 	model            *genai.GenerativeModel
 	output           io.Writer
 	history          []string
 	previousAudioURI string
 }
 
-func (tm *TranscriptionManager) SetPreviousAudioURI(uri string) {
+func (tm *Secretary) SetPreviousAudioURI(uri string) {
 	tm.previousAudioURI = uri
 }
 
-func NewTranscriptionManager(
+func New(
 	client *genai.Client,
 	output io.Writer,
 	existingTranscripts []string,
-) *TranscriptionManager {
+) *Secretary {
 	model := setupGenerativeModel(client)
-	return &TranscriptionManager{
+	return &Secretary{
 		model:   model,
 		output:  output,
 		history: existingTranscripts,
@@ -71,7 +72,7 @@ func setupGenerativeModel(client *genai.Client) *genai.GenerativeModel {
 	return model
 }
 
-func (tm *TranscriptionManager) TranscribeSegment(
+func (tm *Secretary) TranscribeSegment(
 	ctx context.Context,
 	audioURI string,
 	isResuming bool,
@@ -89,11 +90,9 @@ func (tm *TranscriptionManager) TranscribeSegment(
 			previousAudioSegment(tm.previousAudioURI),
 			[]genai.Part{previousSegments(tm.history, 1)},
 			audioSegment(audioURI),
-			[]genai.Part{continuationInstruction()},
 		)
 	}
 
-	// Log the prompt being sent
 	log.Println("Sending prompt:")
 	for _, part := range prompt {
 		switch v := part.(type) {
@@ -110,7 +109,7 @@ func (tm *TranscriptionManager) TranscribeSegment(
 
 	for {
 		resp, err := stream.Next()
-		if err == iterator.Done {
+		if errors.Is(err, iterator.Done) {
 			break
 		}
 		if err != nil {
@@ -129,8 +128,6 @@ func (tm *TranscriptionManager) TranscribeSegment(
 	tm.previousAudioURI = audioURI
 	return nil
 }
-
-// Prompt building functions
 
 func buildPrompt(partGroups ...[]genai.Part) []genai.Part {
 	var allParts []genai.Part
@@ -156,9 +153,9 @@ func previousSegments(history []string, count int) genai.Part {
 
 func audioSegment(uri string) []genai.Part {
 	return []genai.Part{
-		genai.Text("<audio>\n"),
+		genai.Text("<current-audio>\n"),
 		genai.FileData{URI: uri, MIMEType: "audio/mp3"},
-		genai.Text("</audio>\n"),
+		genai.Text("</current-audio>\n"),
 	}
 }
 
@@ -167,20 +164,17 @@ func previousAudioSegment(uri string) []genai.Part {
 		return nil
 	}
 	return []genai.Part{
-		genai.Text("Previous audio:\n"),
+		genai.Text("<previous-audio>\n"),
 		genai.FileData{URI: uri, MIMEType: "audio/opus"},
+		genai.Text("\n</previous-audio>\n"),
 	}
-}
-
-func continuationInstruction() genai.Part {
-	return genai.Text("\n\n---\nContinue transcribing.")
 }
 
 func getResponseText(resp *genai.GenerateContentResponse) string {
 	var text strings.Builder
-	for _, cand := range resp.Candidates {
-		if cand.Content != nil {
-			for _, part := range cand.Content.Parts {
+	for _, candidate := range resp.Candidates {
+		if candidate.Content != nil {
+			for _, part := range candidate.Content.Parts {
 				if t, ok := part.(genai.Text); ok {
 					text.WriteString(string(t))
 				}
