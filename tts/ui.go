@@ -62,15 +62,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.currentLine = msg.Words
 		} else {
 			// For final transcripts
-			for i := range msg.Words {
-				msg.Words[i].AttachesTo = msg.AttachesTo
-			}
 			if msg.AttachesTo == "previous" {
 				m = m.updatePreviousLine(msg.Words)
 			} else {
 				// Update the current line and add it to messages
 				m.currentLine = msg.Words
-				m.messages = append(m.messages, m.currentLine)
+				m.messages = append(m.messages, struct {
+					words      []TranscriptWord
+					attachesTo string
+				}{words: m.currentLine, attachesTo: msg.AttachesTo})
 				// Start a new empty current line
 				m.currentLine = []TranscriptWord{}
 			}
@@ -122,13 +122,13 @@ func (m model) footerView() string {
 
 func (m model) contentView() string {
 	var content strings.Builder
-	for i, line := range m.messages {
+	for _, line := range m.messages {
 		prefix := "[NEW] "
-		if i > 0 && line[0].AttachesTo == "previous" {
+		if line.attachesTo == "previous" {
 			prefix = "[ATT] "
 		}
 		content.WriteString(prefix)
-		content.WriteString(formatWords(line))
+		content.WriteString(formatWords(line.words))
 		content.WriteString("\n")
 	}
 	if len(m.currentLine) > 0 {
@@ -169,10 +169,13 @@ func max(a, b int) int {
 func (m model) updatePreviousLine(words []TranscriptWord) model {
 	if len(m.messages) > 0 {
 		lastIndex := len(m.messages) - 1
-		m.messages[lastIndex] = words
+		m.messages[lastIndex].words = words
 	} else {
 		// If there are no previous messages, treat it as a new message
-		m.messages = append(m.messages, words)
+		m.messages = append(m.messages, struct {
+			words      []TranscriptWord
+			attachesTo string
+		}{words: words, attachesTo: "previous"})
 	}
 	return m
 }
