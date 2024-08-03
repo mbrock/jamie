@@ -7,13 +7,12 @@ GOGET=$(GOCMD) get
 BINARY_NAME=jamie
 
 # ONNX Runtime flags
-CGO_CFLAGS=$(shell pkg-config --cflags libonnxruntime)
-CGO_LDFLAGS=$(shell pkg-config --libs libonnxruntime)
+export CGO_CFLAGS=$(shell pkg-config --cflags libonnxruntime)
+export CGO_LDFLAGS=$(shell pkg-config --libs libonnxruntime)
 
 all: test build
 
 build:
-	CGO_CFLAGS="$(CGO_CFLAGS)" CGO_LDFLAGS="$(CGO_LDFLAGS)" \
 	$(GOBUILD) -o $(BINARY_NAME) -v
 
 test:
