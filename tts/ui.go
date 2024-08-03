@@ -71,9 +71,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.currentLine = msg.Words
 		} else {
 			// For final transcripts
-			// Update the current line and add it to messages
-			m.currentLine = msg.Words
-			m.messages = append(m.messages, m.currentLine)
+			if msg.AttachesTo == "previous" && len(m.messages) > 0 {
+				// Update the previous line
+				lastIndex := len(m.messages) - 1
+				m.messages[lastIndex] = append(m.messages[lastIndex], msg.Words...)
+			} else {
+				// Update the current line and add it to messages
+				m.currentLine = msg.Words
+				m.messages = append(m.messages, m.currentLine)
+			}
 			// Start a new empty current line
 			m.currentLine = []TranscriptWord{}
 		}
