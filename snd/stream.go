@@ -105,22 +105,18 @@ func StreamOpusPackets(
 				continue
 			}
 
-			// Check and print the first few bytes of the opus data
-			if len(packet.OpusData) > 0 {
-				log.Info("Opus packet data check",
-					"first_bytes", fmt.Sprintf("%x", packet.OpusData[:min(4, len(packet.OpusData))]),
-					"starts_with_backslash_x", strings.HasPrefix(packet.OpusData, "\\x"),
-				)
+			// Decode the hex-encoded opus data
+			decodedData, err := hex.DecodeString(strings.TrimPrefix(packet.OpusData, "\\x"))
+			if err != nil {
+				log.Fatal("Error decoding hex string", "error", err)
 			}
+			packet.OpusData = string(decodedData)
 
-			// If the OpusData is a hex string, decode it
-			if strings.HasPrefix(packet.OpusData, "\\x") {
-				decodedData, err := hex.DecodeString(strings.TrimPrefix(packet.OpusData, "\\x"))
-				if err != nil {
-					log.Error("Error decoding hex string", "error", err)
-				} else {
-					packet.OpusData = string(decodedData)
-				}
+			// Log the first few bytes of the decoded opus data
+			if len(packet.OpusData) > 0 {
+				log.Info("Decoded opus packet data",
+					"first_bytes", fmt.Sprintf("%x", packet.OpusData[:min(4, len(packet.OpusData))]),
+				)
 			}
 
 			packet.UserID = getUserIDFromCache(cache, packet.Ssrc)
