@@ -255,7 +255,7 @@ func ListenForTranscriptionChanges(
 		)
 	}
 
-	updateChan := make(chan TranscriptionUpdate)
+	updateChan := make(chan TranscriptionUpdate, 100) // Buffered channel with capacity of 100
 
 	go func() {
 		defer close(updateChan)
