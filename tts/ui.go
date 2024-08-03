@@ -71,24 +71,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.currentLine = msg.Words
 		} else {
 			// For final transcripts
-			if msg.AttachesTo == "previous" && len(m.messages) > 0 {
-				lastIndex := len(m.messages) - 1
-				m.messages[lastIndex] = append(m.messages[lastIndex], TranscriptWord{Content: "[ATTACHED]"})
-				m.messages[lastIndex] = append(m.messages[lastIndex], msg.Words...)
-			} else {
-				// Update the current line and add it to messages
-				m.currentLine = msg.Words
-				m.messages = append(m.messages, m.currentLine)
-				// Start a new empty current line
-				m.currentLine = []TranscriptWord{}
-			}
+			// Update the current line and add it to messages
+			m.currentLine = msg.Words
+			m.messages = append(m.messages, m.currentLine)
+			// Start a new empty current line
+			m.currentLine = []TranscriptWord{}
 		}
 		m.viewport.SetContent(m.contentView())
 		m.viewport.GotoBottom()
 
 		// Add log entry
 		logEntry := fmt.Sprintf("%s %d \"%s\"",
-			getLogPrefix(msg.IsPartial, msg.AttachesTo),
+			getLogPrefix(msg.IsPartial),
 			len(msg.Words),
 			formatTranscriptWords(msg.Words))
 		m.logEntries = append(m.logEntries, logEntry)
@@ -213,12 +207,9 @@ func StartUI(transcripts chan TranscriptMessage) error {
 	return err
 }
 
-func getLogPrefix(isPartial bool, attachesTo string) string {
+func getLogPrefix(isPartial bool) string {
 	if isPartial {
 		return "TMP"
-	}
-	if attachesTo == "previous" {
-		return "FIN (ATT)"
 	}
 	return "FIN"
 }
