@@ -97,7 +97,10 @@ INSERT INTO uploaded_files (hash, file_name, remote_uri)
 VALUES ($1, $2, $3);
 
 -- name: GetUserIDBySSRC :one
-SELECT user_id FROM ssrc_mappings WHERE ssrc = $1 LIMIT 1;
+SELECT user_id
+FROM ssrc_mappings
+WHERE ssrc = $1
+LIMIT 1;
 
 -- name: InsertTranscriptionSession :one
 INSERT INTO transcription_sessions (ssrc, start_time, guild_id, channel_id, user_id)
@@ -105,10 +108,10 @@ VALUES ($1, $2, $3, $4, $5)
 RETURNING id;
 
 -- name: UpsertTranscriptionSegment :one
-SELECT upsert_transcription_segment($1, $2, $3, $4) AS id;
+SELECT upsert_transcription_segment ($1, $2, $3, $4) AS id;
 
 -- name: InsertTranscriptionWord :one
-INSERT INTO transcription_words (segment_id, offset, duration, is_eos)
+INSERT INTO transcription_words (segment_id, OFFSET, duration, is_eos)
 VALUES ($1, $2, $3, $4)
 RETURNING id;
 
