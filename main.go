@@ -111,7 +111,7 @@ var listenPacketsCmd = &cobra.Command{
 	Short: "Listen for new opus packets",
 	Long:  `This command listens for new opus packets and prints information about each new packet.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		sqlDB, _, err := db.OpenDatabase()
+		sqlDB, queries, err := db.OpenDatabase()
 		if err != nil {
 			log.Fatal("Failed to open database", "error", err)
 		}
@@ -119,7 +119,7 @@ var listenPacketsCmd = &cobra.Command{
 		ctx := context.Background()
 		defer sqlDB.Close(ctx)
 
-		packetChan, err := snd.StreamOpusPackets(ctx, sqlDB, queries)
+		packetChan, _, err := snd.StreamOpusPackets(ctx, sqlDB, queries)
 		if err != nil {
 			log.Fatal("Error setting up opus packet stream", "error", err)
 		}
@@ -229,8 +229,7 @@ var packetInfoCmd = &cobra.Command{
 			startTime,
 			endTime,
 			file,
-			4096,
-		) // 4096 is a suggested flush size, adjust as needed
+		)
 		handleError(err, "Error creating Ogg")
 
 		err = processOpusPackets(packets, ogg)
