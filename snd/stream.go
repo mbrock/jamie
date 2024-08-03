@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"sync"
-	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/jackc/pgx/v5"
@@ -35,18 +34,21 @@ func (c *SSRCUserIDCache) Get(ssrc int64) (string, bool) {
 }
 
 type OpusPacketNotification struct {
-	ID        int64   `json:"id"`
-	GuildID   string  `json:"guild_id"`
-	ChannelID string  `json:"channel_id"`
-	UserID    string  `json:"user_id"`
-	Ssrc      int64   `json:"ssrc"`
-	Sequence  int32   `json:"sequence"`
-	Timestamp int64   `json:"timestamp"`
-	OpusData  string  `json:"opus_data"`
-	CreatedAt string  `json:"created_at"`
+	ID        int64  `json:"id"`
+	GuildID   string `json:"guild_id"`
+	ChannelID string `json:"channel_id"`
+	UserID    string `json:"user_id"`
+	Ssrc      int64  `json:"ssrc"`
+	Sequence  int32  `json:"sequence"`
+	Timestamp int64  `json:"timestamp"`
+	OpusData  string `json:"opus_data"`
+	CreatedAt string `json:"created_at"`
 }
 
-func StreamOpusPackets(ctx context.Context, conn *pgx.Conn) (<-chan OpusPacketNotification, *SSRCUserIDCache, error) {
+func StreamOpusPackets(
+	ctx context.Context,
+	conn *pgx.Conn,
+) (<-chan OpusPacketNotification, *SSRCUserIDCache, error) {
 	_, err := conn.Exec(ctx, "LISTEN new_opus_packet")
 	if err != nil {
 		return nil, nil, err
@@ -85,7 +87,11 @@ func StreamOpusPackets(ctx context.Context, conn *pgx.Conn) (<-chan OpusPacketNo
 	return packetChan, cache, nil
 }
 
-func DemuxOpusPackets(ctx context.Context, inputChan <-chan OpusPacketNotification, cache *SSRCUserIDCache) <-chan (<-chan OpusPacketNotification) {
+func DemuxOpusPackets(
+	ctx context.Context,
+	inputChan <-chan OpusPacketNotification,
+	cache *SSRCUserIDCache,
+) <-chan (<-chan OpusPacketNotification) {
 	outputChan := make(chan (<-chan OpusPacketNotification))
 
 	go func() {
@@ -106,13 +112,22 @@ func DemuxOpusPackets(ctx context.Context, inputChan <-chan OpusPacketNotificati
 
 				streamChan, exists := streams[packet.Ssrc]
 				if !exists {
-					streamChan = make(chan OpusPacketNotification, 100) // Buffer size of 100, adjust as needed
+					streamChan = make(
+						chan OpusPacketNotification,
+						100,
+					) // Buffer size of 100, adjust as needed
 					streams[packet.Ssrc] = streamChan
 					outputChan <- streamChan
 
 					// Log the new stream with UserID from cache
 					if userID, ok := cache.Get(packet.Ssrc); ok {
-						log.Info("New stream started", "ssrc", packet.Ssrc, "userID", userID)
+						log.Info(
+							"New stream started",
+							"ssrc",
+							packet.Ssrc,
+							"userID",
+							userID,
+						)
 					} else {
 						log.Info("New stream started", "ssrc", packet.Ssrc, "userID", "unknown")
 					}
@@ -121,7 +136,11 @@ func DemuxOpusPackets(ctx context.Context, inputChan <-chan OpusPacketNotificati
 				select {
 				case streamChan <- packet:
 				default:
-					log.Warn("Stream channel buffer full, dropping packet", "ssrc", packet.Ssrc)
+					log.Warn(
+						"Stream channel buffer full, dropping packet",
+						"ssrc",
+						packet.Ssrc,
+					)
 				}
 
 			case <-ctx.Done():
