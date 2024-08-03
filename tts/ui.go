@@ -11,7 +11,10 @@ import (
 
 type model struct {
 	viewport    viewport.Model
-	messages    [][]TranscriptWord
+	messages    []struct {
+		words      []TranscriptWord
+		attachesTo string
+	}
 	currentLine []TranscriptWord
 	ready       bool
 	transcripts chan TranscriptMessage
@@ -122,13 +125,13 @@ func (m model) footerView() string {
 
 func (m model) contentView() string {
 	var content strings.Builder
-	for _, line := range m.messages {
+	for _, msg := range m.messages {
 		prefix := "[NEW] "
-		if line.attachesTo == "previous" {
+		if msg.attachesTo == "previous" {
 			prefix = "[ATT] "
 		}
 		content.WriteString(prefix)
-		content.WriteString(formatWords(line.words))
+		content.WriteString(formatWords(msg.words))
 		content.WriteString("\n")
 	}
 	if len(m.currentLine) > 0 {
