@@ -322,14 +322,23 @@ func handleTranscriptAndErrorsWithUI(
 			if !ok {
 				return
 			}
+			var words []TranscriptWord
 			for _, result := range transcript.Results {
 				if len(result.Alternatives) > 0 {
-					text := result.Alternatives[0].Content
-					log.Info("Transcription", "text", text, "isPartial", transcript.IsPartial())
-					uiChan <- TranscriptMessage{
-						Text:      text,
-						IsPartial: transcript.IsPartial(),
+					word := TranscriptWord{
+						Content:    result.Alternatives[0].Content,
+						Confidence: result.Alternatives[0].Confidence,
+						StartTime:  result.StartTime,
+						EndTime:    result.EndTime,
 					}
+					words = append(words, word)
+				}
+			}
+			if len(words) > 0 {
+				log.Info("Transcription", "words", len(words), "isPartial", transcript.IsPartial())
+				uiChan <- TranscriptMessage{
+					Words:     words,
+					IsPartial: transcript.IsPartial(),
 				}
 			}
 		case err, ok := <-errChan:
@@ -347,8 +356,15 @@ func handleTranscriptAndErrorsWithUI(
 	}
 }
 
+type TranscriptWord struct {
+	Content    string
+	Confidence float64
+	StartTime  float64
+	EndTime    float64
+}
+
 type TranscriptMessage struct {
-	Text      string
+	Words     []TranscriptWord
 	IsPartial bool
 }
 

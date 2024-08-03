@@ -11,16 +11,16 @@ import (
 
 type model struct {
 	viewport    viewport.Model
-	messages    []string
-	currentLine string
+	messages    [][]TranscriptWord
+	currentLine []TranscriptWord
 	ready       bool
 	transcripts chan TranscriptMessage
 }
 
 func initialModel(transcripts chan TranscriptMessage) model {
 	return model{
-		messages:    []string{},
-		currentLine: "",
+		messages:    [][]TranscriptWord{},
+		currentLine: []TranscriptWord{},
 		ready:       false,
 		transcripts: transcripts,
 	}
@@ -59,13 +59,13 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case transcriptMsg:
 		if msg.IsPartial {
-			m.currentLine = msg.Text
+			m.currentLine = msg.Words
 		} else {
-			if m.currentLine != "" {
+			if len(m.currentLine) > 0 {
 				m.messages = append(m.messages, m.currentLine)
 			}
-			m.messages = append(m.messages, msg.Text)
-			m.currentLine = ""
+			m.messages = append(m.messages, msg.Words)
+			m.currentLine = []TranscriptWord{}
 		}
 		m.viewport.SetContent(m.contentView())
 		m.viewport.GotoBottom()
@@ -113,11 +113,36 @@ func (m model) footerView() string {
 }
 
 func (m model) contentView() string {
-	content := strings.Join(m.messages, "\n")
-	if m.currentLine != "" {
-		content += "\n" + m.currentLine
+	var content strings.Builder
+	for _, line := range m.messages {
+		content.WriteString(formatWords(line))
+		content.WriteString("\n")
 	}
-	return content
+	if len(m.currentLine) > 0 {
+		content.WriteString(formatWords(m.currentLine))
+	}
+	return content.String()
+}
+
+func formatWords(words []TranscriptWord) string {
+	var line strings.Builder
+	for _, word := range words {
+		color := getConfidenceColor(word.Confidence)
+		line.WriteString(lipgloss.NewStyle().Foreground(color).Render(word.Content))
+		line.WriteString(" ")
+	}
+	return strings.TrimSpace(line.String())
+}
+
+func getConfidenceColor(confidence float64) lipgloss.Color {
+	switch {
+	case confidence >= 0.9:
+		return lipgloss.Color("#00FF00") // Green
+	case confidence >= 0.7:
+		return lipgloss.Color("#FFFF00") // Yellow
+	default:
+		return lipgloss.Color("#FF0000") // Red
+	}
 }
 
 func max(a, b int) int {
