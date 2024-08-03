@@ -12,13 +12,15 @@ import (
 type model struct {
 	viewport    viewport.Model
 	messages    []string
+	currentLine string
 	ready       bool
-	transcripts chan string
+	transcripts chan TranscriptMessage
 }
 
-func initialModel(transcripts chan string) model {
+func initialModel(transcripts chan TranscriptMessage) model {
 	return model{
 		messages:    []string{},
+		currentLine: "",
 		ready:       false,
 		transcripts: transcripts,
 	}
@@ -56,7 +58,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case transcriptMsg:
-		m.messages = append(m.messages, string(msg))
+		if msg.IsPartial {
+			m.currentLine = msg.Text
+		} else {
+			if m.currentLine != "" {
+				m.messages = append(m.messages, m.currentLine)
+			}
+			m.messages = append(m.messages, msg.Text)
+			m.currentLine = ""
+		}
 		m.viewport.SetContent(m.contentView())
 		m.viewport.GotoBottom()
 	}
@@ -103,7 +113,11 @@ func (m model) footerView() string {
 }
 
 func (m model) contentView() string {
-	return strings.Join(m.messages, "\n")
+	content := strings.Join(m.messages, "\n")
+	if m.currentLine != "" {
+		content += "\n" + m.currentLine
+	}
+	return content
 }
 
 func max(a, b int) int {
@@ -113,15 +127,15 @@ func max(a, b int) int {
 	return b
 }
 
-type transcriptMsg string
+type transcriptMsg TranscriptMessage
 
-func listenForTranscripts(transcripts chan string) tea.Cmd {
+func listenForTranscripts(transcripts chan TranscriptMessage) tea.Cmd {
 	return func() tea.Msg {
 		return transcriptMsg(<-transcripts)
 	}
 }
 
-func StartUI(transcripts chan string) error {
+func StartUI(transcripts chan TranscriptMessage) error {
 	p := tea.NewProgram(
 		initialModel(transcripts),
 		tea.WithAltScreen(),

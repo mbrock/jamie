@@ -314,7 +314,7 @@ func handleTranscriptAndErrorsWithUI(
 	ctx context.Context,
 	transcriptChan <-chan speechmatics.RTTranscriptResponse,
 	errChan <-chan error,
-	uiChan chan<- string,
+	uiChan chan<- TranscriptMessage,
 ) {
 	for {
 		select {
@@ -325,8 +325,11 @@ func handleTranscriptAndErrorsWithUI(
 			for _, result := range transcript.Results {
 				if len(result.Alternatives) > 0 {
 					text := result.Alternatives[0].Content
-					log.Info("Transcription", "text", text)
-					uiChan <- text
+					log.Info("Transcription", "text", text, "isPartial", transcript.IsPartial())
+					uiChan <- TranscriptMessage{
+						Text:      text,
+						IsPartial: transcript.IsPartial(),
+					}
 				}
 			}
 		case err, ok := <-errChan:
@@ -334,11 +337,19 @@ func handleTranscriptAndErrorsWithUI(
 				return
 			}
 			log.Error("Transcription error", "error", err)
-			uiChan <- fmt.Sprintf("Error: %v", err)
+			uiChan <- TranscriptMessage{
+				Text:      fmt.Sprintf("Error: %v", err),
+				IsPartial: false,
+			}
 		case <-ctx.Done():
 			return
 		}
 	}
+}
+
+type TranscriptMessage struct {
+	Text      string
+	IsPartial bool
 }
 
 func handleStreamWithTranscription(

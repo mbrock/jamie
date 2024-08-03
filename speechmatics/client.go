@@ -79,6 +79,14 @@ type RTTranscriptResponse struct {
 	} `json:"results"`
 }
 
+func (r *RTTranscriptResponse) IsPartial() bool {
+	return r.Message == "AddPartialTranscript"
+}
+
+func (r *RTTranscriptResponse) IsFinal() bool {
+	return r.Message == "AddTranscript"
+}
+
 type JobConfig struct {
 	Type                string               `json:"type"`
 	TranscriptionConfig *TranscriptionConfig `json:"transcription_config,omitempty"`
