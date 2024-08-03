@@ -163,7 +163,15 @@ CREATE INDEX IF NOT EXISTS idx_transcription_words_segment_id ON transcription_w
 CREATE INDEX IF NOT EXISTS idx_word_alternatives_word_id ON word_alternatives(word_id);
 
 -- Function to upsert transcription segment
-CREATE OR REPLACE FUNCTION upsert_transcription_segment(
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'upsert_transcription_segment') THEN
+        DROP FUNCTION upsert_transcription_segment;
+    END IF;
+END
+$$;
+
+CREATE FUNCTION upsert_transcription_segment(
         p_session_id BIGINT,
         p_is_final BOOLEAN
     ) RETURNS TABLE (segment_id BIGINT, version INT) AS $$
