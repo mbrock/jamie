@@ -1,7 +1,9 @@
 package snd
 
 import (
+	"bytes"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/charmbracelet/log"
@@ -43,7 +45,7 @@ type Ogg struct {
 	ssrc                int64
 	startTime           time.Time
 	endTime             time.Time
-	outputFile          string
+	writer              io.Writer
 	oggWriter           *oggwriter.OggWriter
 	packetCount         int
 	firstTimestamp      time.Time
@@ -52,14 +54,17 @@ type Ogg struct {
 	gapCount            int
 	sequenceNumber      uint16
 	segmentNumber       uint32
+	buffer              bytes.Buffer
+	flushSize           int
 }
 
 func NewOgg(
 	ssrc int64,
 	startTime, endTime time.Time,
-	outputFile string,
+	writer io.Writer,
+	flushSize int,
 ) (*Ogg, error) {
-	oggWriter, err := oggwriter.New(outputFile, 48000, 2)
+	oggWriter, err := oggwriter.NewWith(writer, 48000, 2)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OggWriter: %w", err)
 	}
@@ -68,12 +73,17 @@ func NewOgg(
 		ssrc:       ssrc,
 		startTime:  startTime.UTC(),
 		endTime:    endTime.UTC(),
-		outputFile: outputFile,
+		writer:     writer,
 		oggWriter:  oggWriter,
+		flushSize:  flushSize,
 	}, nil
 }
 
 func (o *Ogg) Close() error {
+	if err := o.Flush(); err != nil {
+		return fmt.Errorf("failed to flush buffer: %w", err)
+	}
+
 	if o.oggWriter != nil {
 		if err := o.oggWriter.Close(); err != nil {
 			return fmt.Errorf("failed to close OggWriter: %w", err)
@@ -84,9 +94,17 @@ func (o *Ogg) Close() error {
 		"total_packets", o.packetCount,
 		"time_range", o.lastTimestamp.Sub(o.firstTimestamp),
 		"gap_count", o.gapCount,
-		"output_file", o.outputFile,
 	)
 
+	return nil
+}
+
+func (o *Ogg) Flush() error {
+	_, err := o.writer.Write(o.buffer.Bytes())
+	if err != nil {
+		return fmt.Errorf("error writing to output: %w", err)
+	}
+	o.buffer.Reset()
 	return nil
 }
 
@@ -115,6 +133,12 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 	o.lastTimestamp = packet.CreatedAt
 	o.lastPacketTimestamp = packet.Timestamp
 	o.packetCount++
+
+	if o.buffer.Len() >= o.flushSize {
+		if err := o.Flush(); err != nil {
+			return fmt.Errorf("error flushing buffer: %w", err)
+		}
+	}
 
 	return nil
 }
