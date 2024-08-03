@@ -9,6 +9,31 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+type WordBuilder struct {
+	builder     strings.Builder
+	lastWasWord bool
+	lastWasEOS  bool
+}
+
+func (wb *WordBuilder) WriteWord(word TranscriptWord, style lipgloss.Style) {
+	if !wb.lastWasEOS && wb.lastWasWord && word.AttachesTo != "previous" {
+		wb.builder.WriteString(" ")
+	}
+
+	wb.builder.WriteString(style.Render(word.Content))
+
+	wb.lastWasWord = word.Type == "word"
+	wb.lastWasEOS = word.IsEOS
+
+	if word.IsEOS {
+		wb.builder.WriteString("\n")
+	}
+}
+
+func (wb *WordBuilder) String() string {
+	return wb.builder.String()
+}
+
 type model struct {
 	viewport          viewport.Model
 	finalTranscripts  [][]TranscriptWord
@@ -158,29 +183,15 @@ func (m model) logView() string {
 }
 
 func formatWords(words []TranscriptWord, bgColor lipgloss.Color) string {
-	var line strings.Builder
-	lastWasNewline := true
+	wb := &WordBuilder{}
 	for _, word := range words {
 		color := getConfidenceColor(word.Confidence)
 		style := lipgloss.NewStyle().
 			Foreground(color).
 			Background(bgColor)
-
-		if !lastWasNewline && word.Type == "word" &&
-			word.AttachesTo != "previous" {
-			line.WriteString(" ")
-		}
-
-		line.WriteString(style.Render(word.Content))
-
-		if word.IsEOS {
-			line.WriteString("\n")
-			lastWasNewline = true
-		} else {
-			lastWasNewline = false
-		}
+		wb.WriteWord(word, style)
 	}
-	return line.String()
+	return wb.String()
 }
 
 func getConfidenceColor(confidence float64) lipgloss.Color {
