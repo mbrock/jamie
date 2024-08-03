@@ -108,8 +108,8 @@ VALUES ($1, $2, $3, $4, $5)
 RETURNING id;
 
 -- name: UpsertTranscriptionSegment :one
-SELECT segment_id, version
-FROM upsert_transcription_segment(sqlc.arg(session_id), sqlc.arg(is_final)) AS result(segment_id BIGINT, version INT);
+SELECT result.segment_id::BIGINT, result.version::INT
+FROM upsert_transcription_segment(sqlc.arg(session_id), sqlc.arg(is_final)) AS result;
 
 -- name: InsertTranscriptionWord :one
 INSERT INTO transcription_words (segment_id, start_time, duration, is_eos, version)
