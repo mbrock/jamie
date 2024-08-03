@@ -29,6 +29,7 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"google.golang.org/api/option"
+	"github.com/spf13/viper"
 	"node.town/db"
 	"node.town/gemini"
 	"node.town/speechmatics"
@@ -439,7 +440,7 @@ func transcribeAudio(
 	case "gemini":
 		client, err := genai.NewClient(
 			ctx,
-			option.WithAPIKey(os.Getenv("GEMINI_API_KEY")),
+			option.WithAPIKey(viper.GetString("GEMINI_API_KEY")),
 		)
 		if err != nil {
 			return "", fmt.Errorf("error initializing Gemini client: %w", err)
