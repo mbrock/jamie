@@ -54,3 +54,48 @@ func StreamOpusPackets(ctx context.Context, conn *pgx.Conn) (<-chan OpusPacketNo
 
 	return packetChan, nil
 }
+
+func DemuxOpusPackets(ctx context.Context, inputChan <-chan OpusPacketNotification) <-chan (<-chan OpusPacketNotification) {
+	outputChan := make(chan (<-chan OpusPacketNotification))
+
+	go func() {
+		defer close(outputChan)
+
+		streams := make(map[int64]chan OpusPacketNotification)
+
+		for {
+			select {
+			case packet, ok := <-inputChan:
+				if !ok {
+					// Close all existing streams when input channel is closed
+					for _, streamChan := range streams {
+						close(streamChan)
+					}
+					return
+				}
+
+				streamChan, exists := streams[packet.Ssrc]
+				if !exists {
+					streamChan = make(chan OpusPacketNotification, 100) // Buffer size of 100, adjust as needed
+					streams[packet.Ssrc] = streamChan
+					outputChan <- streamChan
+				}
+
+				select {
+				case streamChan <- packet:
+				default:
+					log.Warn("Stream channel buffer full, dropping packet", "ssrc", packet.Ssrc)
+				}
+
+			case <-ctx.Done():
+				// Close all existing streams when context is cancelled
+				for _, streamChan := range streams {
+					close(streamChan)
+				}
+				return
+			}
+		}
+	}()
+
+	return outputChan
+}
