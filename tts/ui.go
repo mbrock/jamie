@@ -60,14 +60,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case transcriptMsg:
 		if msg.IsPartial {
 			m.currentLine = msg.Words
-		} else if msg.AttachesTo == "previous" {
-			m = m.updatePreviousLine(msg.Words)
 		} else {
-			// For final transcripts, update the current line and add it to messages
-			m.currentLine = msg.Words
-			m.messages = append(m.messages, m.currentLine)
-			// Start a new empty current line
-			m.currentLine = []TranscriptWord{}
+			// For final transcripts
+			if msg.AttachesTo == "previous" {
+				m = m.updatePreviousLine(msg.Words)
+			} else {
+				// Update the current line and add it to messages
+				m.currentLine = msg.Words
+				m.messages = append(m.messages, m.currentLine)
+				// Start a new empty current line
+				m.currentLine = []TranscriptWord{}
+			}
 		}
 		m.viewport.SetContent(m.contentView())
 		m.viewport.GotoBottom()
