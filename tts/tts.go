@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/log"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/spf13/cobra"
@@ -110,14 +110,6 @@ func handleStreamWithTranscriptionAndUI(
 	queries *db.Queries,
 ) {
 	log.Info("Starting handleStreamWithTranscriptionAndUI")
-
-	// Create a channel to send messages to the Bubble Tea program
-	uiChan := make(chan tea.Msg)
-	go func() {
-		for msg := range uiChan {
-			transcriptChan <- msg.(TranscriptMessage)
-		}
-	}()
 
 	client := speechmatics.NewClient(viper.GetString("SPEECHMATICS_API_KEY"))
 	config := speechmatics.TranscriptionConfig{
@@ -435,7 +427,7 @@ func handleTranscript(
 		Words:     words,
 		IsPartial: transcript.IsPartial(),
 	}
-	uiChan <- transcriptMessage
+	transcriptChan <- transcriptMessage
 
 	transcriptText := formatTranscriptWords(words)
 	log.Info(
