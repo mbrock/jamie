@@ -15,7 +15,7 @@ type OpusPacketNotification struct {
 	Ssrc      int64   `json:"ssrc"`
 	Sequence  int32   `json:"sequence"`
 	Timestamp int64   `json:"timestamp"`
-	OpusData  []byte  `json:"opus_data"`
+	OpusData  string  `json:"opus_data"`
 	CreatedAt string  `json:"created_at"`
 }
 
