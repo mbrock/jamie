@@ -121,7 +121,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.Height = msg.Height - verticalMarginHeight
 		}
 
-	case transcriptMsg:
+	case TranscriptMessage:
 		if msg.IsPartial {
 			m.currentTranscript = msg.Words
 		} else {
@@ -138,6 +138,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			len(msg.Words),
 			formatTranscriptWords(msg.Words))
 		m.logEntries = append(m.logEntries, logEntry)
+
+		return m, nil
 	}
 
 	m.viewport, cmd = m.viewport.Update(msg)
@@ -224,14 +226,6 @@ func max(a, b int) int {
 		return a
 	}
 	return b
-}
-
-type transcriptMsg TranscriptMessage
-
-func listenForTranscripts(transcripts chan TranscriptMessage) tea.Cmd {
-	return func() tea.Msg {
-		return transcriptMsg(<-transcripts)
-	}
 }
 
 func getLogPrefix(isPartial bool) string {

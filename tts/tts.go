@@ -427,7 +427,11 @@ func handleTranscript(
 		Words:     words,
 		IsPartial: transcript.IsPartial(),
 	}
-	transcriptChan <- transcriptMessage
+	select {
+	case transcriptChan <- transcriptMessage:
+	default:
+		log.Warn("Transcript channel full, dropping message")
+	}
 
 	transcriptText := formatTranscriptWords(words)
 	log.Info(
