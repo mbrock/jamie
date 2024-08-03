@@ -22,6 +22,7 @@ import (
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
 	"github.com/google/generative-ai-go/genai"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/olekukonko/tablewriter"
 
