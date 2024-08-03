@@ -84,7 +84,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			for i, word := range m.currentSentence {
 				if word.IsEOS {
 					m.sentences = append(m.sentences, m.currentSentence[:i+1])
-					m.currentSentence = m.currentSentence[i+1:]
+					if i+1 < len(m.currentSentence) {
+						m.currentSentence = m.currentSentence[i+1:]
+					} else {
+						m.currentSentence = []TranscriptWord{}
+					}
+					break
 				}
 			}
 		}
