@@ -678,6 +678,111 @@ func handleStreamWithTranscription(
 		}
 	}
 
-	// ... (rest of the function similar to handleStreamWithTranscriptionAndUI,
-	// but without the transcriptChan and UI-related parts)
+	config := speechmatics.TranscriptionConfig{
+		Language:       "en",
+		EnablePartials: true,
+	}
+	audioFormat := speechmatics.AudioFormat{
+		Type: "raw",
+	}
+
+	err := client.ConnectWebSocket(ctx, config, audioFormat)
+	if err != nil {
+		log.Error("Failed to connect to WebSocket", "error", err)
+		return
+	}
+	defer client.CloseWebSocket()
+
+	transcriptChan, errChan := client.ReceiveTranscript(ctx)
+
+	var sessionID int64
+	var sessionStarted bool
+
+	var buffer bytes.Buffer
+	var seqNo int
+
+	go func() {
+		for {
+			select {
+			case transcript, ok := <-transcriptChan:
+				if !ok {
+					return
+				}
+				handleTranscript(ctx, transcript, sessionID, queries)
+			case err := <-errChan:
+				log.Error("Received error from transcription service", "error", err)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	for {
+		select {
+		case packet, ok := <-stream:
+			if !ok {
+				log.Info("Stream closed, ending transcription")
+				if buffer.Len() > 0 {
+					err = client.SendAudio(buffer.Bytes())
+					if err != nil {
+						log.Error("Failed to send final audio", "error", err)
+					}
+				}
+				err = client.EndStream(seqNo)
+				if err != nil {
+					log.Error("Failed to end stream", "error", err)
+				}
+				return
+			}
+
+			if !sessionStarted {
+				sessionID, err = queries.InsertTranscriptionSession(
+					ctx,
+					db.InsertTranscriptionSessionParams{
+						Ssrc: packet.Ssrc,
+						StartTime: pgtype.Timestamptz{
+							Time:  time.Now(),
+							Valid: true,
+						},
+						GuildID:   packet.GuildID,
+						ChannelID: packet.ChannelID,
+						UserID:    packet.UserID,
+					},
+				)
+				if err != nil {
+					log.Error("Failed to insert transcription session", "error", err)
+					return
+				}
+				log.Info("Inserted transcription session", "sessionID", sessionID)
+				sessionStarted = true
+			}
+
+			buffer.Write([]byte(packet.OpusData))
+
+			if buffer.Len() >= 1024 { // Send audio in chunks
+				err = client.SendAudio(buffer.Bytes())
+				if err != nil {
+					log.Error("Failed to send audio", "error", err)
+					return
+				}
+				buffer.Reset()
+			}
+
+			seqNo++
+
+		case <-ctx.Done():
+			log.Info("Context cancelled, ending transcription")
+			if buffer.Len() > 0 {
+				err = client.SendAudio(buffer.Bytes())
+				if err != nil {
+					log.Error("Failed to send final audio", "error", err)
+				}
+			}
+			err = client.EndStream(seqNo)
+			if err != nil {
+				log.Error("Failed to end stream", "error", err)
+			}
+			return
+		}
+	}
 }
