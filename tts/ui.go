@@ -152,12 +152,16 @@ func (m model) transcriptView() string {
 	}
 	if len(m.currentTranscript) > 0 {
 		s := content.String()
-		matched, err := regexp.MatchString(`\s$`, s)
-		if err != nil {
-			panic(err)
-		}
-		if !matched && len(m.currentTranscript) > 0 && m.currentTranscript[0].Type == "word" {
-			content.WriteString(" -- ")
+		if len(m.finalTranscripts) > 0 {
+			matched, err := regexp.MatchString(`\w$`, s)
+			if err != nil {
+				panic(err)
+			}
+
+			if matched && len(m.currentTranscript) > 0 &&
+				m.currentTranscript[0].Type == "word" {
+				content.WriteString(" -- ")
+			}
 		}
 		content.WriteString(formatWords(m.currentTranscript))
 	}
@@ -218,17 +222,6 @@ func listenForTranscripts(transcripts chan TranscriptMessage) tea.Cmd {
 	return func() tea.Msg {
 		return transcriptMsg(<-transcripts)
 	}
-}
-
-func StartUI(transcripts chan TranscriptMessage) error {
-	p := tea.NewProgram(
-		initialModel(transcripts),
-		tea.WithAltScreen(),
-		tea.WithMouseCellMotion(),
-	)
-
-	_, err := p.Run()
-	return err
 }
 
 func getLogPrefix(isPartial bool) string {
