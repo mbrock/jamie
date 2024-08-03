@@ -572,13 +572,16 @@ func (c *Client) ListJobs(ctx context.Context) ([]JobDetails, error) {
 	return response.Jobs, nil
 }
 
-func (c *Client) ConnectWebSocket(ctx context.Context, config TranscriptionConfig, audioFormat AudioFormat) error {
+func (c *Client) ConnectWebSocket(
+	ctx context.Context,
+	config TranscriptionConfig,
+	audioFormat AudioFormat,
+) error {
 	dialer := websocket.DefaultDialer
 	header := http.Header{}
 	header.Set("Authorization", fmt.Sprintf("Bearer %s", c.APIKey))
 
-	url := fmt.Sprintf("%s/%s", WebSocketBaseURL, config.Language)
-	conn, _, err := dialer.DialContext(ctx, url, header)
+	conn, _, err := dialer.DialContext(ctx, WebSocketBaseURL, header)
 	if err != nil {
 		return fmt.Errorf("failed to connect to WebSocket: %w", err)
 	}
@@ -606,7 +609,8 @@ func (c *Client) ConnectWebSocket(ctx context.Context, config TranscriptionConfi
 			return fmt.Errorf("failed to read response: %w", err)
 		}
 
-		if message, ok := response["message"].(string); ok && message == "RecognitionStarted" {
+		if message, ok := response["message"].(string); ok &&
+			message == "RecognitionStarted" {
 			break
 		}
 	}
@@ -662,7 +666,9 @@ func (c *Client) EndStream(lastSeqNo int) error {
 	return nil
 }
 
-func (c *Client) ReceiveTranscript(ctx context.Context) (chan RTTranscriptResponse, chan error) {
+func (c *Client) ReceiveTranscript(
+	ctx context.Context,
+) (chan RTTranscriptResponse, chan error) {
 	transcriptChan := make(chan RTTranscriptResponse)
 	errChan := make(chan error)
 
@@ -678,7 +684,11 @@ func (c *Client) ReceiveTranscript(ctx context.Context) (chan RTTranscriptRespon
 				var response RTTranscriptResponse
 				err := c.WSConn.ReadJSON(&response)
 				if err != nil {
-					if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+					if websocket.IsUnexpectedCloseError(
+						err,
+						websocket.CloseGoingAway,
+						websocket.CloseAbnormalClosure,
+					) {
 						errChan <- fmt.Errorf("WebSocket closed unexpectedly: %w", err)
 					}
 					return
@@ -697,7 +707,10 @@ func (c *Client) CloseWebSocket() error {
 		return nil
 	}
 
-	err := c.WSConn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
+	err := c.WSConn.WriteMessage(
+		websocket.CloseMessage,
+		websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""),
+	)
 	if err != nil {
 		return fmt.Errorf("failed to send close message: %w", err)
 	}
