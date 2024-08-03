@@ -93,21 +93,12 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 		o.firstTimestamp = packet.CreatedAt
 		o.addInitialSilence(packet.CreatedAt)
 	} else {
-		o.gapCount += o.handleGap(packet.Timestamp, o.lastPacketTimestamp, packet.ID, packet.CreatedAt)
+		o.handleGap(packet.Timestamp, packet.CreatedAt)
 	}
 
-	o.sequenceNumber++
-	o.segmentNumber++
-
-	rtpPacket := createRTPPacket(
-		o.sequenceNumber,
-		o.segmentNumber*960, // Use segment number for timestamp
-		uint32(o.ssrc),
-		packet.OpusData,
-	)
-
-	if err := o.oggWriter.WriteRTP(rtpPacket); err != nil {
-		return fmt.Errorf("error writing RTP packet: %w", err)
+	err := o.writeRTPPacket(packet.OpusData)
+	if err != nil {
+		return err
 	}
 
 	o.lastTimestamp = packet.CreatedAt
@@ -119,75 +110,72 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 
 func (o *Ogg) WriteSilence(duration time.Duration) error {
 	silentFrames := int(duration / (20 * time.Millisecond))
-	for i := 0; i < silentFrames; i++ {
-		o.sequenceNumber++
-		o.segmentNumber++
-		silentPacket := createRTPPacket(
-			o.sequenceNumber,
-			o.segmentNumber*960,
-			uint32(o.ssrc),
-			[]byte{0xf8, 0xff, 0xfe}, // Silent Opus packet
-		)
-		if err := o.oggWriter.WriteRTP(silentPacket); err != nil {
-			return fmt.Errorf("error writing silent RTP packet: %w", err)
-		}
+	err := o.writeSilentFrames(silentFrames)
+	if err != nil {
+		return err
 	}
 	o.lastTimestamp = o.lastTimestamp.Add(duration)
-	o.packetCount += silentFrames
 	return nil
 }
 
 func (o *Ogg) addInitialSilence(createdAt time.Time) {
-	createdAtUTC := createdAt
-	startTimeUTC := o.startTime
-	if createdAtUTC.After(startTimeUTC) {
-		silenceDuration := createdAtUTC.Sub(startTimeUTC)
-		silentFrames := int(
-			silenceDuration.Milliseconds() / 20,
-		) // 20ms per frame
-		o.writeSilentFrames(silentFrames)
+	if createdAt.After(o.startTime) {
+		silenceDuration := createdAt.Sub(o.startTime)
+		silentFrames := int(silenceDuration.Milliseconds() / 20) // 20ms per frame
+		err := o.writeSilentFrames(silentFrames)
+		if err != nil {
+			log.Error("Error adding initial silence", "error", err)
+			return
+		}
 		log.Info("Added initial silence", "duration", silenceDuration,
-			"created_at", createdAtUTC,
-			"start_time", startTimeUTC,
+			"created_at", createdAt,
+			"start_time", o.startTime,
 		)
 	}
 }
 
-func (o *Ogg) handleGap(
-	timestamp, lastPacketTimestamp uint32,
-	id int,
-	createdAt time.Time,
-) int {
-	timestampDiff := timestamp - lastPacketTimestamp
+func (o *Ogg) handleGap(timestamp uint32, createdAt time.Time) {
+	timestampDiff := timestamp - o.lastPacketTimestamp
 	if timestampDiff > 960 { // 960 represents 20ms in the Opus timestamp units
-		gapDuration := time.Duration(
-			timestampDiff,
-		) * time.Millisecond / 48 // Convert to real time (Opus uses 48kHz)
+		gapDuration := time.Duration(timestampDiff) * time.Millisecond / 48 // Convert to real time (Opus uses 48kHz)
 		log.Info("Audio gap detected",
 			"gap_duration", gapDuration,
-			"packet_id", id,
 			"created_at", createdAt,
 		)
 
 		silentFrames := int(timestampDiff / 960)
-		o.writeSilentFrames(silentFrames)
-		return 1
+		err := o.writeSilentFrames(silentFrames)
+		if err != nil {
+			log.Error("Error handling gap", "error", err)
+			return
+		}
+		o.gapCount++
 	}
-	return 0
 }
 
-func (o *Ogg) writeSilentFrames(frames int) {
+func (o *Ogg) writeSilentFrames(frames int) error {
 	for i := 0; i < frames; i++ {
-		o.sequenceNumber++
-		o.segmentNumber++
-		silentPacket := createRTPPacket(
-			o.sequenceNumber,
-			o.segmentNumber*960,
-			uint32(o.ssrc),
-			[]byte{0xf8, 0xff, 0xfe},
-		)
-		if err := o.oggWriter.WriteRTP(silentPacket); err != nil {
-			log.Error("Error writing silent frame", "error", err)
+		err := o.writeRTPPacket([]byte{0xf8, 0xff, 0xfe}) // Silent Opus packet
+		if err != nil {
+			return fmt.Errorf("error writing silent frame: %w", err)
 		}
 	}
+	o.packetCount += frames
+	return nil
+}
+
+func (o *Ogg) writeRTPPacket(payload []byte) error {
+	o.sequenceNumber++
+	o.segmentNumber++
+	rtpPacket := createRTPPacket(
+		o.sequenceNumber,
+		o.segmentNumber*960, // Use segment number for timestamp
+		uint32(o.ssrc),
+		payload,
+	)
+
+	if err := o.oggWriter.WriteRTP(rtpPacket); err != nil {
+		return fmt.Errorf("error writing RTP packet: %w", err)
+	}
+	return nil
 }
