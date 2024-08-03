@@ -17,12 +17,10 @@ import (
 	"node.town/snd"
 
 	"encoding/hex"
-	"encoding/json"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
 	"github.com/google/generative-ai-go/genai"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/olekukonko/tablewriter"
 
@@ -120,7 +118,7 @@ var listenPacketsCmd = &cobra.Command{
 		ctx := context.Background()
 		defer sqlDB.Close(ctx)
 
-		packetChan, err := snd.StreamOpusPackets(ctx, sqlDB.(*pgx.Conn))
+		packetChan, err := snd.StreamOpusPackets(ctx, sqlDB)
 		if err != nil {
 			log.Fatal("Error setting up opus packet stream", "error", err)
 		}
@@ -134,8 +132,15 @@ var listenPacketsCmd = &cobra.Command{
 			packetCount++
 			now := time.Now()
 
-			if lastPrintTime.IsZero() || now.Sub(lastPrintTime) >= time.Second {
-				log.Info("Opus packets received", "count", packetCount, "last_packet", packet.ID)
+			if lastPrintTime.IsZero() ||
+				now.Sub(lastPrintTime) >= time.Second {
+				log.Info(
+					"Opus packets received",
+					"count",
+					packetCount,
+					"last_packet",
+					packet.ID,
+				)
 				lastPrintTime = now
 				packetCount = 0
 			}
@@ -218,7 +223,13 @@ var packetInfoCmd = &cobra.Command{
 		handleError(err, "Error creating output file")
 		defer file.Close()
 
-		ogg, err := snd.NewOgg(ssrc, startTime, endTime, file, 4096) // 4096 is a suggested flush size, adjust as needed
+		ogg, err := snd.NewOgg(
+			ssrc,
+			startTime,
+			endTime,
+			file,
+			4096,
+		) // 4096 is a suggested flush size, adjust as needed
 		handleError(err, "Error creating Ogg")
 
 		err = processOpusPackets(packets, ogg)
