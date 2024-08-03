@@ -76,10 +76,10 @@ type OpusPacketNotification struct {
 }
 
 type TranscriptionUpdate struct {
-    Operation  string `json:"operation"`
-    ID         int64  `json:"id"`
-    SessionID  int64  `json:"session_id"`
-    IsFinal    bool   `json:"is_final"`
+	Operation string `json:"operation"`
+	ID        int64  `json:"id"`
+	SessionID int64  `json:"session_id"`
+	IsFinal   bool   `json:"is_final"`
 }
 
 func StreamOpusPackets(
@@ -234,48 +234,60 @@ func DemuxOpusPackets(
 	return outputChan
 }
 
-func ListenForTranscriptionChanges(ctx context.Context, pool *pgxpool.Pool) (<-chan TranscriptionUpdate, error) {
-    conn, err := pool.Acquire(ctx)
-    if err != nil {
-        return nil, fmt.Errorf("failed to acquire database connection: %w", err)
-    }
+func ListenForTranscriptionChanges(
+	ctx context.Context,
+	pool *pgxpool.Pool,
+) (<-chan TranscriptionUpdate, error) {
+	conn, err := pool.Acquire(ctx)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"failed to acquire database connection: %w",
+			err,
+		)
+	}
 
-    _, err = conn.Exec(ctx, "LISTEN transcription_change")
-    if err != nil {
-        conn.Release()
-        return nil, fmt.Errorf("failed to listen for transcription_change: %w", err)
-    }
+	_, err = conn.Exec(ctx, "LISTEN transcription_change")
+	if err != nil {
+		conn.Release()
+		return nil, fmt.Errorf(
+			"failed to listen for transcription_change: %w",
+			err,
+		)
+	}
 
-    updateChan := make(chan TranscriptionUpdate)
+	updateChan := make(chan TranscriptionUpdate)
 
-    go func() {
-        defer close(updateChan)
-        defer conn.Release()
+	go func() {
+		defer close(updateChan)
+		defer conn.Release()
 
-        for {
-            notification, err := conn.Conn().WaitForNotification(ctx)
-            if err != nil {
-                if err == context.Canceled {
-                    return
-                }
-                log.Error("Error waiting for notification", "error", err)
-                return
-            }
+		for {
+			notification, err := conn.Conn().WaitForNotification(ctx)
+			if err != nil {
+				if err == context.Canceled {
+					return
+				}
+				log.Error("Error waiting for notification", "error", err)
+				return
+			}
 
-            var update TranscriptionUpdate
-            err = json.Unmarshal([]byte(notification.Payload), &update)
-            if err != nil {
-                log.Error("Error unmarshalling payload", "error", err)
-                continue
-            }
+			var update TranscriptionUpdate
+			err = json.Unmarshal([]byte(notification.Payload), &update)
+			if err != nil {
+				log.Error("Error unmarshalling payload", "error", err)
+				continue
+			}
 
-            select {
-            case updateChan <- update:
-            case <-ctx.Done():
-                return
-            }
-        }
-    }()
+			log.Info("update", "update", update)
 
-    return updateChan, nil
+			select {
+			case updateChan <- update:
+				log.Info("sent")
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return updateChan, nil
 }
