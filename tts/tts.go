@@ -142,64 +142,67 @@ func handleTranscript(
 		len(transcript.Results),
 	)
 
-	var segmentID int64
-	var currentVersion int32
-	row, err := queries.UpsertTranscriptionSegment(
-		ctx,
-		db.UpsertTranscriptionSegmentParams{
-			SessionID: sessionID,
-			IsFinal:   !transcript.IsPartial(),
-		},
-	)
-	if err != nil {
-		log.Error("Failed to upsert transcription segment", "error", err)
-		return
-	}
-	segmentID = row.ResultSegmentID
-	currentVersion = row.ResultVersion
-
-	for _, result := range transcript.Results {
-		wordID, err := queries.InsertTranscriptionWord(
+	err := queries.WithTx(ctx, func(qtx *db.Queries) error {
+		row, err := qtx.UpsertTranscriptionSegment(
 			ctx,
-			db.InsertTranscriptionWordParams{
-				SegmentID: segmentID,
-				StartTime: result.StartTime,
-				Duration:  result.EndTime - result.StartTime,
-				IsEos:     result.IsEOS,
-				Version:   int32(currentVersion),
-				AttachesTo: pgtype.Text{
-					String: result.AttachesTo,
-					Valid:  true,
-				},
+			db.UpsertTranscriptionSegmentParams{
+				SessionID: sessionID,
+				IsFinal:   !transcript.IsPartial(),
 			},
 		)
 		if err != nil {
-			log.Error("Failed to insert transcription word", "error", err)
-			continue
+			return fmt.Errorf("failed to upsert transcription segment: %w", err)
 		}
+		segmentID := row.ResultSegmentID
+		currentVersion := row.ResultVersion
 
-		for _, alt := range result.Alternatives {
-			err = queries.InsertWordAlternative(
+		for _, result := range transcript.Results {
+			wordID, err := qtx.InsertTranscriptionWord(
 				ctx,
-				db.InsertWordAlternativeParams{
-					WordID:     wordID,
-					Content:    alt.Content,
-					Confidence: alt.Confidence,
+				db.InsertTranscriptionWordParams{
+					SegmentID: segmentID,
+					StartTime: result.StartTime,
+					Duration:  result.EndTime - result.StartTime,
+					IsEos:     result.IsEOS,
+					Version:   int32(currentVersion),
+					AttachesTo: pgtype.Text{
+						String: result.AttachesTo,
+						Valid:  true,
+					},
 				},
 			)
 			if err != nil {
-				log.Error("Failed to insert word alternative", "error", err)
+				return fmt.Errorf("failed to insert transcription word: %w", err)
+			}
+
+			for _, alt := range result.Alternatives {
+				err = qtx.InsertWordAlternative(
+					ctx,
+					db.InsertWordAlternativeParams{
+						WordID:     wordID,
+						Content:    alt.Content,
+						Confidence: alt.Confidence,
+					},
+				)
+				if err != nil {
+					return fmt.Errorf("failed to insert word alternative: %w", err)
+				}
 			}
 		}
-	}
 
-	log.Info(
-		"Processed transcript",
-		"segmentID", segmentID,
-		"wordCount", len(transcript.Results),
-		"isPartial", transcript.IsPartial(),
-		"version", currentVersion,
-	)
+		log.Info(
+			"Processed transcript",
+			"segmentID", segmentID,
+			"wordCount", len(transcript.Results),
+			"isPartial", transcript.IsPartial(),
+			"version", currentVersion,
+		)
+		return nil
+	})
+
+	if err != nil {
+		log.Error("Failed to handle transcript", "error", err)
+	}
 }
 
 func handleTranscriptionUpdate(
