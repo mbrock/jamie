@@ -3,8 +3,11 @@ package snd
 import (
 	"context"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/charmbracelet/log"
@@ -100,6 +103,24 @@ func StreamOpusPackets(
 			if err != nil {
 				log.Error("Error unmarshalling payload", "error", err)
 				continue
+			}
+
+			// Check and print the first few bytes of the opus data
+			if len(packet.OpusData) > 0 {
+				log.Info("Opus packet data check",
+					"first_bytes", fmt.Sprintf("%x", packet.OpusData[:min(4, len(packet.OpusData))]),
+					"starts_with_backslash_x", strings.HasPrefix(packet.OpusData, "\\x"),
+				)
+			}
+
+			// If the OpusData is a hex string, decode it
+			if strings.HasPrefix(packet.OpusData, "\\x") {
+				decodedData, err := hex.DecodeString(strings.TrimPrefix(packet.OpusData, "\\x"))
+				if err != nil {
+					log.Error("Error decoding hex string", "error", err)
+				} else {
+					packet.OpusData = string(decodedData)
+				}
 			}
 
 			packet.UserID = getUserIDFromCache(cache, packet.Ssrc)
