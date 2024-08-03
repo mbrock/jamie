@@ -111,8 +111,12 @@ CREATE TABLE IF NOT EXISTS transcription_words (
     duration INTERVAL NOT NULL,
     is_eos BOOLEAN NOT NULL,
     version INT NOT NULL DEFAULT 1,
+    attaches_to TEXT,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Create an index on the attaches_to column for better performance
+CREATE INDEX IF NOT EXISTS idx_transcription_words_attaches_to ON transcription_words(attaches_to);
 
 CREATE TABLE IF NOT EXISTS word_alternatives (
     id BIGSERIAL PRIMARY KEY,
