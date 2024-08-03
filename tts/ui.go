@@ -10,17 +10,20 @@ import (
 )
 
 type model struct {
-	viewport    viewport.Model
-	messages    [][]TranscriptWord
-	currentLine []TranscriptWord
-	ready       bool
-	transcripts chan TranscriptMessage
+	leftViewport  viewport.Model
+	rightViewport viewport.Model
+	messages      [][]TranscriptWord
+	currentLine   []TranscriptWord
+	logEntries    []string
+	ready         bool
+	transcripts   chan TranscriptMessage
 }
 
 func initialModel(transcripts chan TranscriptMessage) model {
 	return model{
 		messages:    [][]TranscriptWord{},
 		currentLine: []TranscriptWord{},
+		logEntries:  []string{},
 		ready:       false,
 		transcripts: transcripts,
 	}
@@ -48,13 +51,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		verticalMarginHeight := headerHeight + footerHeight
 
 		if !m.ready {
-			m.viewport = viewport.New(msg.Width, msg.Height-verticalMarginHeight)
-			m.viewport.YPosition = headerHeight
-			m.viewport.SetContent(m.contentView())
+			halfWidth := msg.Width / 2
+			m.leftViewport = viewport.New(halfWidth, msg.Height-verticalMarginHeight)
+			m.rightViewport = viewport.New(msg.Width-halfWidth, msg.Height-verticalMarginHeight)
+			m.leftViewport.YPosition = headerHeight
+			m.rightViewport.YPosition = headerHeight
+			m.leftViewport.SetContent(m.leftContentView())
+			m.rightViewport.SetContent(m.rightContentView())
 			m.ready = true
 		} else {
-			m.viewport.Width = msg.Width
-			m.viewport.Height = msg.Height - verticalMarginHeight
+			halfWidth := msg.Width / 2
+			m.leftViewport.Width = halfWidth
+			m.rightViewport.Width = msg.Width - halfWidth
+			m.leftViewport.Height = msg.Height - verticalMarginHeight
+			m.rightViewport.Height = msg.Height - verticalMarginHeight
 		}
 
 	case transcriptMsg:
@@ -74,11 +84,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.currentLine = []TranscriptWord{}
 			}
 		}
-		m.viewport.SetContent(m.contentView())
-		m.viewport.GotoBottom()
+		m.leftViewport.SetContent(m.leftContentView())
+		m.leftViewport.GotoBottom()
+
+		// Add log entry
+		logEntry := fmt.Sprintf("Transcript: %d words, Partial: %v", len(msg.Words), msg.IsPartial)
+		m.logEntries = append(m.logEntries, logEntry)
+		m.rightViewport.SetContent(m.rightContentView())
+		m.rightViewport.GotoBottom()
 	}
 
-	m.viewport, cmd = m.viewport.Update(msg)
+	m.leftViewport, cmd = m.leftViewport.Update(msg)
+	cmds = append(cmds, cmd)
+	m.rightViewport, cmd = m.rightViewport.Update(msg)
 	cmds = append(cmds, cmd)
 
 	return m, tea.Batch(cmds...)
@@ -89,9 +107,10 @@ func (m model) View() string {
 		return "\n  Initializing..."
 	}
 	return fmt.Sprintf(
-		"%s\n%s\n%s",
+		"%s\n%s%s\n%s",
 		m.headerView(),
-		m.viewport.View(),
+		m.leftViewport.View(),
+		m.rightViewport.View(),
 		m.footerView(),
 	)
 }
@@ -119,7 +138,7 @@ func (m model) footerView() string {
 	return lipgloss.JoinHorizontal(lipgloss.Center, line, info)
 }
 
-func (m model) contentView() string {
+func (m model) leftContentView() string {
 	var content strings.Builder
 	for _, msg := range m.messages {
 		content.WriteString(formatWords(msg))
@@ -128,6 +147,15 @@ func (m model) contentView() string {
 	if len(m.currentLine) > 0 {
 		content.WriteString("[CUR] ")
 		content.WriteString(formatWords(m.currentLine))
+	}
+	return content.String()
+}
+
+func (m model) rightContentView() string {
+	var content strings.Builder
+	for _, entry := range m.logEntries {
+		content.WriteString(entry)
+		content.WriteString("\n")
 	}
 	return content.String()
 }
