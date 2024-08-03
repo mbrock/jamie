@@ -30,6 +30,16 @@ func (wb *WordBuilder) WriteWord(word TranscriptWord, style lipgloss.Style) {
 	}
 }
 
+func (wb *WordBuilder) AppendWords(words []TranscriptWord, bgColor lipgloss.Color) {
+	for _, word := range words {
+		color := getConfidenceColor(word.Confidence)
+		style := lipgloss.NewStyle().
+			Foreground(color).
+			Background(bgColor)
+		wb.WriteWord(word, style)
+	}
+}
+
 func (wb *WordBuilder) String() string {
 	return wb.builder.String()
 }
