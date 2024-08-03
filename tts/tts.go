@@ -324,6 +324,7 @@ func handleTranscriptAndErrorsWithUI(
 				return
 			}
 			var words []TranscriptWord
+			var attachesTo string
 			for _, result := range transcript.Results {
 				if len(result.Alternatives) > 0 {
 					word := TranscriptWord{
@@ -334,6 +335,9 @@ func handleTranscriptAndErrorsWithUI(
 					}
 					words = append(words, word)
 				}
+				if result.AttachesTo != "" {
+					attachesTo = result.AttachesTo
+				}
 			}
 			if len(words) > 0 {
 				transcriptText := formatTranscriptWords(words)
@@ -341,12 +345,12 @@ func handleTranscriptAndErrorsWithUI(
 					"text", transcriptText,
 					"words", len(words),
 					"isPartial", transcript.IsPartial(),
-					"attachesTo", transcript.AttachesTo,
+					"attachesTo", attachesTo,
 				)
 				uiChan <- TranscriptMessage{
 					Words:      words,
 					IsPartial:  transcript.IsPartial(),
-					AttachesTo: transcript.AttachesTo,
+					AttachesTo: attachesTo,
 				}
 			}
 		case err, ok := <-errChan:
