@@ -335,7 +335,13 @@ func handleTranscriptAndErrorsWithUI(
 				}
 			}
 			if len(words) > 0 {
-				log.Info("Transcription", "words", len(words), "isPartial", transcript.IsPartial())
+				transcriptText := formatTranscriptWords(words)
+				log.Info("Transcription",
+					"text", transcriptText,
+					"words", len(words),
+					"isPartial", transcript.IsPartial(),
+					"attachesTo", transcript.AttachesTo,
+				)
 				uiChan <- TranscriptMessage{
 					Words:      words,
 					IsPartial:  transcript.IsPartial(),
@@ -360,6 +366,15 @@ func handleTranscriptAndErrorsWithUI(
 			return
 		}
 	}
+}
+
+func formatTranscriptWords(words []TranscriptWord) string {
+	var result strings.Builder
+	for _, word := range words {
+		result.WriteString(word.Content)
+		result.WriteString(" ")
+	}
+	return strings.TrimSpace(result.String())
 }
 
 type TranscriptWord struct {
