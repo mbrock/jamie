@@ -9,6 +9,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/charmbracelet/bubbles/viewport"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"node.town/db"
@@ -67,8 +70,24 @@ func runStream(cmd *cobra.Command, args []string) {
 		log.Info("UI enabled")
 		transcriptChan := make(chan string, 100)
 		go func() {
-			err := StartUI(transcriptChan)
-			if err != nil {
+			p := tea.NewProgram(
+				initialModel(transcriptChan),
+				tea.WithAltScreen(),
+				tea.WithMouseCellMotion(),
+			)
+
+			go func() {
+				for {
+					select {
+					case transcript := <-transcriptChan:
+						p.Send(transcriptMsg(transcript))
+					case <-ctx.Done():
+						return
+					}
+				}
+			}()
+
+			if err := p.Start(); err != nil {
 				log.Error("UI error", "error", err)
 			}
 		}()
