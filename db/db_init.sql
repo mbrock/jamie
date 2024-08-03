@@ -180,13 +180,13 @@ DECLARE
     v_current_version INT;
 BEGIN
     -- Check if the last segment is final
-    SELECT id INTO v_segment_id
-    FROM transcription_segments
-    WHERE session_id = p_session_id
-    ORDER BY id DESC
+    SELECT ts.id INTO v_segment_id
+    FROM transcription_segments ts
+    WHERE ts.session_id = p_session_id
+    ORDER BY ts.id DESC
     LIMIT 1;
 
-    IF v_segment_id IS NULL OR (SELECT is_final FROM transcription_segments WHERE id = v_segment_id) THEN
+    IF v_segment_id IS NULL OR (SELECT ts.is_final FROM transcription_segments ts WHERE ts.id = v_segment_id) THEN
         -- Insert a new segment
         INSERT INTO transcription_segments (session_id, is_final)
         VALUES (p_session_id, p_is_final)
