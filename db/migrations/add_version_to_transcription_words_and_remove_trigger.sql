@@ -16,3 +16,11 @@ SET version = COALESCE(
      WHERE tw.segment_id = ts.id),
     1
 );
+
+-- Ensure that the transcription_segments version is always at least as high as its words
+UPDATE transcription_segments ts
+SET version = GREATEST(ts.version, 
+    COALESCE((SELECT MAX(tw.version)
+              FROM transcription_words tw
+              WHERE tw.segment_id = ts.id),
+             1));
