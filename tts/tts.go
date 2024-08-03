@@ -400,12 +400,15 @@ func handleTranscript(
 		wordID, err := queries.InsertTranscriptionWord(
 			ctx,
 			db.InsertTranscriptionWordParams{
-				SegmentID:  segmentID,
-				StartTime:  result.StartTime,
-				Duration:   result.EndTime - result.StartTime,
-				IsEos:      result.IsEOS,
-				Version:    int32(currentVersion),
-				AttachesTo: result.AttachesTo,
+				SegmentID: segmentID,
+				StartTime: result.StartTime,
+				Duration:  result.EndTime - result.StartTime,
+				IsEos:     result.IsEOS,
+				Version:   int32(currentVersion),
+				AttachesTo: pgtype.Text{
+					String: result.AttachesTo,
+					Valid:  true,
+				},
 			},
 		)
 		if err != nil {
@@ -459,7 +462,7 @@ func handleTranscriptionUpdate(
 			IsEOS:      row.IsEos,
 			Content:    row.Content,
 			Confidence: row.Confidence,
-			AttachesTo: row.AttachesTo,
+			AttachesTo: row.AttachesTo.String,
 		}
 		words = append(words, word)
 	}

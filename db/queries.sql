@@ -135,45 +135,8 @@ RETURNING id;
 INSERT INTO word_alternatives (word_id, content, confidence)
 VALUES ($1, $2, $3);
 
--- name: GetAllFinalTranscripts :many
-SELECT ts.id,
-    ts.session_id,
-    ts.is_final,
-    tw.id AS word_id,
-    tw.start_time,
-    tw.duration,
-    tw.is_eos,
-    wa.content,
-    wa.confidence
-FROM transcription_segments ts
-    JOIN transcription_words tw ON ts.id = tw.segment_id
-    JOIN word_alternatives wa ON tw.id = wa.word_id
-WHERE ts.is_final = TRUE
-ORDER BY ts.id,
-    tw.id,
-    wa.confidence DESC;
-
--- name: GetLatestNonFinalTranscripts :many
-SELECT DISTINCT ON (ts.session_id) ts.id,
-    ts.session_id,
-    ts.is_final,
-    tw.id AS word_id,
-    tw.start_time,
-    tw.duration,
-    tw.is_eos,
-    wa.content,
-    wa.confidence
-FROM transcription_segments ts
-    JOIN transcription_words tw ON ts.id = tw.segment_id
-    JOIN word_alternatives wa ON tw.id = wa.word_id
-WHERE ts.is_final = false
-ORDER BY ts.session_id,
-    ts.id DESC,
-    tw.id,
-    wa.confidence DESC;
-
 -- name: GetTranscriptSegment :many
-SELECT DISTINCT ON (tw.start_time) ts.id,
+SELECT ts.id,
     ts.session_id,
     ts.is_final,
     tw.id AS word_id,
@@ -189,4 +152,5 @@ FROM transcription_segments ts
     JOIN word_alternatives wa ON tw.id = wa.word_id
 WHERE ts.id = $1
 ORDER BY tw.start_time,
+    tw.id,
     wa.confidence DESC;
