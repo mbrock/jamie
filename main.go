@@ -229,7 +229,11 @@ var packetInfoCmd = &cobra.Command{
 		packets, err := fetchOpusPackets(queries, ssrc, startTime, endTime)
 		handleError(err, "Error querying database")
 
-		ogg, err := snd.NewOgg(ssrc, startTime, endTime, outputFile, 4096) // 4096 is a suggested flush size, adjust as needed
+		file, err := os.Create(outputFile)
+		handleError(err, "Error creating output file")
+		defer file.Close()
+
+		ogg, err := snd.NewOgg(ssrc, startTime, endTime, file, 4096) // 4096 is a suggested flush size, adjust as needed
 		handleError(err, "Error creating Ogg")
 
 		err = processOpusPackets(packets, ogg)
