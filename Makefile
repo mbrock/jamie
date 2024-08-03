@@ -9,6 +9,8 @@ BINARY_NAME=jamie
 all: test build
 
 build:
+	CGO_CFLAGS="$(shell pkg-config --cflags libonnxruntime)" \
+	CGO_LDFLAGS="$(shell pkg-config --libs libonnxruntime)" \
 	$(GOBUILD) -o $(BINARY_NAME) -v
 
 test:
@@ -19,6 +21,8 @@ clean:
 	rm -f $(BINARY_NAME)
 
 run:
+	CGO_CFLAGS="$(shell pkg-config --cflags onnxruntime)" \
+	CGO_LDFLAGS="$(shell pkg-config --libs onnxruntime)" \
 	$(GOBUILD) -o $(BINARY_NAME) -v
 	./$(BINARY_NAME)
 
