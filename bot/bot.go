@@ -3,12 +3,12 @@ package bot
 import (
 	"context"
 	"errors"
-	"os"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/charmbracelet/log"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/spf13/viper"
 	"node.town/db"
 )
 
@@ -52,7 +52,7 @@ func (b *Bot) HandleGuildCreate(
 		context.Background(),
 		db.GetLastJoinedChannelParams{
 			GuildID:  m.ID,
-			BotToken: os.Getenv("DISCORD_TOKEN"),
+			BotToken: viper.GetString("DISCORD_TOKEN"),
 		},
 	)
 

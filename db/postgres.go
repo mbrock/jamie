@@ -5,9 +5,8 @@ import (
 	"embed"
 	"fmt"
 
-	"os"
-
 	"github.com/jackc/pgx/v5"
+	"github.com/spf13/viper"
 )
 
 //go:embed db_init.sql
@@ -16,7 +15,7 @@ var sqlFS embed.FS
 func OpenDatabase() (*pgx.Conn, *Queries, error) {
 	sqlDB, err := pgx.Connect(
 		context.Background(),
-		os.Getenv("DATABASE_URL")+"?sslmode=disable",
+		viper.GetString("DATABASE_URL")+"?sslmode=disable",
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("unable to connect to database: %w", err)
