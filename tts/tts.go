@@ -27,7 +27,7 @@ func runStream(cmd *cobra.Command, args []string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	packetChan, ssrcCache, err := snd.StreamOpusPackets(ctx, sqlDB)
+	packetChan, ssrcCache, err := snd.StreamOpusPackets(ctx, sqlDB, queries)
 	if err != nil {
 		log.Fatal("Error setting up opus packet stream", "error", err)
 	}
