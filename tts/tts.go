@@ -12,6 +12,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/log"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/spf13/cobra"
 	"node.town/db"
 	"node.town/snd"
@@ -146,7 +147,6 @@ func handleStreamWithTranscriptionAndUI(
 	speechmaticsTranscriptChan, errChan := client.ReceiveTranscript(ctx)
 
 	var sessionID int64
-	var firstPacket snd.OpusPacketNotification
 	var sessionStarted bool
 
 	tmpDir := "tmp"
@@ -227,12 +227,14 @@ func handleStreamWithTranscriptionAndUI(
 			}
 
 			if !sessionStarted {
-				firstPacket = packet
 				sessionID, err = queries.InsertTranscriptionSession(
 					ctx,
 					db.InsertTranscriptionSessionParams{
-						Ssrc:      packet.Ssrc,
-						StartTime: time.Now(),
+						Ssrc: packet.Ssrc,
+						StartTime: pgtype.Timestamptz{
+							Time:  time.Now(),
+							Valid: true,
+						},
 						GuildID:   packet.GuildID,
 						ChannelID: packet.ChannelID,
 						UserID:    packet.UserID,
@@ -378,12 +380,8 @@ func handleTranscript(
 	segmentID, err := queries.UpsertTranscriptionSegment(
 		ctx,
 		db.UpsertTranscriptionSegmentParams{
-			SessionID:   sessionID,
-			IsF:         !transcript.IsPartial(),
-			StartOffset: int32(transcript.Results[0].StartTime * 1000),
-			EndOffset: int32(
-				transcript.Results[len(transcript.Results)-1].EndTime * 1000,
-			),
+			SessionID: sessionID,
+			IsFinal:   !transcript.IsPartial(),
 		},
 	)
 	if err != nil {
@@ -421,7 +419,7 @@ func handleTranscript(
 				db.InsertWordAlternativeParams{
 					WordID:     wordID,
 					Content:    alt.Content,
-					Confidence: float32(alt.Confidence),
+					Confidence: alt.Confidence,
 				},
 			)
 			if err != nil {
