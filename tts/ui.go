@@ -145,6 +145,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.viewport, cmd = m.viewport.Update(msg)
 	cmds = append(cmds, cmd)
 
+	// Check for new messages from the transcripts channel
+	cmds = append(cmds, func() tea.Msg {
+		return <-m.transcripts
+	})
+
 	return m, tea.Batch(cmds...)
 }
 

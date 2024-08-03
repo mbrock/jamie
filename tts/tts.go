@@ -67,35 +67,28 @@ func runStream(cmd *cobra.Command, args []string) {
 		log.Info("Real-time transcription enabled")
 	}
 
+	transcriptChan := make(chan TranscriptMessage, 100)
+	
 	if useUI {
 		log.Info("UI enabled")
-		transcriptChan := make(chan TranscriptMessage, 100)
 		go func() {
 			p := tea.NewProgram(initialModel(transcriptChan))
 			if _, err := p.Run(); err != nil {
 				log.Fatal("Error running program", "error", err)
 			}
 		}()
+	}
 
-		for stream := range streamChan {
-			if transcribe {
-				go handleStreamWithTranscriptionAndUI(
-					ctx,
-					stream,
-					transcriptChan,
-					queries,
-				)
-			} else {
-				go handleStream(stream)
-			}
-		}
-	} else {
-		for stream := range streamChan {
-			if transcribe {
-				go handleStreamWithTranscription(ctx, stream)
-			} else {
-				go handleStream(stream)
-			}
+	for stream := range streamChan {
+		if transcribe {
+			go handleStreamWithTranscriptionAndUI(
+				ctx,
+				stream,
+				transcriptChan,
+				queries,
+			)
+		} else {
+			go handleStream(stream)
 		}
 	}
 
