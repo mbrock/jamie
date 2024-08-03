@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	_ "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/log"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/spf13/cobra"
