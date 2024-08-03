@@ -1,7 +1,6 @@
 package snd
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"time"
@@ -66,10 +65,10 @@ func NewOgg(
 	}
 
 	return &Ogg{
-		ssrc:       ssrc,
-		startTime:  startTime.UTC(),
-		endTime:    endTime.UTC(),
-		oggWriter:  oggWriter,
+		ssrc:      ssrc,
+		startTime: startTime.UTC(),
+		endTime:   endTime.UTC(),
+		oggWriter: oggWriter,
 	}, nil
 }
 
@@ -88,7 +87,6 @@ func (o *Ogg) Close() error {
 
 	return nil
 }
-
 
 func (o *Ogg) WritePacket(packet OpusPacket) error {
 	if o.packetCount == 0 {
