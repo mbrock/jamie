@@ -118,14 +118,16 @@ INSERT INTO transcription_words (
         start_time,
         duration,
         is_eos,
-        version
+        version,
+        attaches_to
     )
 VALUES (
         sqlc.arg(segment_id),
         make_interval(secs => sqlc.arg(start_time)),
         make_interval(secs => sqlc.arg(duration)),
         sqlc.arg(is_eos),
-        sqlc.arg(version)
+        sqlc.arg(version),
+        sqlc.arg(attaches_to)
     )
 RETURNING id;
 
@@ -178,6 +180,7 @@ SELECT DISTINCT ON (tw.start_time) ts.id,
     tw.start_time,
     tw.duration,
     tw.is_eos,
+    tw.attaches_to,
     wa.content,
     wa.confidence
 FROM transcription_segments ts
