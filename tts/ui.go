@@ -62,6 +62,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.currentLine = msg.Words
 		} else {
 			// For final transcripts
+			for i := range msg.Words {
+				msg.Words[i].AttachesTo = msg.AttachesTo
+			}
 			if msg.AttachesTo == "previous" {
 				m = m.updatePreviousLine(msg.Words)
 			} else {
@@ -119,11 +122,17 @@ func (m model) footerView() string {
 
 func (m model) contentView() string {
 	var content strings.Builder
-	for _, line := range m.messages {
+	for i, line := range m.messages {
+		prefix := "[NEW] "
+		if i > 0 && line[0].AttachesTo == "previous" {
+			prefix = "[ATT] "
+		}
+		content.WriteString(prefix)
 		content.WriteString(formatWords(line))
 		content.WriteString("\n")
 	}
 	if len(m.currentLine) > 0 {
+		content.WriteString("[CUR] ")
 		content.WriteString(formatWords(m.currentLine))
 	}
 	return content.String()
