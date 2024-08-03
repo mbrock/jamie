@@ -148,7 +148,7 @@ func (m model) contentView() string {
 func (m model) transcriptView() string {
 	var content strings.Builder
 	for _, transcript := range m.finalTranscripts {
-		content.WriteString(formatWords(transcript))
+		content.WriteString(formatWords(transcript, lipgloss.Color("0"))) // No background for final transcripts
 	}
 	if len(m.currentTranscript) > 0 {
 		s := content.String()
@@ -163,7 +163,7 @@ func (m model) transcriptView() string {
 				content.WriteString(" -- ")
 			}
 		}
-		content.WriteString(formatWords(m.currentTranscript))
+		content.WriteString(formatWords(m.currentTranscript, lipgloss.Color("236"))) // Dark gray background for current transcript
 	}
 	return content.String()
 }
@@ -177,7 +177,7 @@ func (m model) logView() string {
 	return content.String()
 }
 
-func formatWords(words []TranscriptWord) string {
+func formatWords(words []TranscriptWord, bgColor lipgloss.Color) string {
 	var line strings.Builder
 	lastWasEOS := true
 	for _, word := range words {
@@ -186,7 +186,10 @@ func formatWords(words []TranscriptWord) string {
 			line.WriteString(" ")
 		}
 		line.WriteString(
-			lipgloss.NewStyle().Foreground(color).Render(word.Content),
+			lipgloss.NewStyle().
+				Foreground(color).
+				Background(bgColor).
+				Render(word.Content),
 		)
 		if word.IsEOS {
 			line.WriteString("\n")
