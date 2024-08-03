@@ -161,19 +161,17 @@ func handleStreamWithTranscription(
 			return
 		}
 
-		if buffer.Len() >= 4096 {
-			err = client.SendAudio(buffer.Bytes())
-			log.Debug("Sent audio to Speechmatics", "bytes", buffer.Len())
-			if err != nil {
-				log.Error(
-					"Failed to send audio to Speechmatics",
-					"error",
-					err,
-				)
-				return
-			}
-			buffer.Reset()
+		err = client.SendAudio(buffer.Bytes())
+		log.Debug("Sent audio to Speechmatics", "bytes", buffer.Len())
+		if err != nil {
+			log.Error(
+				"Failed to send audio to Speechmatics",
+				"error",
+				err,
+			)
+			return
 		}
+		buffer.Reset()
 
 		seqNo++
 	}
