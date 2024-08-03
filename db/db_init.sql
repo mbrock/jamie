@@ -122,12 +122,28 @@ CREATE TABLE IF NOT EXISTS word_alternatives (
 
 -- Create a function to notify about transcription changes
 CREATE OR REPLACE FUNCTION notify_transcription_change() RETURNS TRIGGER AS $$
+DECLARE
+    segment_id BIGINT;
+    session_id BIGINT;
+    is_final BOOLEAN;
 BEGIN
+    IF TG_TABLE_NAME = 'transcription_segments' THEN
+        segment_id := NEW.id;
+        session_id := NEW.session_id;
+        is_final := NEW.is_final;
+    ELSIF TG_TABLE_NAME = 'word_alternatives' THEN
+        SELECT tw.segment_id, ts.session_id, ts.is_final
+        INTO segment_id, session_id, is_final
+        FROM transcription_words tw
+        JOIN transcription_segments ts ON tw.segment_id = ts.id
+        WHERE tw.id = NEW.word_id;
+    END IF;
+
     PERFORM pg_notify('transcription_change', json_build_object(
         'operation', TG_OP,
-        'id', NEW.id,
-        'session_id', NEW.session_id,
-        'is_final', NEW.is_final
+        'id', segment_id,
+        'session_id', session_id,
+        'is_final', is_final
     )::text);
     RETURN NEW;
 END;
@@ -137,6 +153,16 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER transcription_segment_changed
 AFTER INSERT OR UPDATE ON transcription_segments
 FOR EACH ROW EXECUTE FUNCTION notify_transcription_change();
+
+-- Create a trigger for word_alternatives table
+CREATE TRIGGER word_alternative_changed
+AFTER INSERT OR UPDATE ON word_alternatives
+FOR EACH ROW EXECUTE FUNCTION notify_transcription_change();
+
+-- Create indexes for performance
+CREATE INDEX IF NOT EXISTS idx_transcription_segments_session_id ON transcription_segments(session_id);
+CREATE INDEX IF NOT EXISTS idx_transcription_words_segment_id ON transcription_words(segment_id);
+CREATE INDEX IF NOT EXISTS idx_word_alternatives_word_id ON word_alternatives(word_id);
 
 -- Function to upsert transcription segment
 CREATE OR REPLACE FUNCTION upsert_transcription_segment(
