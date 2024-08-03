@@ -58,7 +58,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case transcriptMsg:
 		m.messages = append(m.messages, string(msg))
 		m.viewport.SetContent(m.contentView())
-		cmds = append(cmds, m.viewport.ScrollToBottom())
+		m.viewport.GotoBottom()
 	}
 
 	m.viewport, cmd = m.viewport.Update(msg)
@@ -71,7 +71,12 @@ func (m model) View() string {
 	if !m.ready {
 		return "\n  Initializing..."
 	}
-	return fmt.Sprintf("%s\n%s\n%s", m.headerView(), m.viewport.View(), m.footerView())
+	return fmt.Sprintf(
+		"%s\n%s\n%s",
+		m.headerView(),
+		m.viewport.View(),
+		m.footerView(),
+	)
 }
 
 func (m model) headerView() string {
@@ -80,7 +85,10 @@ func (m model) headerView() string {
 		Background(lipgloss.Color("#25A065")).
 		Padding(0, 1).
 		Render("Real-time Transcription")
-	line := strings.Repeat("─", max(0, m.viewport.Width-lipgloss.Width(title)))
+	line := strings.Repeat(
+		"─",
+		max(0, m.viewport.Width-lipgloss.Width(title)),
+	)
 	return lipgloss.JoinHorizontal(lipgloss.Center, title, line)
 }
 
