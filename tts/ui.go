@@ -60,6 +60,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case transcriptMsg:
 		if msg.IsPartial {
 			m.currentLine = msg.Words
+		} else if msg.AttachesTo == "previous" {
+			m = m.updatePreviousLine(msg.Words)
 		} else {
 			// For final transcripts, update the current line and add it to messages
 			m.currentLine = msg.Words
@@ -150,6 +152,17 @@ func max(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func (m model) updatePreviousLine(words []TranscriptWord) model {
+	if len(m.messages) > 0 {
+		lastIndex := len(m.messages) - 1
+		m.messages[lastIndex] = words
+	} else {
+		// If there are no previous messages, treat it as a new message
+		m.messages = append(m.messages, words)
+	}
+	return m
 }
 
 type transcriptMsg TranscriptMessage

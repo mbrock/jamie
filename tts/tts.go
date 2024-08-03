@@ -337,8 +337,9 @@ func handleTranscriptAndErrorsWithUI(
 			if len(words) > 0 {
 				log.Info("Transcription", "words", len(words), "isPartial", transcript.IsPartial())
 				uiChan <- TranscriptMessage{
-					Words:     words,
-					IsPartial: transcript.IsPartial(),
+					Words:      words,
+					IsPartial:  transcript.IsPartial(),
+					AttachesTo: transcript.AttachesTo,
 				}
 			}
 		case err, ok := <-errChan:
@@ -369,8 +370,9 @@ type TranscriptWord struct {
 }
 
 type TranscriptMessage struct {
-	Words     []TranscriptWord
-	IsPartial bool
+	Words      []TranscriptWord
+	IsPartial  bool
+	AttachesTo string
 }
 
 func handleStreamWithTranscription(

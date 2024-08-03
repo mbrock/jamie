@@ -67,8 +67,9 @@ type EndOfStreamMessage struct {
 }
 
 type RTTranscriptResponse struct {
-	Message string `json:"message"`
-	Results []struct {
+	Message    string `json:"message"`
+	AttachesTo string `json:"attaches_to,omitempty"`
+	Results    []struct {
 		Alternatives []struct {
 			Confidence float64 `json:"confidence"`
 			Content    string  `json:"content"`
