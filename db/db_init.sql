@@ -198,6 +198,6 @@ BEGIN
         -- If it's not a final segment, we don't delete existing words, just add new ones with a new version
     END IF;
 
-    RETURN QUERY SELECT v_segment_id, v_current_version;
+    RETURN QUERY SELECT v_segment_id AS segment_id, v_current_version AS version;
 END;
 $$ LANGUAGE plpgsql;
