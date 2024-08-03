@@ -11,7 +11,6 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/log"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"node.town/db"
 )
@@ -83,13 +82,19 @@ func StreamOpusPackets(
 ) (<-chan OpusPacketNotification, *SSRCUserIDCache, error) {
 	conn, err := pool.Acquire(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to acquire database connection: %w", err)
+		return nil, nil, fmt.Errorf(
+			"failed to acquire database connection: %w",
+			err,
+		)
 	}
 
 	_, err = conn.Exec(ctx, "LISTEN new_opus_packet")
 	if err != nil {
 		conn.Release()
-		return nil, nil, fmt.Errorf("failed to listen for new_opus_packet: %w", err)
+		return nil, nil, fmt.Errorf(
+			"failed to listen for new_opus_packet: %w",
+			err,
+		)
 	}
 
 	packetChan := make(chan OpusPacketNotification)

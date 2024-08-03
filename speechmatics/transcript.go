@@ -51,7 +51,6 @@ func ParseTranscript(jsonData []byte) (*Transcript, error) {
 
 		if currentSentence.StartTime == 0 {
 			currentSentence.StartTime = result.StartTime
-			currentSentence.Speaker = alt.Speaker
 		}
 
 		if result.Type == "punctuation" {
@@ -63,12 +62,19 @@ func ParseTranscript(jsonData []byte) (*Transcript, error) {
 			currentSentence.Content += alt.Content
 		}
 
-		if result.IsEos || (result.Type == "punctuation" && (alt.Content == "." || alt.Content == "!" || alt.Content == "?")) {
+		if result.IsEOS ||
+			(result.Type == "punctuation" && (alt.Content == "." || alt.Content == "!" || alt.Content == "?")) {
 			currentSentence.EndTime = result.EndTime
-			currentSentence.Content = strings.TrimSpace(currentSentence.Content)
+			currentSentence.Content = strings.TrimSpace(
+				currentSentence.Content,
+			)
 
-			if currentSentence.StartTime-lastEndTime > 1.0 && lastEndTime != 0 {
-				silence := Silence{StartTime: lastEndTime, EndTime: currentSentence.StartTime}
+			if currentSentence.StartTime-lastEndTime > 1.0 &&
+				lastEndTime != 0 {
+				silence := Silence{
+					StartTime: lastEndTime,
+					EndTime:   currentSentence.StartTime,
+				}
 				currentPage.Silences = append(currentPage.Silences, silence)
 
 				if result.EndTime-currentPage.Sentences[0].StartTime > 300.0 { // 5 minutes
@@ -77,7 +83,10 @@ func ParseTranscript(jsonData []byte) (*Transcript, error) {
 				}
 			}
 
-			currentPage.Sentences = append(currentPage.Sentences, currentSentence)
+			currentPage.Sentences = append(
+				currentPage.Sentences,
+				currentSentence,
+			)
 			lastEndTime = currentSentence.EndTime
 			currentSentence = Sentence{}
 		}

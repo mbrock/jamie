@@ -706,6 +706,10 @@ func (c *Client) ReceiveTranscript(
 			case <-ctx.Done():
 				return
 			default:
+				log.Info("Reading transcript")
+				if c.WSConn == nil {
+					log.Fatal("WebSocket connection not established")
+				}
 				_, message, err := c.WSConn.ReadMessage()
 				if err != nil {
 					if websocket.IsUnexpectedCloseError(
@@ -719,12 +723,16 @@ func (c *Client) ReceiveTranscript(
 				}
 
 				// Log the raw JSON message using debug level
-				log.Debug("Received raw JSON from Speechmatics", "json", string(message))
+				log.Debug(
+					"Received raw JSON from Speechmatics",
+					"json",
+					string(message),
+				)
 
 				var response RTTranscriptResponse
 				err = json.Unmarshal(message, &response)
 				if err != nil {
-					errChan <- fmt.Errorf("Failed to unmarshal response: %w", err)
+					errChan <- fmt.Errorf("failed to unmarshal response: %w", err)
 					return
 				}
 

@@ -114,7 +114,7 @@ CREATE TABLE IF NOT EXISTS transcription_words (
 
 CREATE TABLE IF NOT EXISTS word_alternatives (
     id BIGSERIAL PRIMARY KEY,
-    word_id INTEGER NOT NULL REFERENCES transcription_words(id),
+    word_id BIGINT NOT NULL REFERENCES transcription_words(id),
     content TEXT NOT NULL,
     confidence FLOAT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
@@ -127,30 +127,32 @@ CREATE OR REPLACE FUNCTION upsert_transcription_segment(
     ) RETURNS BIGINT AS $$
 DECLARE v_segment_id BIGINT;
 
-BEGIN
-    -- Check if the last segment is final
-    SELECT id INTO v_segment_id
+BEGIN -- Check if the last segment is final
+SELECT id INTO v_segment_id
+FROM transcription_segments
+WHERE session_id = p_session_id
+ORDER BY id DESC
+LIMIT 1;
+
+IF v_segment_id IS NULL
+OR (
+    SELECT is_final
     FROM transcription_segments
-    WHERE session_id = p_session_id
-    ORDER BY id DESC
-    LIMIT 1;
+    WHERE id = v_segment_id
+) THEN -- Insert a new segment
+INSERT INTO transcription_segments (session_id, is_final)
+VALUES (p_session_id, p_is_final)
+RETURNING id INTO v_segment_id;
 
-    IF v_segment_id IS NULL OR (
-        SELECT is_final
-        FROM transcription_segments
-        WHERE id = v_segment_id
-    ) THEN
-        -- Insert a new segment
-        INSERT INTO transcription_segments (session_id, is_final)
-        VALUES (p_session_id, p_is_final)
-        RETURNING id INTO v_segment_id;
-    ELSE
-        -- Update the existing segment
-        UPDATE transcription_segments
-        SET is_final = p_is_final
-        WHERE id = v_segment_id;
-    END IF;
+ELSE -- Update the existing segment
+UPDATE transcription_segments
+SET is_final = p_is_final
+WHERE id = v_segment_id;
 
-    RETURN v_segment_id;
+END IF;
+
+RETURN v_segment_id;
+
 END;
+
 $$ LANGUAGE plpgsql;

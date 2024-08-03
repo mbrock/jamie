@@ -1,4 +1,3 @@
-# Go parameters
 GOCMD=go
 GOBUILD=$(GOCMD) build
 GOCLEAN=$(GOCMD) clean
@@ -6,9 +5,8 @@ GOTEST=$(GOCMD) test
 GOGET=$(GOCMD) get
 BINARY_NAME=jamie
 
-# ONNX Runtime flags
-export CGO_CFLAGS=$(shell pkg-config --cflags libonnxruntime)
-export CGO_LDFLAGS=$(shell pkg-config --libs libonnxruntime)
+export CGO_CFLAGS=$(shell pkg-config --cflags-only-I libonnxruntime)
+export CGO_LDFLAGS=$(shell pkg-config --libs-only-L libonnxruntime)
 
 all: test build
 
@@ -24,8 +22,3 @@ clean:
 
 run: build
 	./$(BINARY_NAME)
-
-deps:
-	$(GOGET) ./...
-	$(GOGET) github.com/bwmarrin/discordgo
-	$(GOGET) github.com/nats-io/nats.go

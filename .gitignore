@@ -45,3 +45,4 @@ node.town
 .Trashes
 ehthumbs.db
 Thumbs.db
+*.log

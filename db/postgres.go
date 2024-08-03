@@ -5,15 +5,15 @@ import (
 	"embed"
 	"fmt"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spf13/viper"
 )
 
 //go:embed db_init.sql
 var sqlFS embed.FS
 
-func OpenDatabase() (*pgx.Conn, *Queries, error) {
-	sqlDB, err := pgx.Connect(
+func OpenDatabase() (*pgxpool.Pool, *Queries, error) {
+	pool, err := pgxpool.New(
 		context.Background(),
 		viper.GetString("DATABASE_URL")+"?sslmode=disable",
 	)
@@ -21,7 +21,7 @@ func OpenDatabase() (*pgx.Conn, *Queries, error) {
 		return nil, nil, fmt.Errorf("unable to connect to database: %w", err)
 	}
 
-	queries := New(sqlDB)
+	queries := New(pool)
 
 	sqlFile, err := sqlFS.ReadFile("db_init.sql")
 	if err != nil {
@@ -31,7 +31,7 @@ func OpenDatabase() (*pgx.Conn, *Queries, error) {
 		)
 	}
 
-	_, err = sqlDB.Exec(context.Background(), string(sqlFile))
+	_, err = pool.Exec(context.Background(), string(sqlFile))
 	if err != nil {
 		return nil, nil, fmt.Errorf(
 			"failed to execute embedded db_init.sql: %w",
@@ -39,5 +39,5 @@ func OpenDatabase() (*pgx.Conn, *Queries, error) {
 		)
 	}
 
-	return sqlDB, queries, nil
+	return pool, queries, nil
 }

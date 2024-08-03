@@ -29,7 +29,6 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"google.golang.org/api/option"
-	"github.com/spf13/viper"
 	"node.town/db"
 	"node.town/gemini"
 	"node.town/speechmatics"
@@ -63,7 +62,7 @@ var listenCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		sqlDB, queries, err := db.OpenDatabase()
 		handleError(err, "Failed to open database")
-		defer sqlDB.Close(context.Background())
+		defer sqlDB.Close()
 
 		discord, err := discordgo.New(
 			fmt.Sprintf("Bot %s", viper.GetString("DISCORD_TOKEN")),
@@ -128,7 +127,7 @@ var listenPacketsCmd = &cobra.Command{
 		}
 
 		ctx := context.Background()
-		defer sqlDB.Close(ctx)
+		defer sqlDB.Close()
 
 		packetChan, _, err := snd.StreamOpusPackets(ctx, sqlDB, queries)
 		if err != nil {
@@ -226,7 +225,7 @@ var packetInfoCmd = &cobra.Command{
 
 		sqlDB, queries, err := db.OpenDatabase()
 		handleError(err, "Failed to open database")
-		defer sqlDB.Close(context.Background())
+		defer sqlDB.Close()
 
 		packets, err := fetchOpusPackets(queries, ssrc, startTime, endTime)
 		handleError(err, "Error querying database")
@@ -313,7 +312,7 @@ func runReport(cmd *cobra.Command, args []string) {
 
 	sqlDB, queries, err := db.OpenDatabase()
 	handleError(err, "Failed to open database")
-	defer sqlDB.Close(context.Background())
+	defer sqlDB.Close()
 
 	report, err := queries.GetVoiceActivityReport(
 		context.Background(),
@@ -461,7 +460,9 @@ func transcribeAudio(
 		return transcription.String(), nil
 
 	case "speechmatics":
-		client := speechmatics.NewClient(os.Getenv("SPEECHMATICS_API_KEY"))
+		client := speechmatics.NewClient(
+			viper.GetString("SPEECHMATICS_API_KEY"),
+		)
 		transcription, err := client.SubmitAndWaitForTranscript(
 			ctx,
 			audioFilePath,

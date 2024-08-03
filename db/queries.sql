@@ -116,10 +116,10 @@ SELECT upsert_transcription_segment (
 -- name: InsertTranscriptionWord :one
 INSERT INTO transcription_words (segment_id, start_time, duration, is_eos)
 VALUES (
-        $1,
-        make_interval(secs => $2),
-        make_interval(secs => $3),
-        $4
+        sqlc.arg(segment_id),
+        make_interval(secs => sqlc.arg(start_time)),
+        make_interval(secs => sqlc.arg(duration)),
+        sqlc.arg(is_eos)
     )
 RETURNING id;
 
