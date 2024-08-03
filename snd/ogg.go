@@ -16,7 +16,7 @@ func createRTPPacket(
 	ssrc uint32,
 	payload []byte,
 ) *rtp.Packet {
-	log.Info("rtp",
+	log.Debug("rtp",
 		"seq", sequenceNumber,
 		"ts", timestamp,
 	)
