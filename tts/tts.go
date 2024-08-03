@@ -374,23 +374,17 @@ func handleTranscript(
 		return
 	}
 
-	segmentID, err := queries.UpsertTranscriptionSegment(
+	var segmentID int64
+	var currentVersion int32
+	err := queries.UpsertTranscriptionSegment(
 		ctx,
 		db.UpsertTranscriptionSegmentParams{
 			SessionID: sessionID,
 			IsFinal:   !transcript.IsPartial(),
 		},
-	)
+	).Scan(&segmentID, &currentVersion)
 	if err != nil {
 		log.Error("Failed to upsert transcription segment", "error", err)
-		return
-	}
-
-	// Get the current max version for this segment
-	var currentVersion int
-	err = queries.DB.QueryRow(ctx, "SELECT COALESCE(MAX(version), 0) + 1 FROM transcription_words WHERE segment_id = $1", segmentID).Scan(&currentVersion)
-	if err != nil {
-		log.Error("Failed to get current version", "error", err)
 		return
 	}
 

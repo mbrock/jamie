@@ -166,7 +166,7 @@ CREATE INDEX IF NOT EXISTS idx_word_alternatives_word_id ON word_alternatives(wo
 CREATE OR REPLACE FUNCTION upsert_transcription_segment(
         p_session_id BIGINT,
         p_is_final BOOLEAN
-    ) RETURNS BIGINT AS $$
+    ) RETURNS TABLE (segment_id BIGINT, version INT) AS $$
 DECLARE 
     v_segment_id BIGINT;
     v_current_version INT;
@@ -198,6 +198,6 @@ BEGIN
         -- If it's not a final segment, we don't delete existing words, just add new ones with a new version
     END IF;
 
-    RETURN v_segment_id;
+    RETURN QUERY SELECT v_segment_id, v_current_version;
 END;
 $$ LANGUAGE plpgsql;
