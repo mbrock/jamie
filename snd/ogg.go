@@ -125,7 +125,9 @@ func (o *Ogg) WriteSilence(duration time.Duration) error {
 func (o *Ogg) addInitialSilence(createdAt time.Time) {
 	if createdAt.After(o.startTime) {
 		silenceDuration := createdAt.Sub(o.startTime)
-		silentFrames := int(silenceDuration.Milliseconds() / 20) // 20ms per frame
+		silentFrames := int(
+			silenceDuration.Milliseconds() / 20,
+		) // 20ms per frame
 		err := o.writeSilentFrames(silentFrames)
 		if err != nil {
 			log.Error("Error adding initial silence", "error", err)
@@ -141,7 +143,9 @@ func (o *Ogg) addInitialSilence(createdAt time.Time) {
 func (o *Ogg) handleGap(timestamp uint32, createdAt time.Time) time.Duration {
 	timestampDiff := timestamp - o.lastPacketTimestamp
 	if timestampDiff > 960 { // 960 represents 20ms in the Opus timestamp units
-		gapDuration := time.Duration(timestampDiff) * time.Millisecond / 48 // Convert to real time (Opus uses 48kHz)
+		gapDuration := time.Duration(
+			timestampDiff,
+		) * time.Millisecond / 48 // Convert to real time (Opus uses 48kHz)
 		log.Info("Audio gap detected",
 			"gap_duration", gapDuration,
 			"created_at", createdAt,
@@ -161,7 +165,9 @@ func (o *Ogg) handleGap(timestamp uint32, createdAt time.Time) time.Duration {
 
 func (o *Ogg) writeSilentFrames(frames int) error {
 	for i := 0; i < frames; i++ {
-		err := o.writeRTPPacket([]byte{0xf8, 0xff, 0xfe}) // Silent Opus packet
+		err := o.writeRTPPacket(
+			[]byte{0xf8, 0xff, 0xfe},
+		) // Silent Opus packet
 		if err != nil {
 			return fmt.Errorf("error writing silent frame: %w", err)
 		}
