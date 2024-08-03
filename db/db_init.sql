@@ -166,34 +166,37 @@ CREATE OR REPLACE FUNCTION upsert_transcription_segment(
         p_session_id BIGINT,
         p_is_final BOOLEAN
     ) RETURNS BIGINT AS $$
-DECLARE v_segment_id BIGINT;
-
-BEGIN -- Check if the last segment is final
-SELECT id INTO v_segment_id
-FROM transcription_segments
-WHERE session_id = p_session_id
-ORDER BY id DESC
-LIMIT 1;
-
-IF v_segment_id IS NULL
-OR (
-    SELECT is_final
+DECLARE 
+    v_segment_id BIGINT;
+BEGIN
+    -- Check if the last segment is final
+    SELECT id INTO v_segment_id
     FROM transcription_segments
-    WHERE id = v_segment_id
-) THEN -- Insert a new segment
-INSERT INTO transcription_segments (session_id, is_final)
-VALUES (p_session_id, p_is_final)
-RETURNING id INTO v_segment_id;
+    WHERE session_id = p_session_id
+    ORDER BY id DESC
+    LIMIT 1;
 
-ELSE -- Update the existing segment
-UPDATE transcription_segments
-SET is_final = p_is_final
-WHERE id = v_segment_id;
+    IF v_segment_id IS NULL OR (SELECT is_final FROM transcription_segments WHERE id = v_segment_id) THEN
+        -- Insert a new segment
+        INSERT INTO transcription_segments (session_id, is_final)
+        VALUES (p_session_id, p_is_final)
+        RETURNING id INTO v_segment_id;
+    ELSE
+        -- Update the existing segment
+        UPDATE transcription_segments
+        SET is_final = p_is_final
+        WHERE id = v_segment_id;
 
-END IF;
+        -- If it's not a final segment, delete existing words and their alternatives
+        IF NOT p_is_final THEN
+            DELETE FROM word_alternatives
+            WHERE word_id IN (
+                SELECT id FROM transcription_words WHERE segment_id = v_segment_id
+            );
+            DELETE FROM transcription_words WHERE segment_id = v_segment_id;
+        END IF;
+    END IF;
 
-RETURN v_segment_id;
-
+    RETURN v_segment_id;
 END;
-
 $$ LANGUAGE plpgsql;
