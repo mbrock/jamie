@@ -2,7 +2,6 @@ package tts
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -71,15 +70,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.IsPartial {
 			m.currentTranscript = msg.Words
 		} else {
-			// For final transcripts
-			if msg.AttachesTo == "previous" && len(m.finalTranscripts) > 0 {
-				// Update the previous transcript
-				lastIndex := len(m.finalTranscripts) - 1
-				m.finalTranscripts[lastIndex] = append(m.finalTranscripts[lastIndex], msg.Words...)
-			} else {
-				// Add a new final transcript
-				m.finalTranscripts = append(m.finalTranscripts, msg.Words)
-			}
+			m.finalTranscripts = append(m.finalTranscripts, msg.Words)
 			m.currentTranscript = []TranscriptWord{}
 		}
 		m.viewport.SetContent(m.contentView())
@@ -87,9 +78,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Add log entry
 		prefix := getLogPrefix(msg.IsPartial)
-		if msg.AttachesTo != "" {
-			prefix += fmt.Sprintf(" (%s)", msg.AttachesTo)
-		}
 		logEntry := fmt.Sprintf("%s %d \"%s\"",
 			prefix,
 			len(msg.Words),
@@ -147,18 +135,12 @@ func (m model) contentView() string {
 
 func (m model) transcriptView() string {
 	var content strings.Builder
-	for i, transcript := range m.finalTranscripts {
-		if i > 0 && len(transcript) > 0 && transcript[0].AttachesTo != "previous" {
-			content.WriteString("\n")
-		}
+	for _, transcript := range m.finalTranscripts {
 		content.WriteString(
 			formatWords(transcript, lipgloss.Color("0")),
 		) // No background for final transcripts
 	}
 	if len(m.currentTranscript) > 0 {
-		if len(m.finalTranscripts) > 0 && m.currentTranscript[0].AttachesTo != "previous" {
-			content.WriteString("\n")
-		}
 		content.WriteString(
 			formatWords(m.currentTranscript, lipgloss.Color("236")),
 		) // Dark gray background for current transcript
@@ -177,17 +159,15 @@ func (m model) logView() string {
 
 func formatWords(words []TranscriptWord, bgColor lipgloss.Color) string {
 	var line strings.Builder
-	for i, word := range words {
+	lastWasNewline := true
+	for _, word := range words {
 		color := getConfidenceColor(word.Confidence)
 		style := lipgloss.NewStyle().
 			Foreground(color).
 			Background(bgColor)
 
-		if word.AttachesTo == "previous" {
-			style = style.Underline(true)
-		}
-
-		if i > 0 && word.Type == "word" && word.AttachesTo != "previous" {
+		if !lastWasNewline && word.Type == "word" &&
+			word.AttachesTo != "previous" {
 			line.WriteString(" ")
 		}
 
@@ -195,6 +175,9 @@ func formatWords(words []TranscriptWord, bgColor lipgloss.Color) string {
 
 		if word.IsEOS {
 			line.WriteString("\n")
+			lastWasNewline = true
+		} else {
+			lastWasNewline = false
 		}
 	}
 	return line.String()
