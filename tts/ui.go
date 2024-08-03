@@ -204,11 +204,11 @@ func formatWords(words []TranscriptWord, bgColor lipgloss.Color) string {
 func getConfidenceColor(confidence float64) lipgloss.Color {
 	switch {
 	case confidence >= 0.9:
-		return lipgloss.Color("#00FF00") // Green
+		return lipgloss.Color("#FFFFFF") // White (was Green)
 	case confidence >= 0.7:
-		return lipgloss.Color("#FFFF00") // Yellow
+		return lipgloss.Color("#FFFF00") // Yellow (unchanged)
 	default:
-		return lipgloss.Color("#FF0000") // Red
+		return lipgloss.Color("#FF0000") // Red (unchanged)
 	}
 }
 
