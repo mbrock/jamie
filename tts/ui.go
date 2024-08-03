@@ -11,14 +11,8 @@ import (
 
 type model struct {
 	viewport    viewport.Model
-	messages    []struct {
-		Words      []TranscriptWord
-		AttachesTo string
-	}
-	currentLine struct {
-		Words      []TranscriptWord
-		AttachesTo string
-	}
+	messages    [][]TranscriptWord
+	currentLine []TranscriptWord
 	logEntries  []string
 	ready       bool
 	transcripts chan TranscriptMessage
@@ -74,26 +68,25 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case transcriptMsg:
 		if msg.IsPartial {
-			m.currentLine.Words = msg.Words
-			m.currentLine.AttachesTo = msg.AttachesTo
+			m.currentLine = msg.Words
 		} else {
 			// For final transcripts
 			// Update the current line and add it to messages
-			m.currentLine.Words = msg.Words
-			m.currentLine.AttachesTo = msg.AttachesTo
+			m.currentLine = msg.Words
 			m.messages = append(m.messages, m.currentLine)
 			// Start a new empty current line
-			m.currentLine = struct {
-				Words      []TranscriptWord
-				AttachesTo string
-			}{}
+			m.currentLine = []TranscriptWord{}
 		}
 		m.viewport.SetContent(m.contentView())
 		m.viewport.GotoBottom()
 
 		// Add log entry
+		prefix := getLogPrefix(msg.IsPartial)
+		if msg.AttachesTo != "" {
+			prefix += fmt.Sprintf(" (%s)", msg.AttachesTo)
+		}
 		logEntry := fmt.Sprintf("%s %d \"%s\"",
-			getLogPrefix(msg.IsPartial),
+			prefix,
 			len(msg.Words),
 			formatTranscriptWords(msg.Words))
 		m.logEntries = append(m.logEntries, logEntry)
@@ -150,13 +143,11 @@ func (m model) contentView() string {
 func (m model) transcriptView() string {
 	var content strings.Builder
 	for _, msg := range m.messages {
-		content.WriteString(fmt.Sprintf("[SSRC %s] ", msg.AttachesTo))
-		content.WriteString(formatWords(msg.Words))
+		content.WriteString(formatWords(msg))
 		content.WriteString("\n")
 	}
-	if len(m.currentLine.Words) > 0 {
-		content.WriteString(fmt.Sprintf("[CUR SSRC %s] ", m.currentLine.AttachesTo))
-		content.WriteString(formatWords(m.currentLine.Words))
+	if len(m.currentLine) > 0 {
+		content.WriteString(formatWords(m.currentLine))
 	}
 	return content.String()
 }
