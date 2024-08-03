@@ -598,6 +598,19 @@ func (c *Client) ConnectWebSocket(ctx context.Context, config TranscriptionConfi
 		return fmt.Errorf("failed to send StartRecognition message: %w", err)
 	}
 
+	// Wait for RecognitionStarted message
+	for {
+		var response map[string]interface{}
+		err := c.WSConn.ReadJSON(&response)
+		if err != nil {
+			return fmt.Errorf("failed to read response: %w", err)
+		}
+
+		if message, ok := response["message"].(string); ok && message == "RecognitionStarted" {
+			break
+		}
+	}
+
 	return nil
 }
 
