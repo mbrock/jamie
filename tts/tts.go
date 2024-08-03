@@ -397,8 +397,8 @@ func handleTranscript(
 			ctx,
 			db.InsertTranscriptionWordParams{
 				SegmentID: segmentID,
-				StartTime: int32(result.StartTime * 1000),
-				Duration:  int32((result.EndTime - result.StartTime) * 1000),
+				StartTime: result.StartTime,
+				Duration:  result.EndTime - result.StartTime,
 				IsEos:     result.IsEOS,
 			},
 		)

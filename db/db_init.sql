@@ -108,8 +108,8 @@ CREATE TABLE IF NOT EXISTS transcription_segments (
 CREATE TABLE IF NOT EXISTS transcription_words (
     id SERIAL PRIMARY KEY,
     segment_id INTEGER NOT NULL REFERENCES transcription_segments(id),
-    start_time INTEGER NOT NULL,
-    duration INTEGER NOT NULL,
+    start_time INTERVAL NOT NULL,
+    duration INTERVAL NOT NULL,
     is_eos BOOLEAN NOT NULL,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
