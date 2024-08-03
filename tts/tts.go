@@ -86,9 +86,11 @@ func runStream(cmd *cobra.Command, args []string) {
 				}
 			}()
 
-			if err := p.Start(); err != nil {
+			_, err := p.Run()
+			if err != nil {
 				log.Error("UI error", "error", err)
 			}
+			cancel()
 		}()
 
 		for stream := range streamChan {
@@ -331,6 +333,8 @@ func handleTranscriptAndErrorsWithUI(
 						Confidence: result.Alternatives[0].Confidence,
 						StartTime:  result.StartTime,
 						EndTime:    result.EndTime,
+						IsEOS:      result.IsEOS,
+						Type:       result.Type,
 					}
 					words = append(words, word)
 				}
@@ -370,9 +374,11 @@ func handleTranscriptAndErrorsWithUI(
 
 func formatTranscriptWords(words []TranscriptWord) string {
 	var result strings.Builder
-	for _, word := range words {
+	for i, word := range words {
+		if i > 0 && word.Type == "word" {
+			result.WriteString(" ")
+		}
 		result.WriteString(word.Content)
-		result.WriteString(" ")
 	}
 	return strings.TrimSpace(result.String())
 }
@@ -382,6 +388,8 @@ type TranscriptWord struct {
 	Confidence float64
 	StartTime  float64
 	EndTime    float64
+	IsEOS      bool
+	Type       string
 }
 
 type TranscriptMessage struct {
