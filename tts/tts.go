@@ -386,6 +386,14 @@ func handleTranscript(
 		return
 	}
 
+	// Get the current max version for this segment
+	var currentVersion int
+	err = queries.DB.QueryRow(ctx, "SELECT COALESCE(MAX(version), 0) + 1 FROM transcription_words WHERE segment_id = $1", segmentID).Scan(&currentVersion)
+	if err != nil {
+		log.Error("Failed to get current version", "error", err)
+		return
+	}
+
 	for _, result := range transcript.Results {
 		wordID, err := queries.InsertTranscriptionWord(
 			ctx,
@@ -394,6 +402,7 @@ func handleTranscript(
 				StartTime: result.StartTime,
 				Duration:  result.EndTime - result.StartTime,
 				IsEos:     result.IsEOS,
+				Version:   int32(currentVersion),
 			},
 		)
 		if err != nil {
@@ -421,6 +430,7 @@ func handleTranscript(
 		"segmentID", segmentID,
 		"wordCount", len(transcript.Results),
 		"isPartial", transcript.IsPartial(),
+		"version", currentVersion,
 	)
 }
 

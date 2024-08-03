@@ -114,12 +114,13 @@ SELECT upsert_transcription_segment (
     ) AS id;
 
 -- name: InsertTranscriptionWord :one
-INSERT INTO transcription_words (segment_id, start_time, duration, is_eos)
+INSERT INTO transcription_words (segment_id, start_time, duration, is_eos, version)
 VALUES (
         sqlc.arg(segment_id),
         make_interval(secs => sqlc.arg(start_time)),
         make_interval(secs => sqlc.arg(duration)),
-        sqlc.arg(is_eos)
+        sqlc.arg(is_eos),
+        sqlc.arg(version)
     )
 RETURNING id;
 
@@ -145,12 +146,18 @@ WHERE ts.is_final = false
 ORDER BY ts.session_id, ts.id DESC, tw.id, wa.confidence DESC;
 
 -- name: GetTranscriptSegment :many
-SELECT ts.id, ts.session_id, ts.is_final, tw.id as word_id, tw.start_time, tw.duration, tw.is_eos, wa.content, wa.confidence
+WITH latest_words AS (
+    SELECT DISTINCT ON (segment_id, start_time) *
+    FROM transcription_words
+    WHERE segment_id = $1
+    ORDER BY segment_id, start_time, version DESC
+)
+SELECT ts.id, ts.session_id, ts.is_final, lw.id as word_id, lw.start_time, lw.duration, lw.is_eos, wa.content, wa.confidence
 FROM transcription_segments ts
-JOIN transcription_words tw ON ts.id = tw.segment_id
-JOIN word_alternatives wa ON tw.id = wa.word_id
+JOIN latest_words lw ON ts.id = lw.segment_id
+JOIN word_alternatives wa ON lw.id = wa.word_id
 WHERE ts.id = $1
-ORDER BY tw.id, wa.confidence DESC;
+ORDER BY lw.start_time, wa.confidence DESC;
 
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_transcription_segments_is_final ON transcription_segments(is_final);

@@ -109,6 +109,7 @@ CREATE TABLE IF NOT EXISTS transcription_words (
     start_time INTERVAL NOT NULL,
     duration INTERVAL NOT NULL,
     is_eos BOOLEAN NOT NULL,
+    version INT NOT NULL DEFAULT 1,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -168,6 +169,7 @@ CREATE OR REPLACE FUNCTION upsert_transcription_segment(
     ) RETURNS BIGINT AS $$
 DECLARE 
     v_segment_id BIGINT;
+    v_current_version INT;
 BEGIN
     -- Check if the last segment is final
     SELECT id INTO v_segment_id
@@ -181,20 +183,19 @@ BEGIN
         INSERT INTO transcription_segments (session_id, is_final)
         VALUES (p_session_id, p_is_final)
         RETURNING id INTO v_segment_id;
+        v_current_version := 1;
     ELSE
         -- Update the existing segment
         UPDATE transcription_segments
         SET is_final = p_is_final
         WHERE id = v_segment_id;
 
-        -- If it's not a final segment, delete existing words and their alternatives
-        IF NOT p_is_final THEN
-            DELETE FROM word_alternatives
-            WHERE word_id IN (
-                SELECT id FROM transcription_words WHERE segment_id = v_segment_id
-            );
-            DELETE FROM transcription_words WHERE segment_id = v_segment_id;
-        END IF;
+        -- Get the current max version for this segment
+        SELECT COALESCE(MAX(version), 0) + 1 INTO v_current_version
+        FROM transcription_words
+        WHERE segment_id = v_segment_id;
+
+        -- If it's not a final segment, we don't delete existing words, just add new ones with a new version
     END IF;
 
     RETURN v_segment_id;
