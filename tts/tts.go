@@ -111,9 +111,14 @@ func runStream(cmd *cobra.Command, args []string) {
 		)
 	}
 
-	for update := range updates {
-		handleTranscriptionUpdate(ctx, update, queries, transcriptChan)
-	}
+	go func() {
+		for update := range updates {
+			handleTranscriptionUpdate(ctx, update, queries, transcriptChan)
+		}
+	}()
+
+	// Wait for context cancellation
+	<-ctx.Done()
 
 	// Wait for CTRL-C
 	<-ctx.Done()
