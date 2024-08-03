@@ -71,14 +71,9 @@ func runStream(cmd *cobra.Command, args []string) {
 		log.Info("UI enabled")
 		transcriptChan := make(chan TranscriptMessage, 100)
 		go func() {
-			model := initialModel(transcriptChan)
-			for {
-				select {
-				case transcript := <-transcriptChan:
-					model.Update(transcriptMsg(transcript))
-				case <-ctx.Done():
-					return
-				}
+			p := tea.NewProgram(initialModel(transcriptChan))
+			if _, err := p.Run(); err != nil {
+				log.Fatal("Error running program", "error", err)
 			}
 		}()
 
@@ -115,6 +110,14 @@ func handleStreamWithTranscriptionAndUI(
 	queries *db.Queries,
 ) {
 	log.Info("Starting handleStreamWithTranscriptionAndUI")
+
+	// Create a channel to send messages to the Bubble Tea program
+	uiChan := make(chan tea.Msg)
+	go func() {
+		for msg := range uiChan {
+			transcriptChan <- msg.(TranscriptMessage)
+		}
+	}()
 
 	client := speechmatics.NewClient(viper.GetString("SPEECHMATICS_API_KEY"))
 	config := speechmatics.TranscriptionConfig{
@@ -432,7 +435,7 @@ func handleTranscript(
 		Words:     words,
 		IsPartial: transcript.IsPartial(),
 	}
-	transcriptChan <- transcriptMessage
+	uiChan <- transcriptMessage
 
 	transcriptText := formatTranscriptWords(words)
 	log.Info(
