@@ -347,7 +347,12 @@ func handleTranscriptAndErrorsWithUI(
 			}
 			log.Error("Transcription error", "error", err)
 			uiChan <- TranscriptMessage{
-				Text:      fmt.Sprintf("Error: %v", err),
+				Words: []TranscriptWord{{
+					Content:    fmt.Sprintf("Error: %v", err),
+					Confidence: 1.0,
+					StartTime:  0,
+					EndTime:    0,
+				}},
 				IsPartial: false,
 			}
 		case <-ctx.Done():
