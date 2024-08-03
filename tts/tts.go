@@ -129,6 +129,7 @@ func handleTranscript(
 	transcript speechmatics.RTTranscriptResponse,
 	sessionID int64,
 	queries *db.Queries,
+	pool *pgxpool.Pool,
 ) {
 	if len(transcript.Results) == 0 {
 		return
@@ -142,67 +143,81 @@ func handleTranscript(
 		len(transcript.Results),
 	)
 
-	err := queries.WithTx(ctx, func(qtx *db.Queries) error {
-		row, err := qtx.UpsertTranscriptionSegment(
+	// Begin a new transaction
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		log.Error("Failed to begin transaction", "error", err)
+		return
+	}
+	defer tx.Rollback(ctx) // Rollback if not committed
+
+	// Create a new Queries instance with the transaction
+	qtx := queries.WithTx(tx)
+
+	row, err := qtx.UpsertTranscriptionSegment(
+		ctx,
+		db.UpsertTranscriptionSegmentParams{
+			SessionID: sessionID,
+			IsFinal:   !transcript.IsPartial(),
+		},
+	)
+	if err != nil {
+		log.Error("Failed to upsert transcription segment", "error", err)
+		return
+	}
+	segmentID := row.ResultSegmentID
+	currentVersion := row.ResultVersion
+
+	for _, result := range transcript.Results {
+		wordID, err := qtx.InsertTranscriptionWord(
 			ctx,
-			db.UpsertTranscriptionSegmentParams{
-				SessionID: sessionID,
-				IsFinal:   !transcript.IsPartial(),
+			db.InsertTranscriptionWordParams{
+				SegmentID: segmentID,
+				StartTime: result.StartTime,
+				Duration:  result.EndTime - result.StartTime,
+				IsEos:     result.IsEOS,
+				Version:   int32(currentVersion),
+				AttachesTo: pgtype.Text{
+					String: result.AttachesTo,
+					Valid:  true,
+				},
 			},
 		)
 		if err != nil {
-			return fmt.Errorf("failed to upsert transcription segment: %w", err)
+			log.Error("Failed to insert transcription word", "error", err)
+			return
 		}
-		segmentID := row.ResultSegmentID
-		currentVersion := row.ResultVersion
 
-		for _, result := range transcript.Results {
-			wordID, err := qtx.InsertTranscriptionWord(
+		for _, alt := range result.Alternatives {
+			err = qtx.InsertWordAlternative(
 				ctx,
-				db.InsertTranscriptionWordParams{
-					SegmentID: segmentID,
-					StartTime: result.StartTime,
-					Duration:  result.EndTime - result.StartTime,
-					IsEos:     result.IsEOS,
-					Version:   int32(currentVersion),
-					AttachesTo: pgtype.Text{
-						String: result.AttachesTo,
-						Valid:  true,
-					},
+				db.InsertWordAlternativeParams{
+					WordID:     wordID,
+					Content:    alt.Content,
+					Confidence: alt.Confidence,
 				},
 			)
 			if err != nil {
-				return fmt.Errorf("failed to insert transcription word: %w", err)
-			}
-
-			for _, alt := range result.Alternatives {
-				err = qtx.InsertWordAlternative(
-					ctx,
-					db.InsertWordAlternativeParams{
-						WordID:     wordID,
-						Content:    alt.Content,
-						Confidence: alt.Confidence,
-					},
-				)
-				if err != nil {
-					return fmt.Errorf("failed to insert word alternative: %w", err)
-				}
+				log.Error("Failed to insert word alternative", "error", err)
+				return
 			}
 		}
-
-		log.Info(
-			"Processed transcript",
-			"segmentID", segmentID,
-			"wordCount", len(transcript.Results),
-			"isPartial", transcript.IsPartial(),
-			"version", currentVersion,
-		)
-		return nil
-	})
-
-	if err != nil {
-		log.Error("Failed to handle transcript", "error", err)
 	}
+
+	// Commit the transaction
+	err = tx.Commit(ctx)
+	if err != nil {
+		log.Error("Failed to commit transaction", "error", err)
+		return
+	}
+
+	log.Info(
+		"Processed transcript",
+		"segmentID", segmentID,
+		"wordCount", len(transcript.Results),
+		"isPartial", transcript.IsPartial(),
+		"version", currentVersion,
+	)
 }
 
 func handleTranscriptionUpdate(
