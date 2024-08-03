@@ -93,7 +93,11 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 		o.firstTimestamp = packet.CreatedAt
 		o.addInitialSilence(packet.CreatedAt)
 	} else {
-		o.handleGap(packet.Timestamp, packet.CreatedAt)
+		gapDuration := o.handleGap(packet.Timestamp, packet.CreatedAt)
+		if gapDuration > 0 {
+			o.lastTimestamp = o.lastTimestamp.Add(gapDuration)
+			o.lastPacketTimestamp += uint32(gapDuration.Milliseconds() * 48) // Convert to Opus timestamp units
+		}
 	}
 
 	err := o.writeRTPPacket(packet.OpusData)
@@ -134,7 +138,7 @@ func (o *Ogg) addInitialSilence(createdAt time.Time) {
 	}
 }
 
-func (o *Ogg) handleGap(timestamp uint32, createdAt time.Time) {
+func (o *Ogg) handleGap(timestamp uint32, createdAt time.Time) time.Duration {
 	timestampDiff := timestamp - o.lastPacketTimestamp
 	if timestampDiff > 960 { // 960 represents 20ms in the Opus timestamp units
 		gapDuration := time.Duration(timestampDiff) * time.Millisecond / 48 // Convert to real time (Opus uses 48kHz)
@@ -147,10 +151,12 @@ func (o *Ogg) handleGap(timestamp uint32, createdAt time.Time) {
 		err := o.writeSilentFrames(silentFrames)
 		if err != nil {
 			log.Error("Error handling gap", "error", err)
-			return
+			return 0
 		}
 		o.gapCount++
+		return gapDuration
 	}
+	return 0
 }
 
 func (o *Ogg) writeSilentFrames(frames int) error {
