@@ -12,25 +12,41 @@ import (
 type SSRCUserIDCache struct {
 	mu    sync.RWMutex
 	cache map[int64]string
+	db    *pgx.Conn
 }
 
-func NewSSRCUserIDCache() *SSRCUserIDCache {
+func NewSSRCUserIDCache(db *pgx.Conn) *SSRCUserIDCache {
 	return &SSRCUserIDCache{
 		cache: make(map[int64]string),
+		db:    db,
 	}
 }
 
-func (c *SSRCUserIDCache) Set(ssrc int64, userID string) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.cache[ssrc] = userID
-}
-
-func (c *SSRCUserIDCache) Get(ssrc int64) (string, bool) {
+func (c *SSRCUserIDCache) Get(ssrc int64) (string, error) {
 	c.mu.RLock()
-	defer c.mu.RUnlock()
 	userID, ok := c.cache[ssrc]
-	return userID, ok
+	c.mu.RUnlock()
+
+	if ok {
+		return userID, nil
+	}
+
+	// If not in cache, look up in the database
+	var dbUserID string
+	err := c.db.QueryRow(context.Background(), "SELECT user_id FROM opus_packets WHERE ssrc = $1 LIMIT 1", ssrc).Scan(&dbUserID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return "", nil // No error, but no user ID found
+		}
+		return "", err
+	}
+
+	// If found in database, add to cache
+	c.mu.Lock()
+	c.cache[ssrc] = dbUserID
+	c.mu.Unlock()
+
+	return dbUserID, nil
 }
 
 type OpusPacketNotification struct {
@@ -55,7 +71,7 @@ func StreamOpusPackets(
 	}
 
 	packetChan := make(chan OpusPacketNotification)
-	cache := NewSSRCUserIDCache()
+	cache := NewSSRCUserIDCache(conn)
 
 	go func() {
 		defer close(packetChan)
@@ -74,7 +90,12 @@ func StreamOpusPackets(
 				continue
 			}
 
-			cache.Set(packet.Ssrc, packet.UserID)
+			userID, err := cache.Get(packet.Ssrc)
+			if err != nil {
+				log.Error("Error getting user ID from cache", "error", err)
+			} else {
+				packet.UserID = userID
+			}
 
 			select {
 			case packetChan <- packet:
