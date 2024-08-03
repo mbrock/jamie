@@ -144,16 +144,10 @@ WHERE ts.is_final = false
 ORDER BY ts.session_id, ts.id DESC, tw.id, wa.confidence DESC;
 
 -- name: GetTranscriptSegment :many
-WITH latest_words AS (
-    SELECT DISTINCT ON (segment_id, start_time) *
-    FROM transcription_words
-    WHERE segment_id = $1
-    ORDER BY segment_id, start_time, version DESC
-)
-SELECT ts.id, ts.session_id, ts.is_final, lw.id as word_id, lw.start_time, lw.duration, lw.is_eos, wa.content, wa.confidence
+SELECT ts.id, ts.session_id, ts.is_final, tw.id as word_id, tw.start_time, tw.duration, tw.is_eos, wa.content, wa.confidence
 FROM transcription_segments ts
-JOIN latest_words lw ON ts.id = lw.segment_id
-JOIN word_alternatives wa ON lw.id = wa.word_id
+JOIN transcription_words tw ON ts.id = tw.segment_id AND ts.version = tw.version
+JOIN word_alternatives wa ON tw.id = wa.word_id
 WHERE ts.id = $1
-ORDER BY lw.start_time, wa.confidence DESC;
+ORDER BY tw.start_time, wa.confidence DESC;
 
