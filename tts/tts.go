@@ -338,10 +338,10 @@ func handleTranscript(ctx context.Context, transcript speechmatics.RTTranscriptR
 	var words []TranscriptWord
 	for _, result := range transcript.Results {
 		wordID, err := queries.InsertTranscriptionWord(ctx, db.InsertTranscriptionWordParams{
-			SegmentID: segmentID,
-			Offset:    int32(result.StartTime * 1000),
-			Duration:  int32((result.EndTime - result.StartTime) * 1000),
-			IsEos:     result.IsEOS,
+			SegmentID:  segmentID,
+			TimeOffset: int32(result.StartTime * 1000),
+			Duration:   int32((result.EndTime - result.StartTime) * 1000),
+			IsEos:      result.IsEOS,
 		})
 		if err != nil {
 			log.Error("Failed to insert transcription word", "error", err)
