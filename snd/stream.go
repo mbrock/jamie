@@ -92,8 +92,8 @@ func StreamOpusPackets(
 
 			userID, err := cache.Get(packet.Ssrc)
 			if err != nil {
-				log.Error("Error getting user ID from cache", "error", err)
-			} else {
+				log.Error("Error looking up user ID in database", "error", err)
+			} else if userID != "" {
 				packet.UserID = userID
 			}
 
