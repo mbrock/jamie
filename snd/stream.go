@@ -114,7 +114,7 @@ func StreamOpusPackets(
 
 			// Log the first few bytes of the decoded opus data
 			if len(packet.OpusData) > 0 {
-				log.Info("Decoded opus packet data",
+				log.Debug("Decoded opus packet data",
 					"first_bytes", fmt.Sprintf("%x", packet.OpusData[:min(4, len(packet.OpusData))]),
 				)
 			}
