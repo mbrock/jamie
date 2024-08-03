@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/log"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"node.town/db"
@@ -68,7 +69,7 @@ func runStream(cmd *cobra.Command, args []string) {
 	}
 
 	transcriptChan := make(chan TranscriptMessage, 100)
-	
+
 	if useUI {
 		log.Info("UI enabled")
 		go func() {
@@ -86,6 +87,7 @@ func runStream(cmd *cobra.Command, args []string) {
 				stream,
 				transcriptChan,
 				queries,
+				sqlDB,
 			)
 		} else {
 			go handleStream(stream)
@@ -123,9 +125,16 @@ func handleStreamWithTranscriptionAndUI(
 
 	speechmaticsTranscriptChan, errChan := client.ReceiveTranscript(ctx)
 
-	transcriptionUpdateChan, err := snd.ListenForTranscriptionChanges(ctx, pool)
+	transcriptionUpdateChan, err := snd.ListenForTranscriptionChanges(
+		ctx,
+		pool,
+	)
 	if err != nil {
-		log.Error("Failed to set up transcription change listener", "error", err)
+		log.Error(
+			"Failed to set up transcription change listener",
+			"error",
+			err,
+		)
 		return
 	}
 
@@ -177,7 +186,12 @@ func handleStreamWithTranscriptionAndUI(
 			case err := <-errChan:
 				log.Error("Received error from Speechmatics", "error", err)
 			case update := <-transcriptionUpdateChan:
-				handleTranscriptionUpdate(ctx, update, queries, transcriptChan)
+				handleTranscriptionUpdate(
+					ctx,
+					update,
+					queries,
+					transcriptChan,
+				)
 			case <-ctx.Done():
 				return
 			}
@@ -426,9 +440,11 @@ func handleTranscriptionUpdate(
 	for _, row := range segment {
 		word := TranscriptWord{
 			StartTime: float64(row.StartTime.Microseconds) / 1000000,
-			EndTime:   float64(row.StartTime.Microseconds+row.Duration.Microseconds) / 1000000,
-			IsEOS:     row.IsEos,
-			Content:   row.Content,
+			EndTime: float64(
+				row.StartTime.Microseconds+row.Duration.Microseconds,
+			) / 1000000,
+			IsEOS:      row.IsEos,
+			Content:    row.Content,
 			Confidence: row.Confidence,
 		}
 		words = append(words, word)
