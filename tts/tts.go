@@ -66,7 +66,7 @@ func runStream(cmd *cobra.Command, args []string) {
 
 	if useUI {
 		log.Info("UI enabled")
-		transcriptChan := make(chan string, 100)
+		transcriptChan := make(chan TranscriptMessage, 100)
 		go func() {
 			p := tea.NewProgram(
 				initialModel(transcriptChan),
