@@ -17,6 +17,10 @@ var StreamCmd = &cobra.Command{
 	Run:   runStream,
 }
 
+func init() {
+	StreamCmd.Flags().Bool("transcribe", false, "Enable real-time transcription using Speechmatics API")
+}
+
 func runStream(cmd *cobra.Command, args []string) {
 	sqlDB, queries, err := db.OpenDatabase()
 	if err != nil {
@@ -38,12 +42,81 @@ func runStream(cmd *cobra.Command, args []string) {
 		"Listening for demuxed Opus packet streams. Press CTRL-C to exit.",
 	)
 
+	transcribe, _ := cmd.Flags().GetBool("transcribe")
+	if transcribe {
+		log.Info("Real-time transcription enabled")
+	}
+
 	for stream := range streamChan {
-		go handleStream(stream)
+		if transcribe {
+			go handleStreamWithTranscription(ctx, stream)
+		} else {
+			go handleStream(stream)
+		}
 	}
 
 	// Wait for CTRL-C
 	<-ctx.Done()
+}
+
+func handleStreamWithTranscription(ctx context.Context, stream <-chan snd.OpusPacketNotification) {
+	client := speechmatics.NewClient(os.Getenv("SPEECHMATICS_API_KEY"))
+	config := speechmatics.TranscriptionConfig{
+		Language:       "en",
+		EnablePartials: true,
+	}
+	audioFormat := speechmatics.AudioFormat{
+		Type:       "raw",
+		Encoding:   "opus",
+		SampleRate: 48000,
+	}
+
+	err := client.ConnectWebSocket(ctx, config, audioFormat)
+	if err != nil {
+		log.Error("Failed to connect to Speechmatics WebSocket", "error", err)
+		return
+	}
+	defer client.CloseWebSocket()
+
+	transcriptChan, errChan := client.ReceiveTranscript(ctx)
+
+	go func() {
+		for {
+			select {
+			case transcript, ok := <-transcriptChan:
+				if !ok {
+					return
+				}
+				for _, result := range transcript.Results {
+					if len(result.Alternatives) > 0 {
+						log.Info("Transcription", "text", result.Alternatives[0].Content)
+					}
+				}
+			case err, ok := <-errChan:
+				if !ok {
+					return
+				}
+				log.Error("Transcription error", "error", err)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	seqNo := 0
+	for packet := range stream {
+		err := client.SendAudio(packet.OpusData)
+		if err != nil {
+			log.Error("Failed to send audio to Speechmatics", "error", err)
+			return
+		}
+		seqNo++
+	}
+
+	err = client.EndStream(seqNo)
+	if err != nil {
+		log.Error("Failed to end Speechmatics stream", "error", err)
+	}
 }
 
 func handleStream(stream <-chan snd.OpusPacketNotification) {
