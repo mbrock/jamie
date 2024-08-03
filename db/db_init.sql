@@ -120,6 +120,24 @@ CREATE TABLE IF NOT EXISTS word_alternatives (
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Create a function to notify about transcription changes
+CREATE OR REPLACE FUNCTION notify_transcription_change() RETURNS TRIGGER AS $$
+BEGIN
+    PERFORM pg_notify('transcription_change', json_build_object(
+        'operation', TG_OP,
+        'id', NEW.id,
+        'session_id', NEW.session_id,
+        'is_final', NEW.is_final
+    )::text);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create a trigger for transcription_segments table
+CREATE TRIGGER transcription_segment_changed
+AFTER INSERT OR UPDATE ON transcription_segments
+FOR EACH ROW EXECUTE FUNCTION notify_transcription_change();
+
 -- Function to upsert transcription segment
 CREATE OR REPLACE FUNCTION upsert_transcription_segment(
         p_session_id BIGINT,
