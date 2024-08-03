@@ -88,7 +88,13 @@ func handleStreamWithTranscription(
 	go handleTranscriptAndErrors(ctx, transcriptChan, errChan)
 
 	var buffer bytes.Buffer
-	oggWriter, err := snd.NewOgg(0, time.Now(), time.Now().Add(24*time.Hour), &buffer, 4096)
+	oggWriter, err := snd.NewOgg(
+		0,
+		time.Now(),
+		time.Now().Add(24*time.Hour),
+		&buffer,
+		4096,
+	)
 	if err != nil {
 		log.Error("Failed to create Ogg writer", "error", err)
 		return
@@ -97,15 +103,20 @@ func handleStreamWithTranscription(
 
 	seqNo := 0
 	for packet := range stream {
+		createdAt, err := time.Parse(time.RFC3339Nano, packet.CreatedAt)
+		if err != nil {
+			log.Error("Failed to parse createdAt", "error", err)
+			continue
+		}
 		opusPacket := snd.OpusPacket{
 			ID:        int(packet.ID),
 			Sequence:  uint16(packet.Sequence),
 			Timestamp: uint32(packet.Timestamp),
-			CreatedAt: packet.CreatedAt.Time,
-			OpusData:  packet.OpusData,
+			CreatedAt: createdAt,
+			OpusData:  []byte(packet.OpusData),
 		}
 
-		err := oggWriter.WritePacket(opusPacket)
+		err = oggWriter.WritePacket(opusPacket)
 		if err != nil {
 			log.Error("Failed to write packet to Ogg", "error", err)
 			return
@@ -114,7 +125,11 @@ func handleStreamWithTranscription(
 		if buffer.Len() >= 4096 {
 			err = client.SendAudio(buffer.Bytes())
 			if err != nil {
-				log.Error("Failed to send audio to Speechmatics", "error", err)
+				log.Error(
+					"Failed to send audio to Speechmatics",
+					"error",
+					err,
+				)
 				return
 			}
 			buffer.Reset()
@@ -127,7 +142,11 @@ func handleStreamWithTranscription(
 	if buffer.Len() > 0 {
 		err = client.SendAudio(buffer.Bytes())
 		if err != nil {
-			log.Error("Failed to send final audio to Speechmatics", "error", err)
+			log.Error(
+				"Failed to send final audio to Speechmatics",
+				"error",
+				err,
+			)
 		}
 	}
 
@@ -137,7 +156,11 @@ func handleStreamWithTranscription(
 	}
 }
 
-func handleTranscriptAndErrors(ctx context.Context, transcriptChan <-chan speechmatics.RTTranscriptResponse, errChan <-chan error) {
+func handleTranscriptAndErrors(
+	ctx context.Context,
+	transcriptChan <-chan speechmatics.RTTranscriptResponse,
+	errChan <-chan error,
+) {
 	for {
 		select {
 		case transcript, ok := <-transcriptChan:
@@ -146,7 +169,11 @@ func handleTranscriptAndErrors(ctx context.Context, transcriptChan <-chan speech
 			}
 			for _, result := range transcript.Results {
 				if len(result.Alternatives) > 0 {
-					log.Info("Transcription", "text", result.Alternatives[0].Content)
+					log.Info(
+						"Transcription",
+						"text",
+						result.Alternatives[0].Content,
+					)
 				}
 			}
 		case err, ok := <-errChan:
