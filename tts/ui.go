@@ -10,13 +10,13 @@ import (
 )
 
 type model struct {
-	viewport     viewport.Model
-	messages     [][]TranscriptWord
-	currentLine  []TranscriptWord
-	logEntries   []string
-	ready        bool
-	transcripts  chan TranscriptMessage
-	showLog      bool
+	viewport    viewport.Model
+	messages    [][]TranscriptWord
+	currentLine []TranscriptWord
+	logEntries  []string
+	ready       bool
+	transcripts chan TranscriptMessage
+	showLog     bool
 }
 
 func initialModel(transcripts chan TranscriptMessage) model {
@@ -87,7 +87,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.GotoBottom()
 
 		// Add log entry
-		logEntry := fmt.Sprintf("Transcript: %d words, Partial: %v", len(msg.Words), msg.IsPartial)
+		logEntry := fmt.Sprintf("%s %d \"%s\"",
+			getLogPrefix(msg.IsPartial, msg.AttachesTo),
+			len(msg.Words),
+			formatTranscriptWords(msg.Words))
 		m.logEntries = append(m.logEntries, logEntry)
 	}
 
@@ -115,7 +118,10 @@ func (m model) headerView() string {
 		Background(lipgloss.Color("#25A065")).
 		Padding(0, 1).
 		Render("Real-time Transcription")
-	line := strings.Repeat("─", max(0, m.viewport.Width-lipgloss.Width(title)))
+	line := strings.Repeat(
+		"─",
+		max(0, m.viewport.Width-lipgloss.Width(title)),
+	)
 	return lipgloss.JoinHorizontal(lipgloss.Center, title, line)
 }
 
@@ -205,4 +211,14 @@ func StartUI(transcripts chan TranscriptMessage) error {
 
 	_, err := p.Run()
 	return err
+}
+
+func getLogPrefix(isPartial bool, attachesTo string) string {
+	if isPartial {
+		return "TMP"
+	}
+	if attachesTo == "previous" {
+		return "FIN (ATT)"
+	}
+	return "FIN"
 }
