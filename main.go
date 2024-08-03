@@ -119,9 +119,9 @@ var listenPacketsCmd = &cobra.Command{
 		ctx := context.Background()
 		defer sqlDB.Close(ctx)
 
-		_, err = sqlDB.Exec(ctx, "LISTEN new_opus_packet")
+		packetChan, err := snd.StreamOpusPackets(ctx, sqlDB.(*pgx.Conn))
 		if err != nil {
-			log.Fatal("Error listening to channel", "error", err)
+			log.Fatal("Error setting up opus packet stream", "error", err)
 		}
 
 		log.Info("Listening for new opus packets. Press CTRL-C to exit.")
@@ -129,28 +129,12 @@ var listenPacketsCmd = &cobra.Command{
 		var lastPrintTime time.Time
 		packetCount := 0
 
-		for {
-			var notification string
-			err := sqlDB.QueryRow(ctx, "SELECT pg_notify('new_opus_packet', '')").
-				Scan(&notification)
-			if err != nil {
-				log.Error("Error waiting for notification", "error", err)
-				continue
-			}
-
-			var packet map[string]interface{}
-			err = json.Unmarshal([]byte(notification), &packet)
-			if err != nil {
-				log.Error("Error unmarshalling payload", "error", err)
-				continue
-			}
-
+		for packet := range packetChan {
 			packetCount++
 			now := time.Now()
 
-			if lastPrintTime.IsZero() ||
-				now.Sub(lastPrintTime) >= time.Second {
-				log.Info("Opus packets received", "count", packetCount)
+			if lastPrintTime.IsZero() || now.Sub(lastPrintTime) >= time.Second {
+				log.Info("Opus packets received", "count", packetCount, "last_packet", packet.ID)
 				lastPrintTime = now
 				packetCount = 0
 			}
