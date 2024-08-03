@@ -51,8 +51,8 @@ type TranscriptionConfig struct {
 
 type AudioFormat struct {
 	Type       string `json:"type"`
-	Encoding   string `json:"encoding"`
-	SampleRate int    `json:"sample_rate"`
+	Encoding   string `json:"encoding,omitempty"`
+	SampleRate int    `json:"sample_rate,omitempty"`
 }
 
 type StartRecognitionMessage struct {
@@ -598,9 +598,16 @@ func (c *Client) ConnectWebSocket(
 
 	startMsgJSON, err := json.Marshal(startMsg)
 	if err != nil {
-		return fmt.Errorf("failed to marshal StartRecognition message: %w", err)
+		return fmt.Errorf(
+			"failed to marshal StartRecognition message: %w",
+			err,
+		)
 	}
-	log.Info("Sending StartRecognition message", "message", string(startMsgJSON))
+	log.Info(
+		"Sending StartRecognition message",
+		"message",
+		string(startMsgJSON),
+	)
 
 	err = c.WSConn.WriteJSON(startMsg)
 	if err != nil {
@@ -699,6 +706,9 @@ func (c *Client) ReceiveTranscript(
 					}
 					return
 				}
+
+				// log the response
+				//				log.Info("Received transcript", "transcript", response)
 
 				transcriptChan <- response
 			}
