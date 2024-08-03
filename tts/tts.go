@@ -35,7 +35,7 @@ func runStream(cmd *cobra.Command, args []string) {
 	if err != nil {
 		log.Fatal("Failed to open database", "error", err)
 	}
-	defer sqlDB.Close(context.Backgroun())
+	defer sqlDB.Close(context.Background())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -70,7 +70,11 @@ func runStream(cmd *cobra.Command, args []string) {
 
 		for stream := range streamChan {
 			if transcribe {
-				go handleStreamWithTranscriptionAndUI(ctx, stream, transcriptChan)
+				go handleStreamWithTranscriptionAndUI(
+					ctx,
+					stream,
+					transcriptChan,
+				)
 			} else {
 				go handleStream(stream)
 			}
@@ -112,7 +116,12 @@ func handleStreamWithTranscriptionAndUI(
 
 	speechmaticsTranscriptChan, errChan := client.ReceiveTranscript(ctx)
 
-	go handleTranscriptAndErrorsWithUI(ctx, speechmaticsTranscriptChan, errChan, transcriptChan)
+	go handleTranscriptAndErrorsWithUI(
+		ctx,
+		speechmaticsTranscriptChan,
+		errChan,
+		transcriptChan,
+	)
 
 	tmpDir := "tmp"
 	if err := os.MkdirAll(tmpDir, 0755); err != nil {
@@ -125,7 +134,9 @@ func handleStreamWithTranscriptionAndUI(
 	var oggFile *os.File
 	var seqNo int
 	var lastPacketTime time.Time
-	silenceTimer := time.NewTicker(100 * time.Millisecond) // 100ms timer for checking silence
+	silenceTimer := time.NewTicker(
+		100 * time.Millisecond,
+	) // 100ms timer for checking silence
 	defer silenceTimer.Stop()
 
 	defer func() {
@@ -151,18 +162,29 @@ func handleStreamWithTranscriptionAndUI(
 				if buffer.Len() > 0 {
 					err = client.SendAudio(buffer.Bytes())
 					if err != nil {
-						log.Error("Failed to send final audio to Speechmatics", "error", err)
+						log.Error(
+							"Failed to send final audio to Speechmatics",
+							"error",
+							err,
+						)
 					}
 				}
 				err = client.EndStream(seqNo)
 				if err != nil {
-					log.Error("Failed to end Speechmatics stream", "error", err)
+					log.Error(
+						"Failed to end Speechmatics stream",
+						"error",
+						err,
+					)
 				}
 				return
 			}
 
 			if oggWriter == nil {
-				oggFilePath := filepath.Join(tmpDir, fmt.Sprintf("%d.ogg", packet.Ssrc))
+				oggFilePath := filepath.Join(
+					tmpDir,
+					fmt.Sprintf("%d.ogg", packet.Ssrc),
+				)
 				oggFile, err = os.Create(oggFilePath)
 				if err != nil {
 					log.Error("Failed to create Ogg file", "error", err)
@@ -205,7 +227,11 @@ func handleStreamWithTranscriptionAndUI(
 			err = client.SendAudio(buffer.Bytes())
 			log.Debug("Sent audio to Speechmatics", "bytes", buffer.Len())
 			if err != nil {
-				log.Error("Failed to send audio to Speechmatics", "error", err)
+				log.Error(
+					"Failed to send audio to Speechmatics",
+					"error",
+					err,
+				)
 				return
 			}
 			buffer.Reset()
@@ -223,9 +249,17 @@ func handleStreamWithTranscriptionAndUI(
 				}
 
 				err = client.SendAudio(buffer.Bytes())
-				log.Debug("Sent silence to Speechmatics", "bytes", buffer.Len())
+				log.Debug(
+					"Sent silence to Speechmatics",
+					"bytes",
+					buffer.Len(),
+				)
 				if err != nil {
-					log.Error("Failed to send silence to Speechmatics", "error", err)
+					log.Error(
+						"Failed to send silence to Speechmatics",
+						"error",
+						err,
+					)
 					return
 				}
 				buffer.Reset()
@@ -238,7 +272,11 @@ func handleStreamWithTranscriptionAndUI(
 			if buffer.Len() > 0 {
 				err = client.SendAudio(buffer.Bytes())
 				if err != nil {
-					log.Error("Failed to send final audio to Speechmatics", "error", err)
+					log.Error(
+						"Failed to send final audio to Speechmatics",
+						"error",
+						err,
+					)
 				}
 			}
 			err = client.EndStream(seqNo)
@@ -316,7 +354,9 @@ func handleStreamWithTranscription(
 	var oggFile *os.File
 	var seqNo int
 	var lastPacketTime time.Time
-	silenceTimer := time.NewTicker(100 * time.Millisecond) // 100ms timer for checking silence
+	silenceTimer := time.NewTicker(
+		100 * time.Millisecond,
+	) // 100ms timer for checking silence
 	defer silenceTimer.Stop()
 
 	defer func() {
@@ -342,18 +382,29 @@ func handleStreamWithTranscription(
 				if buffer.Len() > 0 {
 					err = client.SendAudio(buffer.Bytes())
 					if err != nil {
-						log.Error("Failed to send final audio to Speechmatics", "error", err)
+						log.Error(
+							"Failed to send final audio to Speechmatics",
+							"error",
+							err,
+						)
 					}
 				}
 				err = client.EndStream(seqNo)
 				if err != nil {
-					log.Error("Failed to end Speechmatics stream", "error", err)
+					log.Error(
+						"Failed to end Speechmatics stream",
+						"error",
+						err,
+					)
 				}
 				return
 			}
 
 			if oggWriter == nil {
-				oggFilePath := filepath.Join(tmpDir, fmt.Sprintf("%d.ogg", packet.Ssrc))
+				oggFilePath := filepath.Join(
+					tmpDir,
+					fmt.Sprintf("%d.ogg", packet.Ssrc),
+				)
 				oggFile, err = os.Create(oggFilePath)
 				if err != nil {
 					log.Error("Failed to create Ogg file", "error", err)
@@ -396,7 +447,11 @@ func handleStreamWithTranscription(
 			err = client.SendAudio(buffer.Bytes())
 			log.Debug("Sent audio to Speechmatics", "bytes", buffer.Len())
 			if err != nil {
-				log.Error("Failed to send audio to Speechmatics", "error", err)
+				log.Error(
+					"Failed to send audio to Speechmatics",
+					"error",
+					err,
+				)
 				return
 			}
 			buffer.Reset()
@@ -414,9 +469,17 @@ func handleStreamWithTranscription(
 				}
 
 				err = client.SendAudio(buffer.Bytes())
-				log.Debug("Sent silence to Speechmatics", "bytes", buffer.Len())
+				log.Debug(
+					"Sent silence to Speechmatics",
+					"bytes",
+					buffer.Len(),
+				)
 				if err != nil {
-					log.Error("Failed to send silence to Speechmatics", "error", err)
+					log.Error(
+						"Failed to send silence to Speechmatics",
+						"error",
+						err,
+					)
 					return
 				}
 				buffer.Reset()
@@ -429,7 +492,11 @@ func handleStreamWithTranscription(
 			if buffer.Len() > 0 {
 				err = client.SendAudio(buffer.Bytes())
 				if err != nil {
-					log.Error("Failed to send final audio to Speechmatics", "error", err)
+					log.Error(
+						"Failed to send final audio to Speechmatics",
+						"error",
+						err,
+					)
 				}
 			}
 			err = client.EndStream(seqNo)
@@ -506,7 +573,7 @@ func handleStream(stream <-chan snd.OpusPacketNotification) {
 
 	// Print final summary when the stream ends
 	lastTime, _ := time.Parse(time.RFC3339, lastPacket.CreatedAt)
-	firstTime, _ := time.Parse(time.RFC3339, firstPacket.Create)
+	firstTime, _ := time.Parse(time.RFC3339, firstPacket.CreatedAt)
 	duration := lastTime.Sub(firstTime)
 	log.Info("Stream ended",
 		"ssrc", lastPacket.Ssrc,
