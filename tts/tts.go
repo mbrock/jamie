@@ -101,6 +101,7 @@ func handleStreamWithTranscriptionAndUI(
 	stream <-chan snd.OpusPacketNotification,
 	transcriptChan chan<- TranscriptMessage,
 	queries *db.Queries,
+	pool *pgxpool.Pool,
 ) {
 	log.Info("Starting handleStreamWithTranscriptionAndUI")
 
@@ -121,6 +122,12 @@ func handleStreamWithTranscriptionAndUI(
 	defer client.CloseWebSocket()
 
 	speechmaticsTranscriptChan, errChan := client.ReceiveTranscript(ctx)
+
+	transcriptionUpdateChan, err := snd.ListenForTranscriptionChanges(ctx, pool)
+	if err != nil {
+		log.Error("Failed to set up transcription change listener", "error", err)
+		return
+	}
 
 	var sessionID int64
 	var sessionStarted bool
@@ -166,10 +173,11 @@ func handleStreamWithTranscriptionAndUI(
 					transcript,
 					sessionID,
 					queries,
-					transcriptChan,
 				)
 			case err := <-errChan:
 				log.Error("Received error from Speechmatics", "error", err)
+			case update := <-transcriptionUpdateChan:
+				handleTranscriptionUpdate(ctx, update, queries, transcriptChan)
 			case <-ctx.Done():
 				return
 			}
@@ -344,7 +352,6 @@ func handleTranscript(
 	transcript speechmatics.RTTranscriptResponse,
 	sessionID int64,
 	queries *db.Queries,
-	transcriptChan chan<- TranscriptMessage,
 ) {
 	log.Info("Handling transcript", "isPartial", transcript.IsPartial())
 
@@ -365,7 +372,6 @@ func handleTranscript(
 		return
 	}
 
-	var words []TranscriptWord
 	for _, result := range transcript.Results {
 		wordID, err := queries.InsertTranscriptionWord(
 			ctx,
@@ -381,14 +387,6 @@ func handleTranscript(
 			continue
 		}
 
-		word := TranscriptWord{
-			StartTime:  result.StartTime,
-			EndTime:    result.EndTime,
-			IsEOS:      result.IsEOS,
-			Type:       result.Type,
-			AttachesTo: result.AttachesTo,
-		}
-
 		for _, alt := range result.Alternatives {
 			err = queries.InsertWordAlternative(
 				ctx,
@@ -401,25 +399,46 @@ func handleTranscript(
 			if err != nil {
 				log.Error("Failed to insert word alternative", "error", err)
 			}
-
-			word.Alternatives = append(word.Alternatives, Alternative{
-				Content:    alt.Content,
-				Confidence: alt.Confidence,
-			})
 		}
+	}
 
-		if len(word.Alternatives) > 0 {
-			word.Content = word.Alternatives[0].Content
-			word.Confidence = word.Alternatives[0].Confidence
+	log.Info(
+		"Processed transcript",
+		"segmentID", segmentID,
+		"wordCount", len(transcript.Results),
+		"isPartial", transcript.IsPartial(),
+	)
+}
+
+func handleTranscriptionUpdate(
+	ctx context.Context,
+	update snd.TranscriptionUpdate,
+	queries *db.Queries,
+	transcriptChan chan<- TranscriptMessage,
+) {
+	segment, err := queries.GetTranscriptSegment(ctx, update.ID)
+	if err != nil {
+		log.Error("Failed to fetch transcript segment", "error", err)
+		return
+	}
+
+	var words []TranscriptWord
+	for _, row := range segment {
+		word := TranscriptWord{
+			StartTime: float64(row.StartTime.Microseconds) / 1000000,
+			EndTime:   float64(row.StartTime.Microseconds+row.Duration.Microseconds) / 1000000,
+			IsEOS:     row.IsEos,
+			Content:   row.Content,
+			Confidence: row.Confidence,
 		}
-
 		words = append(words, word)
 	}
 
 	transcriptMessage := TranscriptMessage{
 		Words:     words,
-		IsPartial: transcript.IsPartial(),
+		IsPartial: !update.IsFinal,
 	}
+
 	select {
 	case transcriptChan <- transcriptMessage:
 	default:
@@ -428,10 +447,10 @@ func handleTranscript(
 
 	transcriptText := formatTranscriptWords(words)
 	log.Info(
-		"Processed transcript",
+		"Processed transcript update",
 		"text", transcriptText,
 		"wordCount", len(words),
-		"isPartial", transcript.IsPartial(),
+		"isPartial", !update.IsFinal,
 	)
 }
 

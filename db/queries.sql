@@ -126,3 +126,33 @@ RETURNING id;
 -- name: InsertWordAlternative :exec
 INSERT INTO word_alternatives (word_id, content, confidence)
 VALUES ($1, $2, $3);
+
+-- name: GetAllFinalTranscripts :many
+SELECT ts.id, ts.session_id, ts.is_final, tw.id as word_id, tw.start_time, tw.duration, tw.is_eos, wa.content, wa.confidence
+FROM transcription_segments ts
+JOIN transcription_words tw ON ts.id = tw.segment_id
+JOIN word_alternatives wa ON tw.id = wa.word_id
+WHERE ts.is_final = true
+ORDER BY ts.id, tw.id, wa.confidence DESC;
+
+-- name: GetLatestNonFinalTranscripts :many
+SELECT DISTINCT ON (ts.session_id) 
+    ts.id, ts.session_id, ts.is_final, tw.id as word_id, tw.start_time, tw.duration, tw.is_eos, wa.content, wa.confidence
+FROM transcription_segments ts
+JOIN transcription_words tw ON ts.id = tw.segment_id
+JOIN word_alternatives wa ON tw.id = wa.word_id
+WHERE ts.is_final = false
+ORDER BY ts.session_id, ts.id DESC, tw.id, wa.confidence DESC;
+
+-- name: GetTranscriptSegment :many
+SELECT ts.id, ts.session_id, ts.is_final, tw.id as word_id, tw.start_time, tw.duration, tw.is_eos, wa.content, wa.confidence
+FROM transcription_segments ts
+JOIN transcription_words tw ON ts.id = tw.segment_id
+JOIN word_alternatives wa ON tw.id = wa.word_id
+WHERE ts.id = $1
+ORDER BY tw.id, wa.confidence DESC;
+
+-- Create indexes for performance
+CREATE INDEX IF NOT EXISTS idx_transcription_segments_is_final ON transcription_segments(is_final);
+CREATE INDEX IF NOT EXISTS idx_transcription_words_segment_id ON transcription_words(segment_id);
+CREATE INDEX IF NOT EXISTS idx_word_alternatives_word_id ON word_alternatives(word_id);
