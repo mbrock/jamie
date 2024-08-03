@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS uploaded_files (
 );
 
 CREATE TABLE IF NOT EXISTS transcription_sessions (
-    id SERIAL PRIMARY KEY,
+    id BIGSERIAL PRIMARY KEY,
     ssrc BIGINT NOT NULL,
     start_time TIMESTAMPTZ NOT NULL,
     guild_id TEXT NOT NULL,
@@ -97,7 +97,7 @@ CREATE TABLE IF NOT EXISTS transcription_sessions (
 );
 
 CREATE TABLE IF NOT EXISTS transcription_segments (
-    id SERIAL PRIMARY KEY,
+    id BIGSERIAL PRIMARY KEY,
     session_id INTEGER NOT NULL REFERENCES transcription_sessions(id),
     is_final BOOLEAN NOT NULL,
     start_offset INTEGER NOT NULL,
@@ -106,7 +106,7 @@ CREATE TABLE IF NOT EXISTS transcription_segments (
 );
 
 CREATE TABLE IF NOT EXISTS transcription_words (
-    id SERIAL PRIMARY KEY,
+    id BIGSERIAL PRIMARY KEY,
     segment_id INTEGER NOT NULL REFERENCES transcription_segments(id),
     start_time INTERVAL NOT NULL,
     duration INTERVAL NOT NULL,
@@ -115,7 +115,7 @@ CREATE TABLE IF NOT EXISTS transcription_words (
 );
 
 CREATE TABLE IF NOT EXISTS word_alternatives (
-    id SERIAL PRIMARY KEY,
+    id BIGSERIAL PRIMARY KEY,
     word_id INTEGER NOT NULL REFERENCES transcription_words(id),
     content TEXT NOT NULL,
     confidence FLOAT NOT NULL,
