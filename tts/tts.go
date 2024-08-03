@@ -324,7 +324,6 @@ func handleTranscriptAndErrorsWithUI(
 				return
 			}
 			var words []TranscriptWord
-			var attachesTo string
 			for _, result := range transcript.Results {
 				if len(result.Alternatives) > 0 {
 					word := TranscriptWord{
@@ -335,9 +334,6 @@ func handleTranscriptAndErrorsWithUI(
 					}
 					words = append(words, word)
 				}
-				if result.AttachesTo != "" {
-					attachesTo = result.AttachesTo
-				}
 			}
 			if len(words) > 0 {
 				transcriptText := formatTranscriptWords(words)
@@ -345,12 +341,10 @@ func handleTranscriptAndErrorsWithUI(
 					"text", transcriptText,
 					"words", len(words),
 					"isPartial", transcript.IsPartial(),
-					"attachesTo", attachesTo,
 				)
 				uiChan <- TranscriptMessage{
-					Words:      words,
-					IsPartial:  transcript.IsPartial(),
-					AttachesTo: attachesTo,
+					Words:     words,
+					IsPartial: transcript.IsPartial(),
 				}
 			}
 		case err, ok := <-errChan:
@@ -390,9 +384,8 @@ type TranscriptWord struct {
 }
 
 type TranscriptMessage struct {
-	Words      []TranscriptWord
-	IsPartial  bool
-	AttachesTo string
+	Words     []TranscriptWord
+	IsPartial bool
 }
 
 func handleStreamWithTranscription(
