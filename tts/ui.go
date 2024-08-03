@@ -30,12 +30,14 @@ func (wb *WordBuilder) WriteWord(word TranscriptWord, style lipgloss.Style) {
 	}
 }
 
-func (wb *WordBuilder) AppendWords(words []TranscriptWord, bgColor lipgloss.Color) {
+func (wb *WordBuilder) AppendWords(words []TranscriptWord, color lipgloss.Color, isPartial bool) {
 	for _, word := range words {
-		color := getConfidenceColor(word.Confidence)
-		style := lipgloss.NewStyle().
-			Foreground(color).
-			Background(bgColor)
+		var style lipgloss.Style
+		if isPartial {
+			style = lipgloss.NewStyle().Foreground(color)
+		} else {
+			style = lipgloss.NewStyle().Foreground(getConfidenceColor(word.Confidence))
+		}
 		wb.WriteWord(word, style)
 	}
 }
@@ -171,10 +173,10 @@ func (m model) contentView() string {
 func (m model) transcriptView() string {
 	wb := &WordBuilder{}
 	for _, transcript := range m.finalTranscripts {
-		wb.AppendWords(transcript, lipgloss.Color("0")) // No background for final transcripts
+		wb.AppendWords(transcript, lipgloss.Color("0"), false) // No color change for final transcripts
 	}
 	if len(m.currentTranscript) > 0 {
-		wb.AppendWords(m.currentTranscript, lipgloss.Color("236")) // Dark gray background for current transcript
+		wb.AppendWords(m.currentTranscript, lipgloss.Color("240"), true) // Dark gray foreground for current transcript
 	}
 	return wb.String()
 }
