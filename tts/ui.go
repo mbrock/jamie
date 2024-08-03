@@ -75,7 +75,7 @@ type model struct {
 }
 
 func initialModel(transcripts chan TranscriptMessage) model {
-	return model{
+	m := model{
 		finalTranscripts:  [][]TranscriptWord{},
 		currentTranscript: []TranscriptWord{},
 		logEntries:        []string{},
@@ -83,10 +83,17 @@ func initialModel(transcripts chan TranscriptMessage) model {
 		transcripts:       transcripts,
 		showLog:           false,
 	}
+	return m
 }
 
 func (m model) Init() tea.Cmd {
-	return nil
+	return waitForTranscript(m.transcripts)
+}
+
+func waitForTranscript(transcripts chan TranscriptMessage) tea.Cmd {
+	return func() tea.Msg {
+		return <-transcripts
+	}
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -139,7 +146,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			formatTranscriptWords(msg.Words))
 		m.logEntries = append(m.logEntries, logEntry)
 
-		return m, nil
+		return m, waitForTranscript(m.transcripts)
 	}
 
 	m.viewport, cmd = m.viewport.Update(msg)
