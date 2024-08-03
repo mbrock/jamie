@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -100,28 +101,43 @@ func handleStreamWithTranscription(
 	var oggFile *os.File
 	var seqNo int
 
+	defer func() {
+		if oggFile != nil {
+			err := oggFile.Close()
+			if err != nil {
+				log.Error("Failed to close Ogg file", "error", err)
+			}
+		}
+		if oggWriter != nil {
+			err := oggWriter.Close()
+			if err != nil {
+				log.Error("Failed to close Ogg writer", "error", err)
+			}
+		}
+	}()
+
 	for packet := range stream {
 		if oggWriter == nil {
-			oggFilePath := filepath.Join(tmpDir, fmt.Sprintf("%d.ogg", packet.Ssrc))
+			oggFilePath := filepath.Join(
+				tmpDir,
+				fmt.Sprintf("%d.ogg", packet.Ssrc),
+			)
 			oggFile, err = os.Create(oggFilePath)
 			if err != nil {
 				log.Error("Failed to create Ogg file", "error", err)
 				return
 			}
-			defer oggFile.Close()
 
 			oggWriter, err = snd.NewOgg(
 				packet.Ssrc,
 				time.Now(),
 				time.Now().Add(24*time.Hour),
 				io.MultiWriter(oggFile, &buffer),
-				4096,
 			)
 			if err != nil {
 				log.Error("Failed to create Ogg writer", "error", err)
 				return
 			}
-			defer oggWriter.Close()
 
 			log.Info("Created Ogg file", "path", oggFilePath)
 		}
@@ -147,6 +163,7 @@ func handleStreamWithTranscription(
 
 		if buffer.Len() >= 4096 {
 			err = client.SendAudio(buffer.Bytes())
+			log.Info("Sent audio to Speechmatics", "bytes", buffer.Len())
 			if err != nil {
 				log.Error(
 					"Failed to send audio to Speechmatics",
