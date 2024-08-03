@@ -2,6 +2,7 @@ package tts
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -10,13 +11,13 @@ import (
 )
 
 type model struct {
-	viewport         viewport.Model
-	finalTranscripts [][]TranscriptWord
+	viewport          viewport.Model
+	finalTranscripts  [][]TranscriptWord
 	currentTranscript []TranscriptWord
-	logEntries       []string
-	ready            bool
-	transcripts      chan TranscriptMessage
-	showLog          bool
+	logEntries        []string
+	ready             bool
+	transcripts       chan TranscriptMessage
+	showLog           bool
 }
 
 func initialModel(transcripts chan TranscriptMessage) model {
@@ -148,29 +149,19 @@ func (m model) transcriptView() string {
 	var content strings.Builder
 	for _, transcript := range m.finalTranscripts {
 		content.WriteString(formatWords(transcript))
-		content.WriteString("\n")
 	}
 	if len(m.currentTranscript) > 0 {
+		s := content.String()
+		matched, err := regexp.MatchString(`\s$`, s)
+		if err != nil {
+			panic(err)
+		}
+		if !matched {
+			content.WriteString(" -- ")
+		}
 		content.WriteString(formatWords(m.currentTranscript))
 	}
 	return content.String()
-}
-
-func formatWords(words []TranscriptWord) string {
-	var line strings.Builder
-	for i, word := range words {
-		color := getConfidenceColor(word.Confidence)
-		if i > 0 && word.Type == "word" {
-			line.WriteString(" ")
-		}
-		line.WriteString(
-			lipgloss.NewStyle().Foreground(color).Render(word.Content),
-		)
-		if word.IsEOS {
-			line.WriteString("\n")
-		}
-	}
-	return strings.TrimSpace(line.String())
 }
 
 func (m model) logView() string {
@@ -184,19 +175,23 @@ func (m model) logView() string {
 
 func formatWords(words []TranscriptWord) string {
 	var line strings.Builder
-	for i, word := range words {
+	lastWasEOS := true
+	for _, word := range words {
 		color := getConfidenceColor(word.Confidence)
-		if i > 0 && word.Type == "word" {
+		if !lastWasEOS && word.Type == "word" {
 			line.WriteString(" ")
 		}
 		line.WriteString(
 			lipgloss.NewStyle().Foreground(color).Render(word.Content),
 		)
 		if word.IsEOS {
-			line.WriteString(" ")
+			line.WriteString("\n")
+			lastWasEOS = true
+		} else {
+			lastWasEOS = false
 		}
 	}
-	return strings.TrimSpace(line.String())
+	return line.String()
 }
 
 func getConfidenceColor(confidence float64) lipgloss.Color {
