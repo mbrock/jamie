@@ -148,14 +148,24 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Create a trigger for transcription_segments table
-CREATE TRIGGER transcription_segment_changed
-AFTER INSERT OR UPDATE ON transcription_segments
-FOR EACH ROW EXECUTE FUNCTION notify_transcription_change();
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'transcription_segment_changed') THEN
+        CREATE TRIGGER transcription_segment_changed
+        AFTER INSERT OR UPDATE ON transcription_segments
+        FOR EACH ROW EXECUTE FUNCTION notify_transcription_change();
+    END IF;
+END $$;
 
 -- Create a trigger for word_alternatives table
-CREATE TRIGGER word_alternative_changed
-AFTER INSERT OR UPDATE ON word_alternatives
-FOR EACH ROW EXECUTE FUNCTION notify_transcription_change();
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'word_alternative_changed') THEN
+        CREATE TRIGGER word_alternative_changed
+        AFTER INSERT OR UPDATE ON word_alternatives
+        FOR EACH ROW EXECUTE FUNCTION notify_transcription_change();
+    END IF;
+END $$;
 
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_transcription_segments_session_id ON transcription_segments(session_id);
