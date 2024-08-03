@@ -10,19 +10,17 @@ import (
 )
 
 type WordBuilder struct {
-	builder     strings.Builder
-	lastWasWord bool
-	lastWasEOS  bool
+	builder    strings.Builder
+	lastWasEOS bool
 }
 
 func (wb *WordBuilder) WriteWord(word TranscriptWord, style lipgloss.Style) {
-	if !wb.lastWasEOS && wb.lastWasWord && word.AttachesTo != "previous" {
+	if !wb.lastWasEOS && word.AttachesTo != "previous" {
 		wb.builder.WriteString(" ")
 	}
 
 	wb.builder.WriteString(style.Render(word.Content))
 
-	wb.lastWasWord = word.Type == "word"
 	wb.lastWasEOS = word.IsEOS
 
 	if word.IsEOS {
@@ -30,7 +28,11 @@ func (wb *WordBuilder) WriteWord(word TranscriptWord, style lipgloss.Style) {
 	}
 }
 
-func (wb *WordBuilder) AppendWords(words []TranscriptWord, color lipgloss.Color, isPartial bool) {
+func (wb *WordBuilder) AppendWords(
+	words []TranscriptWord,
+	color lipgloss.Color,
+	isPartial bool,
+) {
 	for _, word := range words {
 		var style lipgloss.Style
 		if isPartial {
@@ -171,12 +173,20 @@ func (m model) contentView() string {
 }
 
 func (m model) transcriptView() string {
-	wb := &WordBuilder{}
+	wb := &WordBuilder{lastWasEOS: true}
 	for _, transcript := range m.finalTranscripts {
-		wb.AppendWords(transcript, lipgloss.Color("0"), false) // No color change for final transcripts
+		wb.AppendWords(
+			transcript,
+			lipgloss.Color("0"),
+			false,
+		) // No color change for final transcripts
 	}
 	if len(m.currentTranscript) > 0 {
-		wb.AppendWords(m.currentTranscript, lipgloss.Color("240"), true) // Dark gray foreground for current transcript
+		wb.AppendWords(
+			m.currentTranscript,
+			lipgloss.Color("240"),
+			true,
+		) // Dark gray foreground for current transcript
 	}
 	return wb.String()
 }
