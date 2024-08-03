@@ -171,10 +171,10 @@ func (m model) contentView() string {
 func (m model) transcriptView() string {
 	wb := &WordBuilder{}
 	for _, transcript := range m.finalTranscripts {
-		formatWords(wb, transcript, lipgloss.Color("0")) // No background for final transcripts
+		wb.AppendWords(transcript, lipgloss.Color("0")) // No background for final transcripts
 	}
 	if len(m.currentTranscript) > 0 {
-		formatWords(wb, m.currentTranscript, lipgloss.Color("236")) // Dark gray background for current transcript
+		wb.AppendWords(m.currentTranscript, lipgloss.Color("236")) // Dark gray background for current transcript
 	}
 	return wb.String()
 }
@@ -186,16 +186,6 @@ func (m model) logView() string {
 		content.WriteString("\n")
 	}
 	return content.String()
-}
-
-func formatWords(wb *WordBuilder, words []TranscriptWord, bgColor lipgloss.Color) {
-	for _, word := range words {
-		color := getConfidenceColor(word.Confidence)
-		style := lipgloss.NewStyle().
-			Foreground(color).
-			Background(bgColor)
-		wb.WriteWord(word, style)
-	}
 }
 
 func getConfidenceColor(confidence float64) lipgloss.Color {
