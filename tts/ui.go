@@ -156,7 +156,7 @@ func (m model) transcriptView() string {
 		if err != nil {
 			panic(err)
 		}
-		if !matched {
+		if !matched && len(m.currentTranscript) > 0 && m.currentTranscript[0].Type == "word" {
 			content.WriteString(" -- ")
 		}
 		content.WriteString(formatWords(m.currentTranscript))
