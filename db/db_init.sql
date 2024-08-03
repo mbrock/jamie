@@ -100,6 +100,7 @@ CREATE TABLE IF NOT EXISTS transcription_segments (
     id BIGSERIAL PRIMARY KEY,
     session_id BIGINT NOT NULL REFERENCES transcription_sessions(id),
     is_final BOOLEAN NOT NULL,
+    version INT NOT NULL DEFAULT 1,
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -123,28 +124,13 @@ CREATE TABLE IF NOT EXISTS word_alternatives (
 
 -- Create a function to notify about transcription changes
 CREATE OR REPLACE FUNCTION notify_transcription_change() RETURNS TRIGGER AS $$
-DECLARE
-    segment_id BIGINT;
-    session_id BIGINT;
-    is_final BOOLEAN;
 BEGIN
-    IF TG_TABLE_NAME = 'transcription_segments' THEN
-        segment_id := NEW.id;
-        session_id := NEW.session_id;
-        is_final := NEW.is_final;
-    ELSIF TG_TABLE_NAME = 'word_alternatives' THEN
-        SELECT tw.segment_id, ts.session_id, ts.is_final
-        INTO segment_id, session_id, is_final
-        FROM transcription_words tw
-        JOIN transcription_segments ts ON tw.segment_id = ts.id
-        WHERE tw.id = NEW.word_id;
-    END IF;
-
     PERFORM pg_notify('transcription_change', json_build_object(
         'operation', TG_OP,
-        'id', segment_id,
-        'session_id', session_id,
-        'is_final', is_final
+        'id', NEW.id,
+        'session_id', NEW.session_id,
+        'is_final', NEW.is_final,
+        'version', NEW.version
     )::text);
     RETURN NEW;
 END;
@@ -160,15 +146,6 @@ BEGIN
     END IF;
 END $$;
 
--- Create a trigger for word_alternatives table
-DO $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'word_alternative_changed') THEN
-        CREATE TRIGGER word_alternative_changed
-        AFTER INSERT OR UPDATE ON word_alternatives
-        FOR EACH ROW EXECUTE FUNCTION notify_transcription_change();
-    END IF;
-END $$;
 
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_transcription_segments_session_id ON transcription_segments(session_id);
@@ -193,7 +170,7 @@ DECLARE
     v_current_version INT;
 BEGIN
     -- Check if the last segment is final
-    SELECT ts.id INTO v_segment_id
+    SELECT ts.id, ts.version INTO v_segment_id, v_current_version
     FROM transcription_segments ts
     WHERE ts.session_id = p_session_id
     ORDER BY ts.id DESC
@@ -201,22 +178,15 @@ BEGIN
 
     IF v_segment_id IS NULL OR (SELECT ts.is_final FROM transcription_segments ts WHERE ts.id = v_segment_id) THEN
         -- Insert a new segment
-        INSERT INTO transcription_segments (session_id, is_final)
-        VALUES (p_session_id, p_is_final)
-        RETURNING id INTO v_segment_id;
-        v_current_version := 1;
+        INSERT INTO transcription_segments (session_id, is_final, version)
+        VALUES (p_session_id, p_is_final, 1)
+        RETURNING id, version INTO v_segment_id, v_current_version;
     ELSE
         -- Update the existing segment
         UPDATE transcription_segments ts
-        SET is_final = p_is_final
-        WHERE ts.id = v_segment_id;
-
-        -- Get the current max version for this segment
-        SELECT COALESCE(MAX(tw.version), 0) + 1 INTO v_current_version
-        FROM transcription_words tw
-        WHERE tw.segment_id = v_segment_id;
-
-        -- If it's not a final segment, we don't delete existing words, just add new ones with a new version
+        SET is_final = p_is_final, version = ts.version + 1
+        WHERE ts.id = v_segment_id
+        RETURNING version INTO v_current_version;
     END IF;
 
     RETURN QUERY SELECT v_segment_id AS segment_id, v_current_version AS version;
