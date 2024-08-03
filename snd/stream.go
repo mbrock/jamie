@@ -49,6 +49,15 @@ func (c *SSRCUserIDCache) Get(ssrc int64) (string, error) {
 	return dbUserID, nil
 }
 
+func getUserIDFromCache(cache *SSRCUserIDCache, ssrc int64) string {
+	userID, err := cache.Get(ssrc)
+	if err != nil {
+		log.Error("Error looking up user ID in database", "error", err)
+		return ""
+	}
+	return userID
+}
+
 type OpusPacketNotification struct {
 	ID        int64  `json:"id"`
 	GuildID   string `json:"guild_id"`
@@ -90,12 +99,7 @@ func StreamOpusPackets(
 				continue
 			}
 
-			userID, err := cache.Get(packet.Ssrc)
-			if err != nil {
-				log.Error("Error looking up user ID in database", "error", err)
-			} else if userID != "" {
-				packet.UserID = userID
-			}
+			packet.UserID = getUserIDFromCache(cache, packet.Ssrc)
 
 			select {
 			case packetChan <- packet:
@@ -141,14 +145,9 @@ func DemuxOpusPackets(
 					outputChan <- streamChan
 
 					// Log the new stream with UserID from cache
-					if userID, ok := cache.Get(packet.Ssrc); ok {
-						log.Info(
-							"New stream started",
-							"ssrc",
-							packet.Ssrc,
-							"userID",
-							userID,
-						)
+					userID := getUserIDFromCache(cache, packet.Ssrc)
+					if userID != "" {
+						log.Info("New stream started", "ssrc", packet.Ssrc, "userID", userID)
 					} else {
 						log.Info("New stream started", "ssrc", packet.Ssrc, "userID", "unknown")
 					}
