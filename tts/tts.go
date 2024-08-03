@@ -18,7 +18,7 @@ var StreamCmd = &cobra.Command{
 }
 
 func runStream(cmd *cobra.Command, args []string) {
-	sqlDB, _, err := db.OpenDatabase()
+	sqlDB, queries, err := db.OpenDatabase()
 	if err != nil {
 		log.Fatal("Failed to open database", "error", err)
 	}
