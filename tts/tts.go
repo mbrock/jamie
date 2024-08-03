@@ -345,7 +345,7 @@ func handleTranscriptAndErrorsWithUI(
 				uiChan <- TranscriptMessage{
 					Words:      words,
 					IsPartial:  transcript.IsPartial(),
-					AttachesTo: transcript.AttachesTo,
+					AttachesTo: transcript.Results[0].AttachesTo,
 				}
 			}
 		case err, ok := <-errChan:

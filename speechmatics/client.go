@@ -67,15 +67,15 @@ type EndOfStreamMessage struct {
 }
 
 type RTTranscriptResponse struct {
-	Message    string `json:"message"`
-	AttachesTo string `json:"attaches_to,omitempty"`
-	Results    []struct {
+	Message string `json:"message"`
+	Results []struct {
 		Alternatives []struct {
 			Confidence float64 `json:"confidence"`
 			Content    string  `json:"content"`
 		} `json:"alternatives"`
-		StartTime float64 `json:"start_time"`
-		EndTime   float64 `json:"end_time"`
+		StartTime  float64 `json:"start_time"`
+		EndTime    float64 `json:"end_time"`
+		AttachesTo string  `json:"attaches_to,omitempty"`
 		Type      string  `json:"type"`
 	} `json:"results"`
 }
