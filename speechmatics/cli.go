@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
 var (
@@ -412,7 +413,7 @@ func splitAudioFile(inputFile, outputFile string, startTime, endTime float64) er
 }
 
 func init() {
-	RootCmd.PersistentFlags().StringVar(&apiKey, "api-key", os.Getenv("SPEECHMATICS_API_KEY"), "Speechmatics API key")
+	RootCmd.PersistentFlags().StringVar(&apiKey, "api-key", viper.GetString("SPEECHMATICS_API_KEY"), "Speechmatics API key")
 
 	submitTranscriptionCmd.Flags().StringVar(&audioFile, "audio", "", "Path to the audio file")
 	submitTranscriptionCmd.Flags().StringVar(&language, "language", "en", "Language of the audio")

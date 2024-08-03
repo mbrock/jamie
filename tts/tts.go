@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"github.com/spf13/viper"
 	"path/filepath"
 	"strings"
 	"time"
@@ -15,6 +14,7 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"node.town/db"
 	"node.town/snd"
 	"node.town/speechmatics"
@@ -547,7 +547,7 @@ func handleStreamWithTranscription(
 	ctx context.Context,
 	stream <-chan snd.OpusPacketNotification,
 ) {
-	client := speechmatics.NewClient(os.Getenv("SPEECHMATICS_API_KEY"))
+	client := speechmatics.NewClient(viper.GetString("SPEECHMATICS_API_KEY"))
 	config := speechmatics.TranscriptionConfig{
 		Language:       "en",
 		EnablePartials: true,
