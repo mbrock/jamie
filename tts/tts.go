@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"node.town/db"
 	"node.town/snd"
@@ -33,7 +32,7 @@ func init() {
 func runStream(cmd *cobra.Command, args []string) {
 	sqlDB, queries, err := db.OpenDatabase()
 	if err != nil {
-		log.Fatal("Failed to open database", "error", err)
+		getLogger().Fatal("Failed to open database", "error", err)
 	}
 	defer sqlDB.Close(context.Background())
 
@@ -42,29 +41,34 @@ func runStream(cmd *cobra.Command, args []string) {
 
 	packetChan, ssrcCache, err := snd.StreamOpusPackets(ctx, sqlDB, queries)
 	if err != nil {
-		log.Fatal("Error setting up opus packet stream", "error", err)
+		getLogger().Fatal("Error setting up opus packet stream", "error", err)
 	}
 
 	streamChan := snd.DemuxOpusPackets(ctx, packetChan, ssrcCache)
 
-	log.Info(
-		"Listening for demuxed Opus packet streams. Press CTRL-C to exit.",
-	)
-
 	transcribe, _ := cmd.Flags().GetBool("transcribe")
 	useUI, _ := cmd.Flags().GetBool("ui")
 
+	if useUI {
+		initFileLogger()
+		defer closeFileLogger()
+	}
+
+	getLogger().Info(
+		"Listening for demuxed Opus packet streams. Press CTRL-C to exit.",
+	)
+
 	if transcribe {
-		log.Info("Real-time transcription enabled")
+		getLogger().Info("Real-time transcription enabled")
 	}
 
 	if useUI {
-		log.Info("UI enabled")
+		getLogger().Info("UI enabled")
 		transcriptChan := make(chan string, 100)
 		go func() {
 			err := StartUI(transcriptChan)
 			if err != nil {
-				log.Error("UI error", "error", err)
+				getLogger().Error("UI error", "error", err)
 			}
 		}()
 
@@ -109,7 +113,7 @@ func handleStreamWithTranscriptionAndUI(
 
 	err := client.ConnectWebSocket(ctx, config, audioFormat)
 	if err != nil {
-		log.Error("Failed to connect to Speechmatics WebSocket", "error", err)
+		getLogger().Error("Failed to connect to Speechmatics WebSocket", "error", err)
 		return
 	}
 	defer client.CloseWebSocket()
@@ -125,7 +129,7 @@ func handleStreamWithTranscriptionAndUI(
 
 	tmpDir := "tmp"
 	if err := os.MkdirAll(tmpDir, 0755); err != nil {
-		log.Error("Failed to create tmp directory", "error", err)
+		getLogger().Error("Failed to create tmp directory", "error", err)
 		return
 	}
 
@@ -143,13 +147,13 @@ func handleStreamWithTranscriptionAndUI(
 		if oggFile != nil {
 			err := oggFile.Close()
 			if err != nil {
-				log.Error("Failed to close Ogg file", "error", err)
+				getLogger().Error("Failed to close Ogg file", "error", err)
 			}
 		}
 		if oggWriter != nil {
 			err := oggWriter.Close()
 			if err != nil {
-				log.Error("Failed to close Ogg writer", "error", err)
+				getLogger().Error("Failed to close Ogg writer", "error", err)
 			}
 		}
 	}()
@@ -207,7 +211,7 @@ func handleStreamWithTranscriptionAndUI(
 
 			createdAt, err := time.Parse(time.RFC3339Nano, packet.CreatedAt)
 			if err != nil {
-				log.Error("Failed to parse createdAt", "error", err)
+				getLogger().Error("Failed to parse createdAt", "error", err)
 				continue
 			}
 			opusPacket := snd.OpusPacket{
@@ -225,9 +229,9 @@ func handleStreamWithTranscriptionAndUI(
 			}
 
 			err = client.SendAudio(buffer.Bytes())
-			log.Debug("Sent audio to Speechmatics", "bytes", buffer.Len())
+			getLogger().Debug("Sent audio to Speechmatics", "bytes", buffer.Len())
 			if err != nil {
-				log.Error(
+				getLogger().Error(
 					"Failed to send audio to Speechmatics",
 					"error",
 					err,
@@ -249,13 +253,13 @@ func handleStreamWithTranscriptionAndUI(
 				}
 
 				err = client.SendAudio(buffer.Bytes())
-				log.Debug(
+				getLogger().Debug(
 					"Sent silence to Speechmatics",
 					"bytes",
 					buffer.Len(),
 				)
 				if err != nil {
-					log.Error(
+					getLogger().Error(
 						"Failed to send silence to Speechmatics",
 						"error",
 						err,
@@ -272,7 +276,7 @@ func handleStreamWithTranscriptionAndUI(
 			if buffer.Len() > 0 {
 				err = client.SendAudio(buffer.Bytes())
 				if err != nil {
-					log.Error(
+					getLogger().Error(
 						"Failed to send final audio to Speechmatics",
 						"error",
 						err,
@@ -281,7 +285,7 @@ func handleStreamWithTranscriptionAndUI(
 			}
 			err = client.EndStream(seqNo)
 			if err != nil {
-				log.Error("Failed to end Speechmatics stream", "error", err)
+				getLogger().Error("Failed to end Speechmatics stream", "error", err)
 			}
 			return
 		}
@@ -303,7 +307,7 @@ func handleTranscriptAndErrorsWithUI(
 			for _, result := range transcript.Results {
 				if len(result.Alternatives) > 0 {
 					text := result.Alternatives[0].Content
-					log.Info("Transcription", "text", text)
+					getLogger().Info("Transcription", "text", text)
 					uiChan <- text
 				}
 			}
@@ -311,7 +315,7 @@ func handleTranscriptAndErrorsWithUI(
 			if !ok {
 				return
 			}
-			log.Error("Transcription error", "error", err)
+			getLogger().Error("Transcription error", "error", err)
 			uiChan <- fmt.Sprintf("Error: %v", err)
 		case <-ctx.Done():
 			return
@@ -521,7 +525,7 @@ func handleTranscriptAndErrors(
 			}
 			for _, result := range transcript.Results {
 				if len(result.Alternatives) > 0 {
-					log.Info(
+					getLogger().Info(
 						"Transcription",
 						"text",
 						result.Alternatives[0].Content,
@@ -532,7 +536,7 @@ func handleTranscriptAndErrors(
 			if !ok {
 				return
 			}
-			log.Error("Transcription error", "error", err)
+			getLogger().Error("Transcription error", "error", err)
 		case <-ctx.Done():
 			return
 		}
@@ -559,7 +563,7 @@ func handleStream(stream <-chan snd.OpusPacketNotification) {
 			)
 			lastTime, _ := time.Parse(time.RFC3339Nano, lastPacket.CreatedAt)
 			duration := lastTime.Sub(firstTime)
-			log.Info("Stream info",
+			getLogger().Info("Stream info",
 				"ssrc", packet.Ssrc,
 				"packets", packetCount,
 				"duration", duration.Round(time.Second),
@@ -575,7 +579,7 @@ func handleStream(stream <-chan snd.OpusPacketNotification) {
 	lastTime, _ := time.Parse(time.RFC3339, lastPacket.CreatedAt)
 	firstTime, _ := time.Parse(time.RFC3339, firstPacket.CreatedAt)
 	duration := lastTime.Sub(firstTime)
-	log.Info("Stream ended",
+	getLogger().Info("Stream ended",
 		"ssrc", lastPacket.Ssrc,
 		"total_packets", packetCount,
 		"total_duration", duration.Round(time.Second),
