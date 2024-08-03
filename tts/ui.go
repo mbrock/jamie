@@ -147,23 +147,17 @@ func (m model) contentView() string {
 
 func (m model) transcriptView() string {
 	var content strings.Builder
-	for _, transcript := range m.finalTranscripts {
+	for i, transcript := range m.finalTranscripts {
+		if i > 0 && len(transcript) > 0 && transcript[0].AttachesTo != "previous" {
+			content.WriteString("\n")
+		}
 		content.WriteString(
 			formatWords(transcript, lipgloss.Color("0")),
 		) // No background for final transcripts
 	}
 	if len(m.currentTranscript) > 0 {
-		s := content.String()
-		if len(m.finalTranscripts) > 0 {
-			matched, err := regexp.MatchString(`\w$`, s)
-			if err != nil {
-				panic(err)
-			}
-
-			if matched && len(m.currentTranscript) > 0 &&
-				m.currentTranscript[0].Type == "word" {
-				content.WriteString(" -- ")
-			}
+		if len(m.finalTranscripts) > 0 && m.currentTranscript[0].AttachesTo != "previous" {
+			content.WriteString("\n")
 		}
 		content.WriteString(
 			formatWords(m.currentTranscript, lipgloss.Color("236")),
@@ -183,27 +177,24 @@ func (m model) logView() string {
 
 func formatWords(words []TranscriptWord, bgColor lipgloss.Color) string {
 	var line strings.Builder
-	lastWasEOS := true
-	for _, word := range words {
+	for i, word := range words {
 		color := getConfidenceColor(word.Confidence)
-		if !lastWasEOS && word.Type == "word" {
-			line.WriteString(" ")
-		}
 		style := lipgloss.NewStyle().
 			Foreground(color).
 			Background(bgColor)
-		
+
 		if word.AttachesTo == "previous" {
 			style = style.Underline(true)
 		}
-		
+
+		if i > 0 && word.Type == "word" && word.AttachesTo != "previous" {
+			line.WriteString(" ")
+		}
+
 		line.WriteString(style.Render(word.Content))
-		
+
 		if word.IsEOS {
 			line.WriteString("\n")
-			lastWasEOS = true
-		} else {
-			lastWasEOS = false
 		}
 	}
 	return line.String()
