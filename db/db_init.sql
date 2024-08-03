@@ -194,14 +194,14 @@ BEGIN
         v_current_version := 1;
     ELSE
         -- Update the existing segment
-        UPDATE transcription_segments
+        UPDATE transcription_segments ts
         SET is_final = p_is_final
-        WHERE id = v_segment_id;
+        WHERE ts.id = v_segment_id;
 
         -- Get the current max version for this segment
-        SELECT COALESCE(MAX(version), 0) + 1 INTO v_current_version
-        FROM transcription_words
-        WHERE segment_id = v_segment_id;
+        SELECT COALESCE(MAX(tw.version), 0) + 1 INTO v_current_version
+        FROM transcription_words tw
+        WHERE tw.segment_id = v_segment_id;
 
         -- If it's not a final segment, we don't delete existing words, just add new ones with a new version
     END IF;
