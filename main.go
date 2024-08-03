@@ -119,7 +119,7 @@ var listenPacketsCmd = &cobra.Command{
 		ctx := context.Background()
 		defer sqlDB.Close(ctx)
 
-		packetChan, err := snd.StreamOpusPackets(ctx, sqlDB)
+		packetChan, _, err := snd.StreamOpusPackets(ctx, sqlDB)
 		if err != nil {
 			log.Fatal("Error setting up opus packet stream", "error", err)
 		}
