@@ -117,6 +117,26 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 	return nil
 }
 
+func (o *Ogg) WriteSilence(duration time.Duration) error {
+	silentFrames := int(duration / (20 * time.Millisecond))
+	for i := 0; i < silentFrames; i++ {
+		o.sequenceNumber++
+		o.segmentNumber++
+		silentPacket := createRTPPacket(
+			o.sequenceNumber,
+			o.segmentNumber*960,
+			uint32(o.ssrc),
+			[]byte{0xf8, 0xff, 0xfe}, // Silent Opus packet
+		)
+		if err := o.oggWriter.WriteRTP(silentPacket); err != nil {
+			return fmt.Errorf("error writing silent RTP packet: %w", err)
+		}
+	}
+	o.lastTimestamp = o.lastTimestamp.Add(duration)
+	o.packetCount += silentFrames
+	return nil
+}
+
 func (o *Ogg) addInitialSilence(createdAt time.Time) {
 	createdAtUTC := createdAt
 	startTimeUTC := o.startTime

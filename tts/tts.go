@@ -101,7 +101,7 @@ func handleStreamWithTranscription(
 	var oggFile *os.File
 	var seqNo int
 	var lastPacketTime time.Time
-	silenceTimer := time.NewTicker(20 * time.Millisecond) // 20ms timer for silence packets
+	silenceTimer := time.NewTicker(100 * time.Millisecond) // 100ms timer for checking silence
 	defer silenceTimer.Stop()
 
 	defer func() {
@@ -190,30 +190,23 @@ func handleStreamWithTranscription(
 			lastPacketTime = time.Now()
 
 		case <-silenceTimer.C:
-			if time.Since(lastPacketTime) >= 20*time.Millisecond {
-				// Send a silent packet
-				silentPacket := snd.OpusPacket{
-					ID:        -1, // Use a special ID for silent packets
-					Sequence:  0,  // The Ogg writer will handle the sequence
-					Timestamp: 0,  // The Ogg writer will handle the timestamp
-					CreatedAt: time.Now(),
-					OpusData:  []byte{0xf8, 0xff, 0xfe}, // Silent Opus packet
-				}
-				err = oggWriter.WritePacket(silentPacket)
+			if time.Since(lastPacketTime) >= 100*time.Millisecond {
+				// Poke the Ogg writer to handle silence
+				err = oggWriter.WriteSilence(time.Since(lastPacketTime))
 				if err != nil {
-					log.Error("Failed to write silent packet to Ogg", "error", err)
+					log.Error("Failed to write silence to Ogg", "error", err)
 					return
 				}
 
 				err = client.SendAudio(buffer.Bytes())
-				log.Debug("Sent silent packet to Speechmatics", "bytes", buffer.Len())
+				log.Debug("Sent silence to Speechmatics", "bytes", buffer.Len())
 				if err != nil {
-					log.Error("Failed to send silent audio to Speechmatics", "error", err)
+					log.Error("Failed to send silence to Speechmatics", "error", err)
 					return
 				}
 				buffer.Reset()
 
-				seqNo++
+				lastPacketTime = time.Now()
 			}
 
 		case <-ctx.Done():
