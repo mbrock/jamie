@@ -98,3 +98,51 @@ VALUES ($1, $2, $3);
 
 -- name: GetUserIDBySSRC :one
 SELECT user_id FROM ssrc_mappings WHERE ssrc = $1 LIMIT 1;
+
+-- name: InsertTranscriptionSession :one
+INSERT INTO transcription_sessions (ssrc, start_time, guild_id, channel_id, user_id)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id;
+
+-- name: UpsertTranscriptionSegment :one
+CREATE OR REPLACE FUNCTION upsert_transcription_segment(
+    p_session_id BIGINT,
+    p_is_final BOOLEAN,
+    p_start_offset INT,
+    p_end_offset INT
+) RETURNS BIGINT AS $$
+DECLARE
+    v_segment_id BIGINT;
+BEGIN
+    -- Check if the last segment is final
+    SELECT id INTO v_segment_id
+    FROM transcription_segments
+    WHERE session_id = p_session_id
+    ORDER BY id DESC
+    LIMIT 1;
+
+    IF v_segment_id IS NULL OR (SELECT is_final FROM transcription_segments WHERE id = v_segment_id) THEN
+        -- Insert a new segment
+        INSERT INTO transcription_segments (session_id, is_final, start_offset, end_offset)
+        VALUES (p_session_id, p_is_final, p_start_offset, p_end_offset)
+        RETURNING id INTO v_segment_id;
+    ELSE
+        -- Update the existing segment
+        UPDATE transcription_segments
+        SET end_offset = p_end_offset,
+            is_final = p_is_final
+        WHERE id = v_segment_id;
+    END IF;
+
+    RETURN v_segment_id;
+END;
+$$ LANGUAGE plpgsql;
+
+-- name: InsertTranscriptionWord :one
+INSERT INTO transcription_words (segment_id, offset, duration, is_eos)
+VALUES ($1, $2, $3, $4)
+RETURNING id;
+
+-- name: InsertWordAlternative :exec
+INSERT INTO word_alternatives (word_id, content, confidence)
+VALUES ($1, $2, $3);

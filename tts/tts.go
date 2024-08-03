@@ -122,7 +122,10 @@ func handleStreamWithTranscriptionAndUI(
 	ctx context.Context,
 	stream <-chan snd.OpusPacketNotification,
 	transcriptChan chan<- TranscriptMessage,
+	queries *db.Queries,
 ) {
+	log.Info("Starting handleStreamWithTranscriptionAndUI")
+
 	client := speechmatics.NewClient(os.Getenv("SPEECHMATICS_API_KEY"))
 	config := speechmatics.TranscriptionConfig{
 		Language:       "en",
@@ -141,12 +144,9 @@ func handleStreamWithTranscriptionAndUI(
 
 	speechmaticsTranscriptChan, errChan := client.ReceiveTranscript(ctx)
 
-	go handleTranscriptAndErrorsWithUI(
-		ctx,
-		speechmaticsTranscriptChan,
-		errChan,
-		transcriptChan,
-	)
+	var sessionID int64
+	var firstPacket snd.OpusPacketNotification
+	var sessionStarted bool
 
 	tmpDir := "tmp"
 	if err := os.MkdirAll(tmpDir, 0755); err != nil {
@@ -159,9 +159,7 @@ func handleStreamWithTranscriptionAndUI(
 	var oggFile *os.File
 	var seqNo int
 	var lastPacketTime time.Time
-	silenceTimer := time.NewTicker(
-		100 * time.Millisecond,
-	) // 100ms timer for checking silence
+	silenceTimer := time.NewTicker(100 * time.Millisecond)
 	defer silenceTimer.Stop()
 
 	defer func() {
@@ -179,37 +177,59 @@ func handleStreamWithTranscriptionAndUI(
 		}
 	}()
 
+	go func() {
+		for {
+			select {
+			case transcript, ok := <-speechmaticsTranscriptChan:
+				if !ok {
+					return
+				}
+				handleTranscript(ctx, transcript, sessionID, queries, transcriptChan)
+			case err := <-errChan:
+				log.Error("Received error from Speechmatics", "error", err)
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
 	for {
 		select {
 		case packet, ok := <-stream:
 			if !ok {
-				// Stream closed, end the transcription
+				log.Info("Stream closed, ending transcription")
 				if buffer.Len() > 0 {
 					err = client.SendAudio(buffer.Bytes())
 					if err != nil {
-						log.Error(
-							"Failed to send final audio to Speechmatics",
-							"error",
-							err,
-						)
+						log.Error("Failed to send final audio to Speechmatics", "error", err)
 					}
 				}
 				err = client.EndStream(seqNo)
 				if err != nil {
-					log.Error(
-						"Failed to end Speechmatics stream",
-						"error",
-						err,
-					)
+					log.Error("Failed to end Speechmatics stream", "error", err)
 				}
 				return
 			}
 
+			if !sessionStarted {
+				firstPacket = packet
+				sessionID, err = queries.InsertTranscriptionSession(ctx, db.InsertTranscriptionSessionParams{
+					Ssrc:      packet.Ssrc,
+					StartTime: time.Now(),
+					GuildID:   packet.GuildID,
+					ChannelID: packet.ChannelID,
+					UserID:    packet.UserID,
+				})
+				if err != nil {
+					log.Error("Failed to insert transcription session", "error", err)
+					return
+				}
+				log.Info("Inserted transcription session", "sessionID", sessionID)
+				sessionStarted = true
+			}
+
 			if oggWriter == nil {
-				oggFilePath := filepath.Join(
-					tmpDir,
-					fmt.Sprintf("%d.ogg", packet.Ssrc),
-				)
+				oggFilePath := filepath.Join(tmpDir, fmt.Sprintf("%d.ogg", packet.Ssrc))
 				oggFile, err = os.Create(oggFilePath)
 				if err != nil {
 					log.Error("Failed to create Ogg file", "error", err)
@@ -252,11 +272,7 @@ func handleStreamWithTranscriptionAndUI(
 			err = client.SendAudio(buffer.Bytes())
 			log.Debug("Sent audio to Speechmatics", "bytes", buffer.Len())
 			if err != nil {
-				log.Error(
-					"Failed to send audio to Speechmatics",
-					"error",
-					err,
-				)
+				log.Error("Failed to send audio to Speechmatics", "error", err)
 				return
 			}
 			buffer.Reset()
@@ -266,7 +282,6 @@ func handleStreamWithTranscriptionAndUI(
 
 		case <-silenceTimer.C:
 			if time.Since(lastPacketTime) >= 100*time.Millisecond {
-				// Poke the Ogg writer to handle silence
 				err = oggWriter.WriteSilence(time.Since(lastPacketTime))
 				if err != nil {
 					log.Error("Failed to write silence to Ogg", "error", err)
@@ -274,17 +289,9 @@ func handleStreamWithTranscriptionAndUI(
 				}
 
 				err = client.SendAudio(buffer.Bytes())
-				log.Debug(
-					"Sent silence to Speechmatics",
-					"bytes",
-					buffer.Len(),
-				)
+				log.Debug("Sent silence to Speechmatics", "bytes", buffer.Len())
 				if err != nil {
-					log.Error(
-						"Failed to send silence to Speechmatics",
-						"error",
-						err,
-					)
+					log.Error("Failed to send silence to Speechmatics", "error", err)
 					return
 				}
 				buffer.Reset()
@@ -293,15 +300,11 @@ func handleStreamWithTranscriptionAndUI(
 			}
 
 		case <-ctx.Done():
-			// Context cancelled, end the transcription
+			log.Info("Context cancelled, ending transcription")
 			if buffer.Len() > 0 {
 				err = client.SendAudio(buffer.Bytes())
 				if err != nil {
-					log.Error(
-						"Failed to send final audio to Speechmatics",
-						"error",
-						err,
-					)
+					log.Error("Failed to send final audio to Speechmatics", "error", err)
 				}
 			}
 			err = client.EndStream(seqNo)
@@ -311,6 +314,78 @@ func handleStreamWithTranscriptionAndUI(
 			return
 		}
 	}
+}
+
+func handleTranscript(ctx context.Context, transcript speechmatics.RTTranscriptResponse, sessionID int64, queries *db.Queries, transcriptChan chan<- TranscriptMessage) {
+	log.Info("Handling transcript", "isPartial", transcript.IsPartial())
+
+	if len(transcript.Results) == 0 {
+		log.Warn("Received empty transcript")
+		return
+	}
+
+	segmentID, err := queries.UpsertTranscriptionSegment(ctx, db.UpsertTranscriptionSegmentParams{
+		SessionID:   sessionID,
+		IsF:         !transcript.IsPartial(),
+		StartOffset: int32(transcript.Results[0].StartTime * 1000),
+		EndOffset:   int32(transcript.Results[len(transcript.Results)-1].EndTime * 1000),
+	})
+	if err != nil {
+		log.Error("Failed to upsert transcription segment", "error", err)
+		return
+	}
+
+	var words []TranscriptWord
+	for _, result := range transcript.Results {
+		wordID, err := queries.InsertTranscriptionWord(ctx, db.InsertTranscriptionWordParams{
+			SegmentID: segmentID,
+			Offset:    int32(result.StartTime * 1000),
+			Duration:  int32((result.EndTime - result.StartTime) * 1000),
+			IsEos:     result.IsEOS,
+		})
+		if err != nil {
+			log.Error("Failed to insert transcription word", "error", err)
+			continue
+		}
+
+		word := TranscriptWord{
+			StartTime:  result.StartTime,
+			EndTime:    result.EndTime,
+			IsEOS:      result.IsEOS,
+			Type:       result.Type,
+			AttachesTo: result.AttachesTo,
+		}
+
+		for _, alt := range result.Alternatives {
+			err = queries.InsertWordAlternative(ctx, db.InsertWordAlternativeParams{
+				WordID:     wordID,
+				Content:    alt.Content,
+				Confidence: float32(alt.Confidence),
+			})
+			if err != nil {
+				log.Error("Failed to insert word alternative", "error", err)
+			}
+
+			word.Alternatives = append(word.Alternatives, Alternative{
+				Content:    alt.Content,
+				Confidence: alt.Confidence,
+			})
+		}
+
+		if len(word.Alternatives) > 0 {
+			word.Content = word.Alternatives[0].Content
+			word.Confidence = word.Alternatives[0].Confidence
+		}
+
+		words = append(words, word)
+	}
+
+	transcriptChan <- TranscriptMessage{
+		Words:     words,
+		IsPartial: transcript.IsPartial(),
+	}
+
+	log.Info("Processed transcript", "wordCount", len(words), "isPartial", transcript.IsPartial())
 }
 
 func handleTranscriptAndErrorsWithUI(
