@@ -118,7 +118,7 @@ func runStream(cmd *cobra.Command, args []string) {
 func handleStreamWithTranscriptionAndUI(
 	ctx context.Context,
 	stream <-chan snd.OpusPacketNotification,
-	transcriptChan chan<- string,
+	transcriptChan chan<- TranscriptMessage,
 ) {
 	client := speechmatics.NewClient(os.Getenv("SPEECHMATICS_API_KEY"))
 	config := speechmatics.TranscriptionConfig{
