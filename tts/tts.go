@@ -367,7 +367,7 @@ func handleTranscript(
 	sessionID int64,
 	queries *db.Queries,
 ) {
-	log.Info("Handling transcript", "isPartial", transcript.IsPartial())
+	log.Info("Handling transcript", "isPartial", transcript.IsPartial(), "resultCount", len(transcript.Results))
 
 	if len(transcript.Results) == 0 {
 		log.Warn("Received empty transcript")
