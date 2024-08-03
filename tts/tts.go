@@ -339,7 +339,7 @@ func handleTranscript(ctx context.Context, transcript speechmatics.RTTranscriptR
 	for _, result := range transcript.Results {
 		wordID, err := queries.InsertTranscriptionWord(ctx, db.InsertTranscriptionWordParams{
 			SegmentID:  segmentID,
-			TimeOffset: int32(result.StartTime * 1000),
+			StartTime:  int32(result.StartTime * 1000),
 			Duration:   int32((result.EndTime - result.StartTime) * 1000),
 			IsEos:      result.IsEOS,
 		})
