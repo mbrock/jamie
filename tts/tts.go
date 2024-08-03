@@ -70,28 +70,15 @@ func runStream(cmd *cobra.Command, args []string) {
 		log.Info("UI enabled")
 		transcriptChan := make(chan TranscriptMessage, 100)
 		go func() {
-			p := tea.NewProgram(
-				initialModel(transcriptChan),
-				tea.WithAltScreen(),
-				tea.WithMouseCellMotion(),
-			)
-
-			go func() {
-				for {
-					select {
-					case transcript := <-transcriptChan:
-						p.Send(transcriptMsg(transcript))
-					case <-ctx.Done():
-						return
-					}
+			model := initialModel(transcriptChan)
+			for {
+				select {
+				case transcript := <-transcriptChan:
+					model.Update(transcriptMsg(transcript))
+				case <-ctx.Done():
+					return
 				}
-			}()
-
-			_, err := p.Run()
-			if err != nil {
-				log.Error("UI error", "error", err)
 			}
-			cancel()
 		}()
 
 		for stream := range streamChan {
@@ -440,17 +427,18 @@ func handleTranscript(
 		words = append(words, word)
 	}
 
-	transcriptChan <- TranscriptMessage{
+	transcriptMessage := TranscriptMessage{
 		Words:     words,
 		IsPartial: transcript.IsPartial(),
 	}
+	transcriptChan <- transcriptMessage
 
+	transcriptText := formatTranscriptWords(words)
 	log.Info(
 		"Processed transcript",
-		"wordCount",
-		len(words),
-		"isPartial",
-		transcript.IsPartial(),
+		"text", transcriptText,
+		"wordCount", len(words),
+		"isPartial", transcript.IsPartial(),
 	)
 }
 
