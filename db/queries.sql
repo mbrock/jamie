@@ -108,11 +108,18 @@ VALUES ($1, $2, $3, $4, $5)
 RETURNING id;
 
 -- name: UpsertTranscriptionSegment :one
-SELECT result.segment_id::BIGINT, result.version::INT
+SELECT result.segment_id::BIGINT,
+    result.version::INT
 FROM upsert_transcription_segment(sqlc.arg(session_id), sqlc.arg(is_final)) AS result;
 
 -- name: InsertTranscriptionWord :one
-INSERT INTO transcription_words (segment_id, start_time, duration, is_eos, version)
+INSERT INTO transcription_words (
+        segment_id,
+        start_time,
+        duration,
+        is_eos,
+        version
+    )
 VALUES (
         sqlc.arg(segment_id),
         make_interval(secs => sqlc.arg(start_time)),
@@ -127,28 +134,56 @@ INSERT INTO word_alternatives (word_id, content, confidence)
 VALUES ($1, $2, $3);
 
 -- name: GetAllFinalTranscripts :many
-SELECT ts.id, ts.session_id, ts.is_final, tw.id as word_id, tw.start_time, tw.duration, tw.is_eos, wa.content, wa.confidence
+SELECT ts.id,
+    ts.session_id,
+    ts.is_final,
+    tw.id AS word_id,
+    tw.start_time,
+    tw.duration,
+    tw.is_eos,
+    wa.content,
+    wa.confidence
 FROM transcription_segments ts
-JOIN transcription_words tw ON ts.id = tw.segment_id
-JOIN word_alternatives wa ON tw.id = wa.word_id
-WHERE ts.is_final = true
-ORDER BY ts.id, tw.id, wa.confidence DESC;
+    JOIN transcription_words tw ON ts.id = tw.segment_id
+    JOIN word_alternatives wa ON tw.id = wa.word_id
+WHERE ts.is_final = TRUE
+ORDER BY ts.id,
+    tw.id,
+    wa.confidence DESC;
 
 -- name: GetLatestNonFinalTranscripts :many
-SELECT DISTINCT ON (ts.session_id) 
-    ts.id, ts.session_id, ts.is_final, tw.id as word_id, tw.start_time, tw.duration, tw.is_eos, wa.content, wa.confidence
+SELECT DISTINCT ON (ts.session_id) ts.id,
+    ts.session_id,
+    ts.is_final,
+    tw.id AS word_id,
+    tw.start_time,
+    tw.duration,
+    tw.is_eos,
+    wa.content,
+    wa.confidence
 FROM transcription_segments ts
-JOIN transcription_words tw ON ts.id = tw.segment_id
-JOIN word_alternatives wa ON tw.id = wa.word_id
+    JOIN transcription_words tw ON ts.id = tw.segment_id
+    JOIN word_alternatives wa ON tw.id = wa.word_id
 WHERE ts.is_final = false
-ORDER BY ts.session_id, ts.id DESC, tw.id, wa.confidence DESC;
+ORDER BY ts.session_id,
+    ts.id DESC,
+    tw.id,
+    wa.confidence DESC;
 
 -- name: GetTranscriptSegment :many
-SELECT DISTINCT ON (tw.id)
-    ts.id, ts.session_id, ts.is_final, tw.id as word_id, tw.start_time, tw.duration, tw.is_eos, wa.content, wa.confidence
+SELECT DISTINCT ON (tw.start_time) ts.id,
+    ts.session_id,
+    ts.is_final,
+    tw.id AS word_id,
+    tw.start_time,
+    tw.duration,
+    tw.is_eos,
+    wa.content,
+    wa.confidence
 FROM transcription_segments ts
-JOIN transcription_words tw ON ts.id = tw.segment_id AND ts.version = tw.version
-JOIN word_alternatives wa ON tw.id = wa.word_id
+    JOIN transcription_words tw ON ts.id = tw.segment_id
+    AND ts.version = tw.version
+    JOIN word_alternatives wa ON tw.id = wa.word_id
 WHERE ts.id = $1
-ORDER BY tw.id, tw.start_time, wa.confidence DESC;
-
+ORDER BY tw.start_time,
+    wa.confidence DESC;

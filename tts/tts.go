@@ -367,7 +367,13 @@ func handleTranscript(
 	sessionID int64,
 	queries *db.Queries,
 ) {
-	log.Info("Handling transcript", "isPartial", transcript.IsPartial(), "resultCount", len(transcript.Results))
+	log.Info(
+		"Handling transcript",
+		"isPartial",
+		transcript.IsPartial(),
+		"resultCount",
+		len(transcript.Results),
+	)
 
 	if len(transcript.Results) == 0 {
 		log.Warn("Received empty transcript")
@@ -376,17 +382,19 @@ func handleTranscript(
 
 	var segmentID int64
 	var currentVersion int32
-	err := queries.UpsertTranscriptionSegment(
+	row, err := queries.UpsertTranscriptionSegment(
 		ctx,
 		db.UpsertTranscriptionSegmentParams{
 			SessionID: sessionID,
 			IsFinal:   !transcript.IsPartial(),
 		},
-	).Scan(&segmentID, &currentVersion)
+	)
 	if err != nil {
 		log.Error("Failed to upsert transcription segment", "error", err)
 		return
 	}
+	segmentID = row.ResultSegmentID
+	currentVersion = row.ResultVersion
 
 	for _, result := range transcript.Results {
 		wordID, err := queries.InsertTranscriptionWord(
@@ -572,232 +580,6 @@ type Alternative struct {
 type TranscriptMessage struct {
 	Words     []TranscriptWord
 	IsPartial bool
-}
-
-func handleStreamWithTranscription(
-	ctx context.Context,
-	stream <-chan snd.OpusPacketNotification,
-) {
-	client := speechmatics.NewClient(viper.GetString("SPEECHMATICS_API_KEY"))
-	config := speechmatics.TranscriptionConfig{
-		Language:       "en",
-		EnablePartials: true,
-	}
-	audioFormat := speechmatics.AudioFormat{
-		Type: "file",
-	}
-
-	err := client.ConnectWebSocket(ctx, config, audioFormat)
-	if err != nil {
-		log.Error("Failed to connect to Speechmatics WebSocket", "error", err)
-		return
-	}
-	defer func(client *speechmatics.Client) {
-		log.Info("Closing connection to Speechmatics WebSocket")
-		err := client.CloseWebSocket()
-		if err != nil {
-			log.Error("Failed to close WebSocket", "error", err)
-		}
-	}(client)
-
-	transcriptChan, errChan := client.ReceiveTranscript(ctx)
-
-	go handleTranscriptAndErrors(ctx, transcriptChan, errChan)
-
-	tmpDir := "tmp"
-	if err := os.MkdirAll(tmpDir, 0755); err != nil {
-		log.Error("Failed to create tmp directory", "error", err)
-		return
-	}
-
-	var oggWriter *snd.Ogg
-	var buffer bytes.Buffer
-	var oggFile *os.File
-	var seqNo int
-	var lastPacketTime time.Time
-	silenceTimer := time.NewTicker(
-		100 * time.Millisecond,
-	) // 100ms timer for checking silence
-	defer silenceTimer.Stop()
-
-	defer func() {
-		if oggFile != nil {
-			err := oggFile.Close()
-			if err != nil {
-				log.Error("Failed to close Ogg file", "error", err)
-			}
-		}
-		if oggWriter != nil {
-			err := oggWriter.Close()
-			if err != nil {
-				log.Error("Failed to close Ogg writer", "error", err)
-			}
-		}
-	}()
-
-	for {
-		select {
-		case packet, ok := <-stream:
-			if !ok {
-				// Stream closed, end the transcription
-				if buffer.Len() > 0 {
-					err = client.SendAudio(buffer.Bytes())
-					if err != nil {
-						log.Error(
-							"Failed to send final audio to Speechmatics",
-							"error",
-							err,
-						)
-					}
-				}
-				err = client.EndStream(seqNo)
-				if err != nil {
-					log.Error(
-						"Failed to end Speechmatics stream",
-						"error",
-						err,
-					)
-				}
-				return
-			}
-
-			if oggWriter == nil {
-				oggFilePath := filepath.Join(
-					tmpDir,
-					fmt.Sprintf("%d.ogg", packet.Ssrc),
-				)
-				oggFile, err = os.Create(oggFilePath)
-				if err != nil {
-					log.Error("Failed to create Ogg file", "error", err)
-					return
-				}
-
-				oggWriter, err = snd.NewOgg(
-					packet.Ssrc,
-					time.Now(),
-					time.Now().Add(24*time.Hour),
-					io.MultiWriter(oggFile, &buffer),
-				)
-				if err != nil {
-					log.Error("Failed to create Ogg writer", "error", err)
-					return
-				}
-
-				log.Info("Created Ogg file", "path", oggFilePath)
-			}
-
-			createdAt, err := time.Parse(time.RFC3339Nano, packet.CreatedAt)
-			if err != nil {
-				log.Error("Failed to parse createdAt", "error", err)
-				continue
-			}
-			opusPacket := snd.OpusPacket{
-				ID:        int(packet.ID),
-				Sequence:  uint16(packet.Sequence),
-				Timestamp: uint32(packet.Timestamp),
-				CreatedAt: createdAt,
-				OpusData:  []byte(packet.OpusData),
-			}
-
-			err = oggWriter.WritePacket(opusPacket)
-			if err != nil {
-				log.Error("Failed to write packet to Ogg", "error", err)
-				return
-			}
-
-			err = client.SendAudio(buffer.Bytes())
-			log.Debug("Sent audio to Speechmatics", "bytes", buffer.Len())
-			if err != nil {
-				log.Error(
-					"Failed to send audio to Speechmatics",
-					"error",
-					err,
-				)
-				return
-			}
-			buffer.Reset()
-
-			seqNo++
-			lastPacketTime = time.Now()
-
-		case <-silenceTimer.C:
-			if time.Since(lastPacketTime) >= 100*time.Millisecond {
-				// Poke the Ogg writer to handle silence
-				err = oggWriter.WriteSilence(time.Since(lastPacketTime))
-				if err != nil {
-					log.Error("Failed to write silence to Ogg", "error", err)
-					return
-				}
-
-				err = client.SendAudio(buffer.Bytes())
-				log.Debug(
-					"Sent silence to Speechmatics",
-					"bytes",
-					buffer.Len(),
-				)
-				if err != nil {
-					log.Error(
-						"Failed to send silence to Speechmatics",
-						"error",
-						err,
-					)
-					return
-				}
-				buffer.Reset()
-
-				lastPacketTime = time.Now()
-			}
-
-		case <-ctx.Done():
-			// Context cancelled, end the transcription
-			if buffer.Len() > 0 {
-				err = client.SendAudio(buffer.Bytes())
-				if err != nil {
-					log.Error(
-						"Failed to send final audio to Speechmatics",
-						"error",
-						err,
-					)
-				}
-			}
-			err = client.EndStream(seqNo)
-			if err != nil {
-				log.Error("Failed to end Speechmatics stream", "error", err)
-			}
-			return
-		}
-	}
-}
-
-func handleTranscriptAndErrors(
-	ctx context.Context,
-	transcriptChan <-chan speechmatics.RTTranscriptResponse,
-	errChan <-chan error,
-) {
-	for {
-		select {
-		case transcript, ok := <-transcriptChan:
-			if !ok {
-				return
-			}
-			for _, result := range transcript.Results {
-				if len(result.Alternatives) > 0 {
-					log.Info(
-						"Transcription",
-						"text",
-						result.Alternatives[0].Content,
-					)
-				}
-			}
-		case err, ok := <-errChan:
-			if !ok {
-				return
-			}
-			log.Error("Transcription error", "error", err)
-		case <-ctx.Done():
-			return
-		}
-	}
 }
 
 func handleStream(stream <-chan snd.OpusPacketNotification) {
