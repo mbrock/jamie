@@ -4,43 +4,58 @@ import (
 	"testing"
 )
 
+func newTestModel() model {
+	return model{
+		sessions: make(map[int64]*SessionTranscript),
+	}
+}
+
+func addFinalTranscript(m *model, sessionID int64, words []TranscriptWord) {
+	session, ok := m.sessions[sessionID]
+	if !ok {
+		session = &SessionTranscript{}
+		m.sessions[sessionID] = session
+	}
+	session.FinalTranscripts = append(session.FinalTranscripts, words)
+}
+
+func setCurrentTranscript(m *model, sessionID int64, words []TranscriptWord) {
+	session, ok := m.sessions[sessionID]
+	if !ok {
+		session = &SessionTranscript{}
+		m.sessions[sessionID] = session
+	}
+	session.CurrentTranscript = words
+}
+
+func newWord(content string, startTime, endTime float64, confidence float64, isEOS bool) TranscriptWord {
+	return TranscriptWord{
+		Content:    content,
+		StartTime:  startTime,
+		EndTime:    endTime,
+		Confidence: confidence,
+		IsEOS:      isEOS,
+	}
+}
+
 func TestTranscriptView(t *testing.T) {
 	t.Run("Single Session", func(t *testing.T) {
-		// Create a model with one session
-		m := model{
-			sessions: map[int64]*SessionTranscript{
-				1: {
-					FinalTranscripts: [][]TranscriptWord{
-						{
-							{
-								Content:    "Hello",
-								StartTime:  0.0,
-								EndTime:    0.5,
-								Confidence: 0.9,
-							},
-						},
-						{
-							{
-								Content:    "World",
-								StartTime:  0.5,
-								EndTime:    1.0,
-								Confidence: 0.8,
-							},
-						},
-					},
-					CurrentTranscript: []TranscriptWord{
-						{
-							Content:    "Partial",
-							StartTime:  1.1,
-							EndTime:    1.3,
-							Confidence: 0.7,
-						},
-					},
-				},
+		m := newTestModel()
+		addFinalTranscript(
+			&m,
+			1,
+			[]TranscriptWord{
+				newWord("A", 0.0, 0.5, 0.9, false),
+				newWord("B", 0.5, 1.0, 0.8, true),
 			},
-		}
+		)
+		setCurrentTranscript(
+			&m,
+			1,
+			[]TranscriptWord{newWord("C", 1.1, 1.3, 0.7, false)},
+		)
 
-		expected := "Hello World Partial\n"
+		expected := "A B\nC\n"
 		result := m.TranscriptView()
 
 		if result != expected {
@@ -53,81 +68,40 @@ func TestTranscriptView(t *testing.T) {
 	})
 
 	t.Run("Two Interleaved Sessions", func(t *testing.T) {
-		// Create a model with two sessions
-		m := model{
-			sessions: map[int64]*SessionTranscript{
-				1: {
-					FinalTranscripts: [][]TranscriptWord{
-						{
-							{
-								Content:    "Hello",
-								StartTime:  0.0,
-								EndTime:    0.5,
-								Confidence: 0.9,
-							},
-							{
-								Content:    "from",
-								StartTime:  0.5,
-								EndTime:    1.0,
-								Confidence: 0.8,
-							},
-							{
-								Content:    "session",
-								StartTime:  1.0,
-								EndTime:    1.5,
-								Confidence: 0.9,
-								IsEOS:      true,
-							},
-						},
-					},
-					CurrentTranscript: []TranscriptWord{
-						{
-							Content:    "one",
-							StartTime:  2.5,
-							EndTime:    3.0,
-							Confidence: 0.7,
-							IsEOS:      true,
-						},
-					},
-				},
-				2: {
-					FinalTranscripts: [][]TranscriptWord{
-						{
-							{
-								Content:    "Greetings",
-								StartTime:  0.2,
-								EndTime:    0.7,
-								Confidence: 0.9,
-							},
-							{
-								Content:    "from",
-								StartTime:  0.7,
-								EndTime:    1.2,
-								Confidence: 0.8,
-								IsEOS:      true,
-							},
-						},
-					},
-					CurrentTranscript: []TranscriptWord{
-						{
-							Content:    "session",
-							StartTime:  2.0,
-							EndTime:    2.5,
-							Confidence: 0.8,
-						},
-						{
-							Content:    "two",
-							StartTime:  2.5,
-							EndTime:    3.0,
-							Confidence: 0.8,
-							IsEOS:      true,
-						},
-					},
-				},
+		m := newTestModel()
+		addFinalTranscript(
+			&m,
+			1,
+			[]TranscriptWord{
+				newWord("A", 0.0, 0.5, 0.9, false),
+				newWord("B", 0.5, 1.0, 0.8, false),
+				newWord("1", 1.0, 1.5, 0.9, true),
 			},
-		}
+		)
+		setCurrentTranscript(
+			&m,
+			1,
+			[]TranscriptWord{newWord("2", 2.5, 3.0, 0.7, true)},
+		)
 
-		expected := "Hello from session\nGreetings from\none\nsession two\n"
+		addFinalTranscript(
+			&m,
+			2,
+			[]TranscriptWord{
+				newWord("C", 0.2, 0.7, 0.9, false),
+				newWord("D", 0.7, 1.2, 0.8, true),
+			},
+		)
+		setCurrentTranscript(
+			&m,
+			2,
+			[]TranscriptWord{
+				newWord("3", 2.0, 2.5, 0.8, false),
+				newWord("4", 2.5, 3.0, 0.8, true),
+			},
+		)
+
+		expected := "A B 1\nC D\n2\n3 4\n"
 		result := m.TranscriptView()
 
 		if result != expected {
