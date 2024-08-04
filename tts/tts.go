@@ -141,4 +141,40 @@ func loadConfig() Config {
 	}
 }
 
-// Keep other necessary functions (handleTranscriptionUpdate, formatTranscriptWords, etc.) ...
+func handleTranscriptionUpdate(ctx context.Context, update snd.TranscriptionUpdate, queries *db.Queries, transcriptChan chan<- TranscriptMessage) {
+	if update.Operation != "INSERT" && update.Operation != "UPDATE" {
+		return
+	}
+
+	segment, err := queries.GetTranscriptionSegment(ctx, update.ID)
+	if err != nil {
+		log.Error("Failed to get transcription segment", "error", err)
+		return
+	}
+
+	words, err := queries.GetTranscriptionWords(ctx, update.ID)
+	if err != nil {
+		log.Error("Failed to get transcription words", "error", err)
+		return
+	}
+
+	formattedWords := formatTranscriptWords(words)
+
+	transcriptChan <- TranscriptMessage{
+		SessionID: segment.SessionID,
+		IsFinal:   segment.IsFinal,
+		Words:     formattedWords,
+	}
+}
+
+func formatTranscriptWords(words []db.GetTranscriptionWordsRow) []TranscriptWord {
+	var formattedWords []TranscriptWord
+	for _, word := range words {
+		formattedWords = append(formattedWords, TranscriptWord{
+			Word:      word.Content,
+			StartTime: float64(word.StartTime),
+			EndTime:   float64(word.StartTime + word.Duration),
+		})
+	}
+	return formattedWords
+}
