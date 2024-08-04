@@ -238,7 +238,9 @@ var packetInfoCmd = &cobra.Command{
 			ssrc,
 			startTime,
 			endTime,
-			file,
+			snd.NewOggWriter(file),
+			&snd.RealTimeProvider{},
+			log.Default(),
 		)
 		handleError(err, "Error creating Ogg")
 
