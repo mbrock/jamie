@@ -1,0 +1,14 @@
+{
+  "template_dir": "templates",
+  "output_dir": "generated",
+  "static_dir": "static",
+  "watch": true,
+  "minify": true,
+  "include": [
+    "*.templ"
+  ],
+  "exclude": [
+    "node_modules",
+    "vendor"
+  ]
+}
