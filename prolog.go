@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/trealla-prolog/go/trealla"
+	"github.com/trealla-prolog/go/trealla/terms"
 	"node.town/db"
 )
 
@@ -47,11 +48,11 @@ func RegisterExample() {
 			// Check the Input argument's type, must be string.
 			input, ok := goal.Args[0].(string)
 			if !ok {
-				// throw(error(type_error(list, X), base32/2)).
-				return trealla.Atom("throw").Of(trealla.Atom("error").Of(
-					trealla.Atom("type_error").Of("list", goal.Args[0]),
-					trealla.Atom("/").Of(trealla.Atom("base32"), 2),
-				))
+				return terms.TypeError(
+					trealla.Atom("string"),
+					goal.Args[0],
+					terms.PI(goal),
+				)
 			}
 
 			// Check Output type, must be string or var.
@@ -61,10 +62,11 @@ func RegisterExample() {
 			default:
 				// throw(error(type_error(list, X), base32/2)).
 				// See: terms subpackage for convenience functions to create these errors.
-				return trealla.Atom("throw").Of(trealla.Atom("error").Of(
-					trealla.Atom("type_error").Of("list", goal.Args[0]),
-					trealla.Atom("/").Of(trealla.Atom("base32"), 2),
-				))
+				return terms.TypeError(
+					trealla.Atom("string"),
+					goal.Args[1],
+					terms.PI(goal),
+				)
 			}
 
 			// Do the actual encoding work.
@@ -98,11 +100,10 @@ func RegisterDBQuery(
 
 			guildID, ok := goal.Args[0].(string)
 			if !ok {
-				return trealla.Atom("throw").Of(trealla.Atom("error").Of(
-					trealla.Atom("type_error").Of("string", goal.Args[0]),
-					trealla.Atom("/").
-						Of(trealla.Atom("last_joined_channel"), 2),
-				),
+				return terms.TypeError(
+					trealla.Atom("string"),
+					goal.Args[0],
+					terms.PI(goal),
 				)
 			}
 
@@ -114,11 +115,10 @@ func RegisterDBQuery(
 				},
 			)
 			if err != nil {
-				return trealla.Atom("throw").Of(trealla.Atom("error").Of(
-					trealla.Atom("db_error").Of(err.Error()),
-					trealla.Atom("/").
-						Of(trealla.Atom("last_joined_channel"), 2),
-				),
+				return terms.DomainError(
+					trealla.Atom("db_error"),
+					trealla.Atom(err.Error()),
+					terms.PI(goal),
 				)
 			}
 
@@ -134,12 +134,14 @@ func RegisterDBQuery(
 		"known_guilds",
 		1,
 		func(_ trealla.Prolog, _ trealla.Subquery, goal0 trealla.Term) trealla.Term {
+			goal := goal0.(trealla.Compound)
 			guildIDs, err := queries.GetKnownGuildIDs(ctx)
 			if err != nil {
-				return trealla.Atom("throw").Of(trealla.Atom("error").Of(
-					trealla.Atom("db_error").Of(err.Error()),
-					trealla.Atom("/").Of(trealla.Atom("known_guild"), 1),
-				))
+				return terms.DomainError(
+					trealla.Atom("db_error"),
+					trealla.Atom(err.Error()),
+					terms.PI(goal),
+				)
 			}
 
 			guildAtoms := make([]trealla.Term, len(guildIDs))
