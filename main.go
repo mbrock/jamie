@@ -311,6 +311,13 @@ func init() {
 	rootCmd.AddCommand(nt.ServeCmd)
 	rootCmd.AddCommand(aiderdoc.AiderdocCmd)
 
+	r := chi.NewRouter()
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
+
+	tts.Routes(r, queries)
+	aiderdoc.Routes(r)
+
 	prologCmd := &cobra.Command{
 		Use:   "prolog",
 		Short: "Start a Prolog REPL",

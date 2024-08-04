@@ -23,9 +23,6 @@ func Serve(port int) error {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
 
-	tts.Routes(r, queries)
-	aiderdoc.Routes(r)
-
 	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		component := RoutesList(r.Routes())
