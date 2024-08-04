@@ -13,7 +13,10 @@ import (
 	"strings"
 	"time"
 
+	"node.town/aiderdoc"
 	"node.town/bot"
+	nt "node.town/http"
+	"node.town/prolog"
 	"node.town/snd"
 	"node.town/tts"
 
@@ -305,7 +308,8 @@ func init() {
 	rootCmd.AddCommand(packetInfoCmd)
 	rootCmd.AddCommand(tts.TranscribeCmd)
 	rootCmd.AddCommand(tts.StreamCmd)
-	rootCmd.AddCommand(tts.HTTPCmd)
+	rootCmd.AddCommand(nt.ServeCmd)
+	rootCmd.AddCommand(aiderdoc.AiderdocCmd)
 
 	prologCmd := &cobra.Command{
 		Use:   "prolog",
@@ -316,7 +320,7 @@ func init() {
 			handleError(err, "Failed to open database")
 			defer sqlDB.Close()
 
-			StartPrologREPL(queries)
+			prolog.StartPrologREPL(queries)
 		},
 	}
 	rootCmd.AddCommand(prologCmd)

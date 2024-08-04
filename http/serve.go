@@ -31,7 +31,11 @@ func Serve(port int) error {
 		component := RoutesList(r.Routes())
 		err := component.Render(req.Context(), w)
 		if err != nil {
-			http.Error(w, "Failed to render routes list", http.StatusInternalServerError)
+			http.Error(
+				w,
+				"Failed to render routes list",
+				http.StatusInternalServerError,
+			)
 		}
 	})
 
