@@ -10,6 +10,14 @@ import (
 	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
 )
 
+// Constants
+const (
+	OpusFrameDuration = 20 * time.Millisecond
+	SampleRate        = 48000
+	Channels          = 2
+)
+
+// Interfaces
 type TimeProvider interface {
 	Now() time.Time
 }
@@ -25,24 +33,24 @@ type Logger interface {
 	Debug(interface{}, ...interface{})
 }
 
+// RealTimeProvider implements TimeProvider
 type RealTimeProvider struct{}
 
 func (r *RealTimeProvider) Now() time.Time {
 	return time.Now()
 }
 
+// OggWriterWrapper wraps oggwriter.OggWriter to implement OggWriter interface
 type OggWriterWrapper struct {
 	writer *oggwriter.OggWriter
 }
 
 func NewOggWriter(w io.Writer) (*OggWriterWrapper, error) {
-	writer, err := oggwriter.NewWith(w, 48000, 2)
+	writer, err := oggwriter.NewWith(w, SampleRate, Channels)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OggWriter: %w", err)
 	}
-	return &OggWriterWrapper{
-		writer: writer,
-	}, nil
+	return &OggWriterWrapper{writer: writer}, nil
 }
 
 func (o *OggWriterWrapper) WriteRTP(packet *rtp.Packet) error {
@@ -53,16 +61,9 @@ func (o *OggWriterWrapper) Close() error {
 	return o.writer.Close()
 }
 
-func createRTPPacket(
-	sequenceNumber uint16,
-	timestamp uint32,
-	ssrc uint32,
-	payload []byte,
-) *rtp.Packet {
-	log.Debug("rtp",
-		"seq", sequenceNumber,
-		"ts", timestamp,
-	)
+// createRTPPacket creates an RTP packet with the given parameters
+func createRTPPacket(sequenceNumber uint16, timestamp uint32, ssrc uint32, payload []byte) *rtp.Packet {
+	log.Debug("Creating RTP packet", "seq", sequenceNumber, "ts", timestamp)
 	return &rtp.Packet{
 		Header: rtp.Header{
 			Version:        2,
@@ -75,6 +76,7 @@ func createRTPPacket(
 	}
 }
 
+// OpusPacket represents an Opus audio packet
 type OpusPacket struct {
 	ID        int
 	Sequence  uint16
@@ -83,28 +85,23 @@ type OpusPacket struct {
 	OpusData  []byte
 }
 
+// Ogg represents an Ogg container for Opus audio
 type Ogg struct {
-	ssrc              int64
-	startTime         time.Time
-	endTime           time.Time
-	oggWriter         OggWriter
-	timeProvider      TimeProvider
-	logger            Logger
-	packetCount       int
-	firstTimestamp    time.Time
-	lastTimestamp     time.Time
-	lastSegmentNumber uint64
-	gapCount          int
-	segmentNumber     uint64
+	ssrc           int64
+	startTime      time.Time
+	endTime        time.Time
+	oggWriter      OggWriter
+	timeProvider   TimeProvider
+	logger         Logger
+	packetCount    int
+	firstTimestamp time.Time
+	lastTimestamp  time.Time
+	gapCount       int
+	segmentNumber  uint64
 }
 
-func NewOgg(
-	ssrc int64,
-	startTime, endTime time.Time,
-	oggWriter OggWriter,
-	timeProvider TimeProvider,
-	logger Logger,
-) (*Ogg, error) {
+// NewOgg creates a new Ogg instance
+func NewOgg(ssrc int64, startTime, endTime time.Time, oggWriter OggWriter, timeProvider TimeProvider, logger Logger) (*Ogg, error) {
 	return &Ogg{
 		ssrc:         ssrc,
 		startTime:    startTime.UTC(),
@@ -115,6 +112,7 @@ func NewOgg(
 	}, nil
 }
 
+// Close finalizes the Ogg container and logs summary information
 func (o *Ogg) Close() error {
 	if o.oggWriter != nil {
 		if err := o.oggWriter.Close(); err != nil {
@@ -122,7 +120,7 @@ func (o *Ogg) Close() error {
 		}
 	}
 
-	log.Info("Summary",
+	o.logger.Info("Ogg processing summary",
 		"total_packets", o.packetCount,
 		"time_range", o.lastTimestamp.Sub(o.firstTimestamp),
 		"gap_count", o.gapCount,
@@ -131,13 +129,15 @@ func (o *Ogg) Close() error {
 	return nil
 }
 
+// WritePacket writes an OpusPacket to the Ogg container
 func (o *Ogg) WritePacket(packet OpusPacket) error {
-	log.Info("WritePacket",
+	o.logger.Info("Writing packet",
 		"packet_count", o.packetCount,
 		"packet_sequence", packet.Sequence,
 		"packet_timestamp", packet.Timestamp,
 		"packet_created_at", packet.CreatedAt,
 	)
+
 	if o.packetCount == 0 {
 		o.firstTimestamp = packet.CreatedAt
 		o.addInitialSilence(packet.CreatedAt)
@@ -148,40 +148,37 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 		}
 	}
 
-	err := o.writeRTPPacket(packet.OpusData)
-	if err != nil {
+	if err := o.writeRTPPacket(packet.OpusData); err != nil {
 		return err
 	}
 
 	o.lastTimestamp = packet.CreatedAt
-	//	o.segmentNumber = uint64(packet.Sequence)
 	o.packetCount++
 
 	return nil
 }
 
+// WriteSilence writes a duration of silence to the Ogg container
 func (o *Ogg) WriteSilence(duration time.Duration) error {
-	silentFrames := int(duration / (20 * time.Millisecond))
-	err := o.writeSilentFrames(silentFrames)
-	if err != nil {
+	silentFrames := int(duration / OpusFrameDuration)
+	if err := o.writeSilentFrames(silentFrames); err != nil {
 		return err
 	}
 	o.lastTimestamp = o.lastTimestamp.Add(duration)
 	return nil
 }
 
+// addInitialSilence adds silence at the beginning if needed
 func (o *Ogg) addInitialSilence(createdAt time.Time) {
 	if createdAt.After(o.startTime) {
 		silenceDuration := createdAt.Sub(o.startTime)
-		silentFrames := int(
-			silenceDuration.Milliseconds() / 20,
-		) // 20ms per frame
-		err := o.writeSilentFrames(silentFrames)
-		if err != nil {
-			log.Error("Error adding initial silence", "error", err)
+		silentFrames := int(silenceDuration / OpusFrameDuration)
+		if err := o.writeSilentFrames(silentFrames); err != nil {
+			o.logger.Error("Error adding initial silence", "error", err)
 			return
 		}
-		log.Info("Added initial silence", "duration", silenceDuration,
+		o.logger.Info("Added initial silence",
+			"duration", silenceDuration,
 			"created_at", createdAt,
 			"start_time", o.startTime,
 			"frames", silentFrames,
@@ -189,40 +186,34 @@ func (o *Ogg) addInitialSilence(createdAt time.Time) {
 	}
 }
 
+// handleGap detects and handles gaps between packets
 func (o *Ogg) handleGap(packet OpusPacket) time.Duration {
 	if o.lastTimestamp.IsZero() {
 		return 0 // No gap for the first packet
 	}
 
-	expectedTimestamp := o.lastTimestamp.Add(20 * time.Millisecond)
+	expectedTimestamp := o.lastTimestamp.Add(OpusFrameDuration)
 	actualGap := packet.CreatedAt.Sub(expectedTimestamp)
 
-	log.Info(
-		"Actual gap",
-		"gap",
-		actualGap,
-		"expected",
-		expectedTimestamp,
-		"created_at",
-		packet.CreatedAt,
-		"last_timestamp",
-		o.lastTimestamp,
+	o.logger.Info("Packet gap analysis",
+		"gap", actualGap,
+		"expected", expectedTimestamp,
+		"created_at", packet.CreatedAt,
+		"last_timestamp", o.lastTimestamp,
 	)
 
-	if actualGap > 20*time.Millisecond {
-		// Calculate frames without rounding
-		silentFrames := int(actualGap / (20 * time.Millisecond))
-		gapDuration := time.Duration(silentFrames) * 20 * time.Millisecond
+	if actualGap > OpusFrameDuration {
+		silentFrames := int(actualGap / OpusFrameDuration)
+		gapDuration := time.Duration(silentFrames) * OpusFrameDuration
 
-		log.Info("Audio gap detected",
+		o.logger.Info("Audio gap detected",
 			"gap_duration", gapDuration,
 			"silent_frames", silentFrames,
 			"created_at", packet.CreatedAt,
 		)
 
-		err := o.writeSilentFrames(silentFrames)
-		if err != nil {
-			log.Error("Error handling gap", "error", err)
+		if err := o.writeSilentFrames(silentFrames); err != nil {
+			o.logger.Error("Error handling gap", "error", err)
 			return 0
 		}
 		o.gapCount++
@@ -231,12 +222,11 @@ func (o *Ogg) handleGap(packet OpusPacket) time.Duration {
 	return 0
 }
 
+// writeSilentFrames writes a number of silent frames to the Ogg container
 func (o *Ogg) writeSilentFrames(frames int) error {
+	silentOpusPacket := []byte{0xf8, 0xff, 0xfe} // Silent Opus packet
 	for i := 0; i < frames; i++ {
-		err := o.writeRTPPacket(
-			[]byte{0xf8, 0xff, 0xfe},
-		) // Silent Opus packet
-		if err != nil {
+		if err := o.writeRTPPacket(silentOpusPacket); err != nil {
 			return fmt.Errorf("error writing silent frame: %w", err)
 		}
 	}
@@ -244,12 +234,11 @@ func (o *Ogg) writeSilentFrames(frames int) error {
 	return nil
 }
 
+// writeRTPPacket writes an RTP packet to the Ogg container
 func (o *Ogg) writeRTPPacket(payload []byte) error {
 	o.segmentNumber++
 	rtpPacket := createRTPPacket(
-		uint16(
-			o.segmentNumber,
-		),
+		uint16(o.segmentNumber),
 		uint32(o.segmentNumber*960),
 		uint32(o.ssrc),
 		payload,
