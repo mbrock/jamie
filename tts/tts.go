@@ -95,7 +95,7 @@ func runStream(cmd *cobra.Command, args []string) {
 	transcriptChan := make(chan TranscriptMessage, 100)
 
 	go func() {
-		p := tea.NewProgram(initialModel(transcriptChan))
+		p := tea.NewProgram(initialModel(transcriptChan, queries))
 		if _, err := p.Run(); err != nil {
 			log.Fatal("Error running program", "error", err)
 		}
@@ -240,17 +240,20 @@ func handleTranscriptionUpdate(
 			EndTime: float64(
 				row.StartTime.Microseconds+row.Duration.Microseconds,
 			) / 1000000,
-			IsEOS:      row.IsEos,
-			Content:    row.Content,
-			Confidence: row.Confidence,
-			AttachesTo: row.AttachesTo.String,
+			RealStartTime: row.RealStartTime.Time,
+			IsEOS:         row.IsEos,
+			Content:       row.Content,
+			Confidence:    row.Confidence,
+			AttachesTo:    row.AttachesTo.String,
 		}
 		words = append(words, word)
 	}
 
 	transcriptMessage := TranscriptMessage{
-		Words:     words,
-		IsPartial: !update.IsFinal,
+		Words:            words,
+		IsPartial:        !update.IsFinal,
+		SessionID:        update.SessionID,
+		SessionStartTime: segment[0].SessionCreatedAt.Time,
 	}
 
 	select {
@@ -268,74 +271,6 @@ func handleTranscriptionUpdate(
 	)
 }
 
-func handleTranscriptAndErrorsWithUI(
-	ctx context.Context,
-	transcriptChan <-chan speechmatics.RTTranscriptResponse,
-	errChan <-chan error,
-	uiChan chan<- TranscriptMessage,
-) {
-	for {
-		select {
-		case transcript, ok := <-transcriptChan:
-			if !ok {
-				return
-			}
-			var words []TranscriptWord
-			for _, result := range transcript.Results {
-				word := TranscriptWord{
-					StartTime:  result.StartTime,
-					EndTime:    result.EndTime,
-					IsEOS:      result.IsEOS,
-					Type:       result.Type,
-					AttachesTo: result.AttachesTo,
-				}
-
-				for _, alt := range result.Alternatives {
-					word.Alternatives = append(word.Alternatives, Alternative{
-						Content:    alt.Content,
-						Confidence: alt.Confidence,
-					})
-				}
-
-				if len(word.Alternatives) > 0 {
-					word.Content = word.Alternatives[0].Content
-					word.Confidence = word.Alternatives[0].Confidence
-				}
-
-				words = append(words, word)
-			}
-			if len(words) > 0 {
-				transcriptText := formatTranscriptWords(words)
-				log.Info("Transcription",
-					"text", transcriptText,
-					"words", len(words),
-					"isPartial", transcript.IsPartial(),
-				)
-				uiChan <- TranscriptMessage{
-					Words:     words,
-					IsPartial: transcript.IsPartial(),
-				}
-			}
-		case err, ok := <-errChan:
-			if !ok {
-				return
-			}
-			log.Error("Transcription error", "error", err)
-			uiChan <- TranscriptMessage{
-				Words: []TranscriptWord{{
-					Content:    fmt.Sprintf("Error: %v", err),
-					Confidence: 1.0,
-					StartTime:  0,
-					EndTime:    0,
-				}},
-				IsPartial: false,
-			}
-		case <-ctx.Done():
-			return
-		}
-	}
-}
-
 func formatTranscriptWords(words []TranscriptWord) string {
 	var result strings.Builder
 	for i, word := range words {
@@ -348,14 +283,15 @@ func formatTranscriptWords(words []TranscriptWord) string {
 }
 
 type TranscriptWord struct {
-	Content      string
-	Confidence   float64
-	StartTime    float64
-	EndTime      float64
-	IsEOS        bool
-	Type         string
-	AttachesTo   string
-	Alternatives []Alternative
+	RealStartTime time.Time
+	Content       string
+	Confidence    float64
+	StartTime     float64
+	EndTime       float64
+	IsEOS         bool
+	Type          string
+	AttachesTo    string
+	Alternatives  []Alternative
 }
 
 type Alternative struct {
@@ -364,9 +300,10 @@ type Alternative struct {
 }
 
 type TranscriptMessage struct {
-	SessionID int64
-	Words     []TranscriptWord
-	IsPartial bool
+	SessionID        int64
+	SessionStartTime time.Time
+	Words            []TranscriptWord
+	IsPartial        bool
 }
 
 func handleStream(stream <-chan snd.OpusPacketNotification) {

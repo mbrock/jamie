@@ -1,6 +1,7 @@
 package tts
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -9,18 +10,20 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/yourusername/yourproject/db"
+	"github.com/jackc/pgx/v5/pgtype"
+	"node.town/db"
 )
 
 type lineInfo struct {
 	content   string
-	startTime float64
+	startTime time.Time
 }
 
 type WordBuilder struct {
+	sessionStartTime time.Time
 	lines            []lineInfo
 	currentLine      strings.Builder
-	currentStartTime float64
+	currentStartTime time.Time
 	lastWasEOS       bool
 }
 
@@ -40,8 +43,8 @@ func (wb *WordBuilder) WriteWord(word TranscriptWord, isPartial bool) {
 
 	wb.lastWasEOS = word.IsEOS
 
-	if wb.currentStartTime == -1 {
-		wb.currentStartTime = word.StartTime
+	if wb.currentStartTime.IsZero() {
+		wb.currentStartTime = word.RealStartTime
 	}
 
 	if word.IsEOS {
@@ -51,7 +54,7 @@ func (wb *WordBuilder) WriteWord(word TranscriptWord, isPartial bool) {
 		})
 
 		wb.currentLine.Reset()
-		wb.currentStartTime = -1
+		wb.currentStartTime = time.Time{}
 	}
 }
 
@@ -77,6 +80,7 @@ type SessionTranscript struct {
 	FinalTranscripts  [][]TranscriptWord
 	CurrentTranscript []TranscriptWord
 	LastStartTime     float64
+	SessionStartTime  time.Time
 }
 
 type model struct {
@@ -89,7 +93,10 @@ type model struct {
 	dbQueries   *db.Queries
 }
 
-func initialModel(transcripts chan TranscriptMessage, dbQueries *db.Queries) model {
+func initialModel(
+	transcripts chan TranscriptMessage,
+	dbQueries *db.Queries,
+) model {
 	m := model{
 		sessions:    make(map[int64]*SessionTranscript),
 		logEntries:  []string{},
@@ -98,57 +105,67 @@ func initialModel(transcripts chan TranscriptMessage, dbQueries *db.Queries) mod
 		showLog:     false,
 		dbQueries:   dbQueries,
 	}
-	
+
 	// Load past hour's transcripts
 	pastTranscripts, err := m.loadPastHourTranscripts()
 	if err != nil {
-		m.logEntries = append(m.logEntries, fmt.Sprintf("Error loading past transcripts: %v", err))
+		m.logEntries = append(
+			m.logEntries,
+			fmt.Sprintf("Error loading past transcripts: %v", err),
+		)
 	} else {
 		for _, transcript := range pastTranscripts {
 			m.updateTranscript(transcript)
 		}
 	}
-	
+
 	return m
 }
 
 func (m *model) loadPastHourTranscripts() ([]TranscriptMessage, error) {
-	oneHourAgo := time.Now().Add(-1 * time.Hour)
-	
+	oneHourAgo := time.Now().Add(-4 * time.Hour)
+
 	// Fetch transcripts from the database
-	segments, err := m.dbQueries.GetTranscriptsFromLastHour(context.Background(), oneHourAgo)
+	segments, err := m.dbQueries.GetTranscriptsFromLastHour(
+		context.Background(),
+		pgtype.Timestamptz{Time: oneHourAgo, Valid: true},
+	)
 	if err != nil {
 		return nil, err
 	}
-	
+
 	var transcripts []TranscriptMessage
-	for _, segment := range segments {
+	for _, word := range segments {
 		words := make([]TranscriptWord, 0)
-		for _, word := range segment.Words {
-			words = append(words, TranscriptWord{
-				Content:    word.Content,
-				Confidence: word.Confidence,
-				StartTime:  word.StartTime.Seconds(),
-				EndTime:    word.StartTime.Seconds() + word.Duration.Seconds(),
-				IsEOS:      word.IsEos,
-				AttachesTo: word.AttachesTo.String,
-			})
-		}
-		
+		words = append(words, TranscriptWord{
+			Content:    word.Content,
+			Confidence: word.Confidence,
+			StartTime:  float64(word.StartTime.Microseconds) / 1000000.0,
+			EndTime: float64(
+				word.StartTime.Microseconds+word.Duration.Microseconds,
+			) / 1000000.0,
+			IsEOS:         word.IsEos,
+			AttachesTo:    word.AttachesTo.String,
+			RealStartTime: word.RealStartTime.Time,
+		})
+
 		transcripts = append(transcripts, TranscriptMessage{
-			SessionID: segment.SessionID,
-			Words:     words,
-			IsPartial: false,
+			SessionID:        word.SessionID,
+			Words:            words,
+			IsPartial:        !word.IsFinal,
+			SessionStartTime: word.SessionCreatedAt.Time,
 		})
 	}
-	
+
 	return transcripts, nil
 }
 
 func (m *model) updateTranscript(msg TranscriptMessage) {
 	session, ok := m.sessions[msg.SessionID]
 	if !ok {
-		session = &SessionTranscript{}
+		session = &SessionTranscript{
+			SessionStartTime: msg.SessionStartTime,
+		}
 		m.sessions[msg.SessionID] = session
 	}
 
@@ -273,7 +290,10 @@ func (m model) contentView() string {
 func (m model) TranscriptView() string {
 	var allLines []lineInfo
 	for _, session := range m.sessions {
-		wb := &WordBuilder{lastWasEOS: true, currentStartTime: -1}
+		wb := &WordBuilder{
+			lastWasEOS:       true,
+			sessionStartTime: session.SessionStartTime,
+		}
 
 		for _, transcript := range session.FinalTranscripts {
 			wb.AppendWords(transcript, false)
@@ -289,13 +309,18 @@ func (m model) TranscriptView() string {
 
 	// Sort lines by start time
 	sort.Slice(allLines, func(i, j int) bool {
-		return allLines[i].startTime < allLines[j].startTime
+		return allLines[i].startTime.Before(allLines[j].startTime)
 	})
 
 	var result strings.Builder
 	for _, line := range allLines {
-		result.WriteString(line.content)
-		result.WriteString("\n")
+		result.WriteString(
+			fmt.Sprintf(
+				"(%s) %s\n",
+				line.startTime.Format("15:04:05"),
+				line.content,
+			),
+		)
 	}
 
 	return result.String()
