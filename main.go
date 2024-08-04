@@ -307,6 +307,16 @@ func init() {
 	rootCmd.AddCommand(tts.StreamCmd)
 	rootCmd.AddCommand(tts.HTTPCmd)
 
+	prologCmd := &cobra.Command{
+		Use:   "prolog",
+		Short: "Start a Prolog REPL",
+		Long:  `This command starts a simple Prolog REPL using a bubble TUI.`,
+		Run: func(cmd *cobra.Command, args []string) {
+			StartPrologREPL()
+		},
+	}
+	rootCmd.AddCommand(prologCmd)
+
 	packetInfoCmd.Flags().Int64P("ssrc", "s", 0, "SSRC to filter packets")
 	packetInfoCmd.Flags().
 		StringP("start", "f", time.Now().Add(-2*time.Minute).Format(time.RFC3339), "Start time (RFC3339 format)")

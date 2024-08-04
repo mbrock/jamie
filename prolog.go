@@ -90,6 +90,12 @@ func RegisterDBQuery(ctx context.Context, queries *db.Queries) {
 		panic(err)
 	}
 
+	// ... (rest of the existing code)
+}
+
+func StartPrologREPL() {
+	// This function is implemented in prolog_repl.go
+
 	pl.Register(
 		ctx,
 		"db_query",
