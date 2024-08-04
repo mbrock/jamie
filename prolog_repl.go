@@ -8,19 +8,8 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/trealla-prolog/go/trealla"
 	"node.town/db"
-)
-
-var (
-	focusedStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	blurredStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	cursorStyle  = focusedStyle.Copy()
-	noStyle      = lipgloss.NewStyle()
-
-	focusedButton = focusedStyle.Copy().Render("[ Submit ]")
-	blurredButton = fmt.Sprintf("[ %s ]", blurredStyle.Render("Submit"))
 )
 
 type model struct {
@@ -45,6 +34,15 @@ func initialModel(queries *db.Queries) model {
 	prolog, err := trealla.New()
 	if err != nil {
 		return model{err: fmt.Errorf("failed to initialize Prolog: %w", err)}
+	}
+
+	err = prolog.ConsultText(
+		context.Background(),
+		"user",
+		"use_module(library(lists)).",
+	)
+	if err != nil {
+		return model{err: fmt.Errorf("failed to consult text: %w", err)}
 	}
 
 	RegisterDBQuery(prolog, context.Background(), queries)
@@ -73,21 +71,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.Type {
 		case tea.KeyEnter:
 			queryStr := m.textInput.Value()
-			m.query, err = m.prolog.Query(context.Background(), queryStr)
-			if err != nil {
-				m.history = append(m.history, fmt.Sprintf("Error: %v", err))
-			} else {
-				m.history = append(m.history, fmt.Sprintf("Query: %s", queryStr))
-				m.iterateQuery()
-			}
+			m.query = m.prolog.Query(context.Background(), queryStr)
+
+			m.history = append(m.history, fmt.Sprintf("Query: %s", queryStr))
+			m.iterateQuery()
+
 			m.textInput.SetValue("")
 			m.viewport.SetContent(strings.Join(m.history, "\n\n"))
 			m.viewport.GotoBottom()
-		case tea.KeyComma:
-			if m.query != nil {
-				m.iterateQuery()
-				m.viewport.SetContent(strings.Join(m.history, "\n\n"))
-				m.viewport.GotoBottom()
+		case tea.KeyRunes:
+			if string(msg.Runes) == "," {
+				if m.query != nil {
+					m.iterateQuery()
+					m.viewport.SetContent(strings.Join(m.history, "\n\n"))
+					m.viewport.GotoBottom()
+				}
 			}
 		case tea.KeyCtrlC, tea.KeyEsc:
 			return m, tea.Quit
@@ -113,8 +111,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *model) iterateQuery() {
 	if m.query.Next(context.Background()) {
-		solution := m.query.Current()
-		m.history = append(m.history, fmt.Sprintf("Result: %v", solution))
+		solution := m.query.Current().Solution
+		for k, v := range solution {
+			m.history = append(m.history, fmt.Sprintf("  %v = %v", k, v))
+		}
 	} else {
 		if err := m.query.Err(); err != nil {
 			m.history = append(m.history, fmt.Sprintf("Error: %v", err))
