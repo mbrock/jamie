@@ -132,6 +132,12 @@ func (o *Ogg) Close() error {
 }
 
 func (o *Ogg) WritePacket(packet OpusPacket) error {
+	log.Info("WritePacket",
+		"packet_count", o.packetCount,
+		"packet_sequence", packet.Sequence,
+		"packet_timestamp", packet.Timestamp,
+		"packet_created_at", packet.CreatedAt,
+	)
 	if o.packetCount == 0 {
 		o.firstTimestamp = packet.CreatedAt
 		o.addInitialSilence(packet.CreatedAt)
@@ -148,7 +154,7 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 	}
 
 	o.lastTimestamp = packet.CreatedAt
-	o.segmentNumber = uint64(packet.Sequence)
+	//	o.segmentNumber = uint64(packet.Sequence)
 	o.packetCount++
 
 	return nil
@@ -190,6 +196,18 @@ func (o *Ogg) handleGap(packet OpusPacket) time.Duration {
 
 	expectedTimestamp := o.lastTimestamp.Add(20 * time.Millisecond)
 	actualGap := packet.CreatedAt.Sub(expectedTimestamp)
+
+	log.Info(
+		"Actual gap",
+		"gap",
+		actualGap,
+		"expected",
+		expectedTimestamp,
+		"created_at",
+		packet.CreatedAt,
+		"last_timestamp",
+		o.lastTimestamp,
+	)
 
 	if actualGap > 20*time.Millisecond {
 		// Calculate frames without rounding
