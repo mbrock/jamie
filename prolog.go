@@ -84,13 +84,12 @@ func RegisterExample() {
 	fmt.Println(answer.Solution["Encoded"])
 }
 
-func RegisterDBQuery(ctx context.Context, queries *db.Queries) {
-	pl, err := trealla.New()
-	if err != nil {
-		panic(err)
-	}
-
-	pl.Register(
+func RegisterDBQuery(
+	pl trealla.Prolog,
+	ctx context.Context,
+	queries *db.Queries,
+) {
+	err := pl.Register(
 		ctx,
 		"last_joined_channel",
 		2,
@@ -101,8 +100,10 @@ func RegisterDBQuery(ctx context.Context, queries *db.Queries) {
 			if !ok {
 				return trealla.Atom("throw").Of(trealla.Atom("error").Of(
 					trealla.Atom("type_error").Of("string", goal.Args[0]),
-					trealla.Atom("/").Of(trealla.Atom("last_joined_channel"), 2),
-				))
+					trealla.Atom("/").
+						Of(trealla.Atom("last_joined_channel"), 2),
+				),
+				)
 			}
 
 			channel, err := queries.GetLastJoinedChannel(
@@ -115,14 +116,18 @@ func RegisterDBQuery(ctx context.Context, queries *db.Queries) {
 			if err != nil {
 				return trealla.Atom("throw").Of(trealla.Atom("error").Of(
 					trealla.Atom("db_error").Of(err.Error()),
-					trealla.Atom("/").Of(trealla.Atom("last_joined_channel"), 2),
-				))
+					trealla.Atom("/").
+						Of(trealla.Atom("last_joined_channel"), 2),
+				),
+				)
 			}
 
 			return trealla.Atom("last_joined_channel").Of(guildID, channel)
 		},
 	)
-
+	if err != nil {
+		panic(err)
+	}
 	// Example usage
 	// answer, err := pl.QueryOnce(ctx, `last_joined_channel("123412341234", ChannelID).`)
 	// if err != nil {
