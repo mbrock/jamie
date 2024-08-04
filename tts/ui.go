@@ -20,7 +20,6 @@ type lineInfo struct {
 }
 
 type WordBuilder struct {
-	sessionStartTime time.Time
 	lines            []lineInfo
 	currentLine      strings.Builder
 	currentStartTime time.Time
@@ -62,7 +61,6 @@ func (wb *WordBuilder) AppendWords(words []TranscriptWord, isPartial bool) {
 	for _, word := range words {
 		wb.WriteWord(word, isPartial)
 	}
-
 }
 
 func (wb *WordBuilder) GetLines() []lineInfo {
@@ -77,10 +75,8 @@ func (wb *WordBuilder) GetLines() []lineInfo {
 }
 
 type SessionTranscript struct {
-	FinalTranscripts  [][]TranscriptWord
+	FinalTranscript   []TranscriptWord
 	CurrentTranscript []TranscriptWord
-	LastStartTime     float64
-	SessionStartTime  time.Time
 }
 
 type model struct {
@@ -138,22 +134,17 @@ func (m *model) loadPastHourTranscripts() ([]TranscriptMessage, error) {
 	for _, word := range segments {
 		words := make([]TranscriptWord, 0)
 		words = append(words, TranscriptWord{
-			Content:    word.Content,
-			Confidence: word.Confidence,
-			StartTime:  float64(word.StartTime.Microseconds) / 1000000.0,
-			EndTime: float64(
-				word.StartTime.Microseconds+word.Duration.Microseconds,
-			) / 1000000.0,
+			Content:       word.Content,
+			Confidence:    word.Confidence,
 			IsEOS:         word.IsEos,
 			AttachesTo:    word.AttachesTo.String,
 			RealStartTime: word.RealStartTime.Time,
 		})
 
 		transcripts = append(transcripts, TranscriptMessage{
-			SessionID:        word.SessionID,
-			Words:            words,
-			IsPartial:        !word.IsFinal,
-			SessionStartTime: word.SessionCreatedAt.Time,
+			SessionID: word.SessionID,
+			Words:     words,
+			IsPartial: !word.IsFinal,
 		})
 	}
 
@@ -163,21 +154,15 @@ func (m *model) loadPastHourTranscripts() ([]TranscriptMessage, error) {
 func (m *model) updateTranscript(msg TranscriptMessage) {
 	session, ok := m.sessions[msg.SessionID]
 	if !ok {
-		session = &SessionTranscript{
-			SessionStartTime: msg.SessionStartTime,
-		}
+		session = &SessionTranscript{}
 		m.sessions[msg.SessionID] = session
 	}
 
 	if msg.IsPartial {
 		session.CurrentTranscript = msg.Words
 	} else {
-		session.FinalTranscripts = append(session.FinalTranscripts, msg.Words)
+		session.FinalTranscript = append(session.FinalTranscript, msg.Words...)
 		session.CurrentTranscript = []TranscriptWord{}
-	}
-
-	if len(msg.Words) > 0 {
-		session.LastStartTime = msg.Words[0].StartTime
 	}
 }
 
@@ -290,24 +275,15 @@ func (m model) contentView() string {
 func (m model) TranscriptView() string {
 	var allLines []lineInfo
 	for _, session := range m.sessions {
-		wb := &WordBuilder{
-			lastWasEOS:       true,
-			sessionStartTime: session.SessionStartTime,
-		}
+		wb := &WordBuilder{lastWasEOS: true}
 
-		for _, transcript := range session.FinalTranscripts {
-			wb.AppendWords(transcript, false)
-		}
-
-		if len(session.CurrentTranscript) > 0 {
-			wb.AppendWords(session.CurrentTranscript, true)
-		}
+		wb.AppendWords(session.FinalTranscript, false)
+		wb.AppendWords(session.CurrentTranscript, true)
 
 		sessionLines := wb.GetLines()
 		allLines = append(allLines, sessionLines...)
 	}
 
-	// Sort lines by start time
 	sort.Slice(allLines, func(i, j int) bool {
 		return allLines[i].startTime.Before(allLines[j].startTime)
 	})

@@ -53,8 +53,8 @@ func NewOggWriter(w io.Writer) (*OggWriterWrapper, error) {
 	return &OggWriterWrapper{writer: writer}, nil
 }
 
-func NewOggFile(w io.Writer) (*OggWriterWrapper, error) {
-	writer, err := ogg.New(w)
+func NewOggFile(filename string) (*OggWriterWrapper, error) {
+	writer, err := ogg.New(filename, SampleRate, Channels)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OggFile: %w", err)
 	}

@@ -57,8 +57,6 @@ func runTranscribe(cmd *cobra.Command, args []string) {
 
 	streamChan := snd.DemuxOpusPackets(ctx, packetChan, ssrcCache)
 
-	useSpeechmatics, _ := cmd.Flags().GetBool("speechmatics")
-
 	log.Info(
 		"Listening for demuxed Opus packet streams. Press CTRL-C to exit.",
 	)
@@ -70,7 +68,6 @@ func runTranscribe(cmd *cobra.Command, args []string) {
 			stream,
 			queries,
 			sqlDB,
-			useSpeechmatics,
 		)
 	}
 
@@ -300,7 +297,6 @@ func handleStreamWithTranscription(
 	stream <-chan snd.OpusPacketNotification,
 	queries *db.Queries,
 	pool *pgxpool.Pool,
-	useSpeechmatics bool,
 ) {
 	log.Info("Starting handleStreamWithTranscription")
 
