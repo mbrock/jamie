@@ -61,11 +61,7 @@ templ head() {
 
 templ articleTemplate(article Article) {
 	<div class="article">
-		if article.StartTime != time.Time{} {
-			<div class="date">{ article.StartTime.Format("Monday, 2 January, 2006") }</div>
-		} else {
-			<div class="date hidden">Placeholder</div>
-		}
+		<div class="date">{ article.StartTime.Format("Monday, 2 January") }</div>
 		for _, section := range article.Sections {
 			@sectionTemplate(section)
 		}
