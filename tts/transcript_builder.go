@@ -73,25 +73,16 @@ func (tb *TranscriptBuilder) WriteWord(word TranscriptWord, isPartial bool) {
 		tb.currentStartTime = word.AbsoluteStartTime
 	}
 
-	if word.IsEOS {
+	if word.IsEOS || tb.currentStartTime.IsZero() {
 		tb.lines = append(tb.lines, Line{
 			Spans:     tb.currentLine,
-			StartTime: tb.currentStartTime,
+			StartTime: tb.currentStartTime.IsZero() ? word.AbsoluteStartTime : tb.currentStartTime,
 			EndTime:   word.AbsoluteStartTime.Add(time.Duration(word.RelativeEndTime * float64(time.Second))),
 			SessionID: word.SessionID,
 		})
 
 		tb.currentLine = []Span{}
 		tb.currentStartTime = time.Time{}
-	} else if tb.currentStartTime.IsZero() {
-		// If it's not the end of a sentence but we haven't set a start time yet,
-		// create a new line with the current word
-		tb.lines = append(tb.lines, Line{
-			Spans:     tb.currentLine,
-			StartTime: word.AbsoluteStartTime,
-			EndTime:   word.AbsoluteStartTime.Add(time.Duration(word.RelativeEndTime * float64(time.Second))),
-			SessionID: word.SessionID,
-		})
 	}
 }
 

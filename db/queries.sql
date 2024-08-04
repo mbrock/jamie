@@ -160,7 +160,8 @@ SELECT ts.id,
     tw.is_eos,
     tw.attaches_to,
     wa.content,
-    wa.confidence
+    wa.confidence,
+    s.id AS session_id
 FROM transcription_segments ts
     JOIN transcription_words tw ON ts.id = tw.segment_id
     AND ts.version = tw.version

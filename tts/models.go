@@ -61,6 +61,7 @@ func ConvertDBRowsToTranscriptSegments(
 			IsEOS:             row.IsEos,
 			AttachesTo:        row.AttachesTo.String,
 			AbsoluteStartTime: row.RealStartTime.Time,
+			SessionID:         row.SessionID,
 		}
 
 		segment.Words = append(segment.Words, word)
