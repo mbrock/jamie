@@ -15,9 +15,6 @@ import (
 	"node.town/snd"
 )
 
-// TranscriptMessage is deprecated, use TranscriptSegment instead
-type TranscriptMessage = TranscriptSegment
-
 type Config struct {
 	SpeechmaticsAPIKey string
 	DatabaseURL        string
@@ -133,7 +130,7 @@ func runStream(cmd *cobra.Command, args []string) {
 	defer CloseLogger()
 
 	log.Info("UI enabled")
-	transcriptChan := make(chan TranscriptMessage, 100)
+	transcriptChan := make(chan TranscriptSegment, 100)
 
 	go func() {
 		p := tea.NewProgram(initialModel(transcriptChan, queries))
@@ -192,13 +189,17 @@ func handleTranscriptionUpdate(
 	}
 }
 
-func convertDBRowsToTranscriptWords(rows []db.GetTranscriptSegmentRow) []TranscriptWord {
+func convertDBRowsToTranscriptWords(
+	rows []db.GetTranscriptSegmentRow,
+) []TranscriptWord {
 	words := make([]TranscriptWord, len(rows))
 	for i, row := range rows {
 		words[i] = TranscriptWord{
-			Content:       row.Content,
-			StartTime:     float64(row.StartTime.Microseconds) / 1000000,
-			EndTime:       float64(row.StartTime.Microseconds+row.Duration.Microseconds) / 1000000,
+			Content:   row.Content,
+			StartTime: float64(row.StartTime.Microseconds) / 1000000,
+			EndTime: float64(
+				row.StartTime.Microseconds+row.Duration.Microseconds,
+			) / 1000000,
 			Confidence:    row.Confidence,
 			IsEOS:         row.IsEos,
 			AttachesTo:    row.AttachesTo.String,
