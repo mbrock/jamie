@@ -197,13 +197,7 @@ func handleTranscriptionUpdate(
 		return
 	}
 
-	words, err := queries.GetTranscriptSegment(ctx, update.ID)
-	if err != nil {
-		log.Error("Failed to get transcription words", "error", err)
-		return
-	}
-
-	formattedWords := formatTranscriptWords(words)
+	formattedWords := formatTranscriptWords(segment)
 
 	if len(segment) > 0 {
 		transcriptChan <- TranscriptMessage{
@@ -220,9 +214,11 @@ func formatTranscriptWords(
 	var formattedWords []TranscriptWord
 	for _, word := range words {
 		formattedWords = append(formattedWords, TranscriptWord{
-			Content:       word.Content,
-			StartTime:     float64(word.StartTime.Microseconds) / 1000000,
-			EndTime:       float64(word.StartTime.Microseconds+word.Duration.Microseconds) / 1000000,
+			Content:   word.Content,
+			StartTime: float64(word.StartTime.Microseconds) / 1000000,
+			EndTime: float64(
+				word.StartTime.Microseconds+word.Duration.Microseconds,
+			) / 1000000,
 			Confidence:    word.Confidence,
 			IsEOS:         word.IsEos,
 			AttachesTo:    word.AttachesTo.String,
