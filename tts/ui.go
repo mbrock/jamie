@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -198,7 +197,9 @@ func (m model) TranscriptView() string {
 
 	var result strings.Builder
 	for _, line := range allLines {
-		result.WriteString(fmt.Sprintf("(%s) ", line.StartTime.Format("15:04:05")))
+		result.WriteString(
+			fmt.Sprintf("(%s) ", line.StartTime.Format("15:04:05")),
+		)
 		for _, span := range line.Spans {
 			result.WriteString(span.Style.Render(span.Content))
 		}

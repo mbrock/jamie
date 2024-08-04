@@ -24,17 +24,17 @@ templ TranscriptTemplate(lines []Line) {
 
 templ getSpanClass(style SpanStyle) {
 	switch style {
-	case StyleNormal:
-		class="text-gray-900"
-	case StylePartial:
-		class="text-gray-500 italic"
-	case StyleHighConfidence:
-		class="text-green-600 font-semibold"
-	case StyleMediumConfidence:
-		class="text-yellow-600"
-	case StyleLowConfidence:
-		class="text-red-600"
-	default:
-		class="text-gray-900"
+		case StyleNormal:
+			return "text-gray-900"
+		case StylePartial:
+			return "text-gray-500 italic"
+		case StyleHighConfidence:
+			return "text-green-600 font-semibold"
+		case StyleMediumConfidence:
+			return "text-yellow-600"
+		case StyleLowConfidence:
+			return "text-red-600"
+		default:
+			return "text-gray-900"
 	}
 }
