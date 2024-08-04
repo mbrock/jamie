@@ -1,6 +1,8 @@
 # Jamie - Discord Voice Channel Transcription Bot
 
-Jamie is a Discord bot designed to join voice channels, record audio, and provide real-time transcription of conversations. It's built with Go and uses various technologies to process and analyze audio data.
+Jamie is a Discord bot designed to join voice channels, record audio, and
+provide real-time transcription of conversations. It's built with Go and uses
+various technologies to process and analyze audio data.
 
 ## Features
 
@@ -23,47 +25,54 @@ Jamie is a Discord bot designed to join voice channels, record audio, and provid
 ## Setup
 
 1. Clone the repository:
+
    ```
-   git clone https://github.com/yourusername/jamie-discord-bot.git
-   cd jamie-discord-bot
+   git clone https://github.com/mbrock/jamie
+   cd jamie
    ```
 
 2. Install dependencies:
+
    ```
    go mod tidy
    ```
 
 3. Set up your PostgreSQL database and run the initialization script:
+
    ```
-   psql -d your_database_name -f db/db_init.sql
+   psql -d jamie -f db/db_init.sql
    ```
 
 4. Create a `.env` file in the root directory with the following content:
+
    ```
+   DATABASE_URL=postgres://username:password@localhost:5432/jamie
    DISCORD_TOKEN=your_discord_bot_token
-   DATABASE_URL=postgres://username:password@localhost:5432/your_database_name
    GEMINI_API_KEY=your_google_cloud_api_key
    SPEECHMATICS_API_KEY=your_speechmatics_api_key
    ```
 
 5. Build the project:
    ```
-   go build
+   make
    ```
 
 ## Usage
 
 To start the bot and listen in Discord voice channels:
+
 ```
 ./jamie listen
 ```
 
 To start the HTTP server for viewing transcripts:
+
 ```
 ./jamie http
 ```
 
 For more commands and options, run:
+
 ```
 ./jamie --help
 ```
@@ -74,4 +83,5 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-This project is licensed under the GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later) - see the LICENSE file for details.
+This project is licensed under the GNU Affero General Public License v3.0 or
+later (AGPL-3.0-or-later) - see the LICENSE file for details.
