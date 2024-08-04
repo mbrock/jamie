@@ -197,7 +197,7 @@ func handleTranscriptionUpdate(
 		return
 	}
 
-	words, err := queries.GetTranscriptWords(ctx, update.ID)
+	words, err := queries.GetTranscriptSegment(ctx, update.ID)
 	if err != nil {
 		log.Error("Failed to get transcription words", "error", err)
 		return
@@ -205,15 +205,17 @@ func handleTranscriptionUpdate(
 
 	formattedWords := formatTranscriptWords(words)
 
-	transcriptChan <- TranscriptMessage{
-		SessionID: segment.SessionID,
-		IsFinal:   segment.IsFinal,
-		Words:     formattedWords,
+	if len(segment) > 0 {
+		transcriptChan <- TranscriptMessage{
+			SessionID: segment[0].SessionID,
+			IsFinal:   segment[0].IsFinal,
+			Words:     formattedWords,
+		}
 	}
 }
 
 func formatTranscriptWords(
-	words []db.GetTranscriptWordsRow,
+	words []db.GetTranscriptSegmentRow,
 ) []TranscriptWord {
 	var formattedWords []TranscriptWord
 	for _, word := range words {
