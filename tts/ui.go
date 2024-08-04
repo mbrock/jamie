@@ -10,65 +10,77 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+type lineInfo struct {
+	content   string
+	startTime float64
+}
+
 type WordBuilder struct {
-	builder    strings.Builder
-	lastWasEOS bool
+	lines      []lineInfo
+	currentLine strings.Builder
+	lastWasEOS  bool
 }
 
 func (wb *WordBuilder) WriteWord(word TranscriptWord, isPartial bool) {
 	if !wb.lastWasEOS && word.AttachesTo != "previous" {
-		wb.builder.WriteString(" ")
+		wb.currentLine.WriteString(" ")
 	}
 
 	if len(word.Alternatives) > 1 {
-		wb.builder.WriteString("[")
+		wb.currentLine.WriteString("[")
 		for i, alt := range word.Alternatives {
 			if i > 0 {
-				wb.builder.WriteString("|")
+				wb.currentLine.WriteString("|")
 			}
 			style := lipgloss.NewStyle()
 			if isPartial {
-				style = style.Foreground(
-					lipgloss.Color("240"),
-				) // Dark gray foreground for partial transcripts
+				style = style.Foreground(lipgloss.Color("240"))
 			} else {
 				style = style.Foreground(getConfidenceColor(alt.Confidence))
 			}
-			wb.builder.WriteString(style.Render(alt.Content))
+			wb.currentLine.WriteString(style.Render(alt.Content))
 		}
-		wb.builder.WriteString("]")
+		wb.currentLine.WriteString("]")
 	} else {
 		style := lipgloss.NewStyle()
 		if isPartial {
-			style = style.Foreground(lipgloss.Color("240")) // Dark gray foreground for partial transcripts
+			style = style.Foreground(lipgloss.Color("240"))
 		} else {
 			style = style.Foreground(getConfidenceColor(word.Confidence))
 		}
-		wb.builder.WriteString(style.Render(word.Content))
+		wb.currentLine.WriteString(style.Render(word.Content))
 	}
 
 	wb.lastWasEOS = word.IsEOS
 
 	if word.IsEOS {
-		wb.builder.WriteString("\n")
+		wb.lines = append(wb.lines, lineInfo{
+			content:   wb.currentLine.String(),
+			startTime: word.StartTime,
+		})
+		wb.currentLine.Reset()
 	}
 }
 
-func (wb *WordBuilder) AppendWords(
-	words []TranscriptWord,
-	isPartial bool,
-) {
+func (wb *WordBuilder) AppendWords(words []TranscriptWord, isPartial bool) {
 	for _, word := range words {
 		wb.WriteWord(word, isPartial)
 	}
+	if !wb.lastWasEOS && len(words) > 0 {
+		wb.lines = append(wb.lines, lineInfo{
+			content:   wb.currentLine.String(),
+			startTime: words[0].StartTime,
+		})
+	}
 }
 
-func (wb *WordBuilder) String() string {
-	return wb.builder.String()
+func (wb *WordBuilder) GetLines() []lineInfo {
+	return wb.lines
 }
 
 func (wb *WordBuilder) Reset() {
-	wb.builder.Reset()
+	wb.lines = nil
+	wb.currentLine.Reset()
 	wb.lastWasEOS = true
 }
 
@@ -221,33 +233,26 @@ func (m model) contentView() string {
 }
 
 func (m model) transcriptView() string {
-	type lineInfo struct {
-		content   string
-		startTime float64
-	}
+	var allLines []lineInfo
 
-	var lines []lineInfo
-
-	for sessionID, session := range m.sessions {
-		wb := &WordBuilder{lastWasEOS: true}
+	for _, session := range m.sessions {
+		wb := &WordBuilder{}
 		for _, transcript := range session.FinalTranscripts {
 			wb.AppendWords(transcript, false) // Final transcripts
 		}
 		if len(session.CurrentTranscript) > 0 {
-			wb.AppendWords(
-				session.CurrentTranscript,
-				true,
-			)
+			wb.AppendWords(session.CurrentTranscript, true)
 		}
+		allLines = append(allLines, wb.GetLines()...)
 	}
 
 	// Sort lines by start time
-	sort.Slice(lines, func(i, j int) bool {
-		return lines[i].startTime < lines[j].startTime
+	sort.Slice(allLines, func(i, j int) bool {
+		return allLines[i].startTime < allLines[j].startTime
 	})
 
 	var result strings.Builder
-	for _, line := range lines {
+	for _, line := range allLines {
 		result.WriteString(line.content)
 		result.WriteString("\n")
 	}
