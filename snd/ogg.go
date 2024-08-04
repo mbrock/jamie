@@ -98,12 +98,12 @@ type Ogg struct {
 	oggWriter         OggWriter
 	timeProvider      TimeProvider
 	logger            Logger
-	packetCount       int       // Total number of packets processed
-	firstTimestamp    time.Time // Timestamp of the first packet received
-	lastTimestamp     time.Time // Timestamp of the last packet received
-	gapCount          int       // Number of gaps detected in the audio stream
-	segmentNumber     uint64    // Current segment number for RTP packets
-	expectedTimestamp time.Time // Expected timestamp for the next packet
+	packetCount       int           // Total number of packets processed
+	firstTimestamp    time.Time     // Timestamp of the first packet received
+	lastTimestamp     time.Time     // Timestamp of the last packet received
+	gapCount          int           // Number of gaps detected in the audio stream
+	segmentNumber     uint64        // Current segment number for RTP packets
+	expectedTimestamp time.Time     // Expected timestamp for the next packet
 	silenceDuration   time.Duration // Total duration of inserted silence
 }
 
@@ -169,13 +169,6 @@ func (o *Ogg) Close() error {
 
 // WritePacket writes an OpusPacket to the Ogg container
 func (o *Ogg) WritePacket(packet OpusPacket) error {
-	o.logger.Info("Writing packet",
-		"packet_count", o.packetCount,
-		"packet_sequence", packet.Sequence,
-		"packet_timestamp", packet.Timestamp,
-		"packet_created_at", packet.CreatedAt,
-	)
-
 	if o.packetCount == 0 {
 		o.firstTimestamp = packet.CreatedAt
 		o.expectedTimestamp = o.startTime
@@ -183,11 +176,6 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 
 	silenceDuration := o.insertSilenceIfNeeded(packet.CreatedAt)
 	if silenceDuration > 0 {
-		o.logger.Info("Silence inserted",
-			"duration", silenceDuration,
-			"expected_timestamp", o.expectedTimestamp,
-			"actual_timestamp", packet.CreatedAt,
-		)
 		packet.CreatedAt = o.expectedTimestamp.Add(silenceDuration)
 	}
 
