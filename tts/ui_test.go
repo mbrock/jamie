@@ -75,6 +75,37 @@ func TestTranscriptView(t *testing.T) {
 		}
 	})
 
+	t.Run("Session with AttachesTo Period", func(t *testing.T) {
+		m := newTestModel()
+		m.addFinalTranscript(
+			1,
+			word("This is a sentence", 0.0, 1.0, false),
+			TranscriptWord{
+				Content:    ".",
+				StartTime:  1.0,
+				EndTime:    1.1,
+				Confidence: 1.0,
+				IsEOS:      true,
+				AttachesTo: "previous",
+			},
+		)
+		m.setCurrentTranscript(
+			1,
+			word("Another sentence", 1.2, 2.0, false),
+		)
+
+		expected := "This is a sentence.\nAnother sentence\n"
+		result := model(m).TranscriptView()
+
+		if result != expected {
+			t.Errorf(
+				"TranscriptView() returned incorrect result.\nExpected:\n%s\nGot:\n%s",
+				expected,
+				result,
+			)
+		}
+	})
+
 	t.Run("Two Interleaved Sessions", func(t *testing.T) {
 		m := newTestModel()
 		m.addFinalTranscript(
