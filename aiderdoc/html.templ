@@ -7,30 +7,52 @@ templ EntriesTemplate(articles []Article) {
 			<meta charset="UTF-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>Aider Chronicle</title>
-			<script src="https://cdn.tailwindcss.com"></script>
-		</head>
-		<body class="bg-gray-100 p-8">
-			<div class="max-w-4xl mx-auto">
-				<h1 class="text-3xl font-bold mb-6">Aider Chronicle</h1>
-				for _, article := range articles {
-					<article class="mb-8 bg-white shadow-md rounded-lg p-6">
-						<h2 class="text-2xl font-semibold mb-4">Session started at { article.StartTime.Format("January 2, 2006 15:04:05") }</h2>
-						for _, section := range article.Sections {
-							<section class="mb-6">
-								<h3 class="text-xl font-medium mb-3">Section started at { section.StartTime.Format("15:04:05") }</h3>
-								<ul class="space-y-4">
-									for _, entry := range section.Entries {
-										<li class="border-b pb-2">
-											<span class="text-sm text-gray-600">{ entry.Timestamp.Format("15:04:05") }</span>
-											<p class="mt-1 whitespace-pre-wrap">{ entry.Content }</p>
-										</li>
-									}
-								</ul>
-							</section>
-						}
-					</article>
+			<style>
+				body {
+					font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+					line-height: 1.5;
+					max-width: 800px;
+					margin: 0 auto;
+					padding: 2rem;
+					color: #333;
 				}
-			</div>
+				.article {
+					margin-bottom: 2rem;
+					border-top: 1px solid #ddd;
+					padding-top: 2rem;
+				}
+				.section {
+					margin-bottom: 1.5rem;
+				}
+				.entry {
+					margin-bottom: 1rem;
+				}
+				.timestamp {
+					font-size: 0.875rem;
+					color: #666;
+				}
+				.content {
+					margin-top: 0.25rem;
+					white-space: pre-wrap;
+				}
+			</style>
+		</head>
+		<body>
+			for _, article := range articles {
+				<div class="article">
+					<div class="timestamp">{ article.StartTime.Format("2006-01-02 15:04:05") }</div>
+					for _, section := range article.Sections {
+						<div class="section">
+							for _, entry := range section.Entries {
+								<div class="entry">
+									<div class="timestamp">{ entry.Timestamp.Format("15:04:05") }</div>
+									<div class="content">{ entry.Content }</div>
+								</div>
+							}
+						</div>
+					}
+				</div>
+			}
 		</body>
 	</html>
 }
