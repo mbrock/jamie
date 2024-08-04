@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/pion/rtp"
-	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
+	"node.town/ogg"
 )
 
 // Constants
@@ -42,11 +42,11 @@ func (r *RealTimeProvider) Now() time.Time {
 
 // OggWriterWrapper wraps oggwriter.OggWriter to implement OggWriter interface
 type OggWriterWrapper struct {
-	writer *oggwriter.OggWriter
+	writer *ogg.OggWriter
 }
 
 func NewOggWriter(w io.Writer) (*OggWriterWrapper, error) {
-	writer, err := oggwriter.NewWith(w, SampleRate, Channels)
+	writer, err := ogg.NewWith(w, SampleRate, Channels)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OggWriter: %w", err)
 	}
@@ -215,7 +215,7 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 	}
 
 	o.updateTimestamps(packet.CreatedAt)
-	o.packetCount++
+	//	o.packetCount++
 
 	return nil
 }
@@ -241,7 +241,13 @@ func (o *Ogg) insertSilenceIfNeeded(packetTimestamp time.Time) time.Duration {
 		return 0
 	}
 
+	// We truncate the silence duration to a multiple of OpusFrameDuration
+	// This ensures we only insert complete Opus frames
 	silenceDuration = silenceDuration.Truncate(OpusFrameDuration)
+
+	// Calculate the number of silent frames to insert
+	// We divide again by OpusFrameDuration to get the count of frames
+	// This division will always result in an integer because we truncated earlier
 	silentFrames := int(silenceDuration / OpusFrameDuration)
 
 	if err := o.writeSilentFrames(silentFrames); err != nil {
@@ -257,13 +263,14 @@ func (o *Ogg) insertSilenceIfNeeded(packetTimestamp time.Time) time.Duration {
 
 // writeSilentFrames writes a number of silent frames to the Ogg container
 func (o *Ogg) writeSilentFrames(frames int) error {
-	silentOpusPacket := []byte{0xf8, 0xff, 0xfe} // Silent Opus packet
+	silentOpusPacket := []byte{0xFC, 0xFD, 0xFE}
+
 	for i := 0; i < frames; i++ {
 		if err := o.writeRTPPacket(silentOpusPacket); err != nil {
 			return fmt.Errorf("error writing silent frame: %w", err)
 		}
 	}
-	o.packetCount += uint64(frames)
+	//	o.packetCount += uint64(frames)
 	return nil
 }
 
