@@ -2,9 +2,13 @@ package tts
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/log"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"node.town/db"
@@ -37,7 +41,7 @@ func init() {
 
 func runTranscribe(cmd *cobra.Command, args []string) {
 	cfg := loadConfig()
-	
+
 	pgPool, queries, err := db.OpenDatabase()
 	if err != nil {
 		log.Fatal("Failed to open database", "error", err)
@@ -56,7 +60,12 @@ func runTranscribe(cmd *cobra.Command, args []string) {
 	}
 }
 
-func streamAndTranscribe(ctx context.Context, pgPool *pgxpool.Pool, queries *db.Queries, handler *TranscriptionHandler) error {
+func streamAndTranscribe(
+	ctx context.Context,
+	pgPool *pgxpool.Pool,
+	queries *db.Queries,
+	handler *TranscriptionHandler,
+) error {
 	cache := snd.NewSSRCUserIDCache(queries)
 	streamer := snd.NewPostgresPacketStreamer(pgPool, cache, log.Default())
 	packetChan, err := snd.StreamOpusPackets(ctx, streamer)
@@ -67,26 +76,35 @@ func streamAndTranscribe(ctx context.Context, pgPool *pgxpool.Pool, queries *db.
 	demuxer := snd.NewDefaultPacketDemuxer(cache, log.Default())
 	streamChan := snd.DemuxOpusPackets(ctx, demuxer, packetChan)
 
-	log.Info("Listening for demuxed Opus packet streams. Press CTRL-C to exit.")
+	log.Info(
+		"Listening for demuxed Opus packet streams. Press CTRL-C to exit.",
+	)
 	log.Info("Real-time transcription enabled")
 
 	for stream := range streamChan {
 		go func(s <-chan snd.OpusPacketNotification) {
-			sessionID, err := queries.InsertTranscriptionSession(ctx, db.InsertTranscriptionSessionParams{
-				Ssrc: s.Ssrc,
-				StartTime: pgtype.Timestamptz{
-					Time:  time.Now(),
-					Valid: true,
+			sessionID, err := queries.InsertTranscriptionSession(
+				ctx,
+				db.InsertTranscriptionSessionParams{
+					Ssrc: s.Ssrc,
+					StartTime: pgtype.Timestamptz{
+						Time:  time.Now(),
+						Valid: true,
+					},
+					GuildID:   s.GuildID,
+					ChannelID: s.ChannelID,
+					UserID:    s.UserID,
 				},
-				GuildID:   s.GuildID,
-				ChannelID: s.ChannelID,
-				UserID:    s.UserID,
-			})
+			)
 			if err != nil {
-				log.Error("Failed to insert transcription session", "error", err)
+				log.Error(
+					"Failed to insert transcription session",
+					"error",
+					err,
+				)
 				return
 			}
-			
+
 			err = handler.ProcessAudioStream(ctx, s, sessionID)
 			if err != nil {
 				log.Error("Error processing audio stream", "error", err)
@@ -122,7 +140,11 @@ func runStream(cmd *cobra.Command, args []string) {
 
 	updates, err := snd.ListenForTranscriptionChanges(ctx, pgPool)
 	if err != nil {
-		log.Fatal("Failed to set up transcription change listener", "error", err)
+		log.Fatal(
+			"Failed to set up transcription change listener",
+			"error",
+			err,
+		)
 	}
 
 	go func() {
@@ -141,7 +163,12 @@ func loadConfig() Config {
 	}
 }
 
-func handleTranscriptionUpdate(ctx context.Context, update snd.TranscriptionUpdate, queries *db.Queries, transcriptChan chan<- TranscriptMessage) {
+func handleTranscriptionUpdate(
+	ctx context.Context,
+	update snd.TranscriptionUpdate,
+	queries *db.Queries,
+	transcriptChan chan<- TranscriptMessage,
+) {
 	if update.Operation != "INSERT" && update.Operation != "UPDATE" {
 		return
 	}
@@ -167,7 +194,9 @@ func handleTranscriptionUpdate(ctx context.Context, update snd.TranscriptionUpda
 	}
 }
 
-func formatTranscriptWords(words []db.GetTranscriptionWordsRow) []TranscriptWord {
+func formatTranscriptWords(
+	words []db.GetTranscriptionWordsRow,
+) []TranscriptWord {
 	var formattedWords []TranscriptWord
 	for _, word := range words {
 		formattedWords = append(formattedWords, TranscriptWord{
