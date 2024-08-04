@@ -4,13 +4,15 @@ import (
 	"testing"
 )
 
-func newTestModel() model {
-	return model{
+type testModel model
+
+func newTestModel() testModel {
+	return testModel{
 		sessions: make(map[int64]*SessionTranscript),
 	}
 }
 
-func addFinalTranscript(m *model, sessionID int64, words []TranscriptWord) {
+func (m *testModel) addFinalTranscript(sessionID int64, words ...TranscriptWord) {
 	session, ok := m.sessions[sessionID]
 	if !ok {
 		session = &SessionTranscript{}
@@ -19,7 +21,7 @@ func addFinalTranscript(m *model, sessionID int64, words []TranscriptWord) {
 	session.FinalTranscripts = append(session.FinalTranscripts, words)
 }
 
-func setCurrentTranscript(m *model, sessionID int64, words []TranscriptWord) {
+func (m *testModel) setCurrentTranscript(sessionID int64, words ...TranscriptWord) {
 	session, ok := m.sessions[sessionID]
 	if !ok {
 		session = &SessionTranscript{}
@@ -41,22 +43,18 @@ func newWord(content string, startTime, endTime float64, confidence float64, isE
 func TestTranscriptView(t *testing.T) {
 	t.Run("Single Session", func(t *testing.T) {
 		m := newTestModel()
-		addFinalTranscript(
-			&m,
+		m.addFinalTranscript(
 			1,
-			[]TranscriptWord{
-				newWord("A", 0.0, 0.5, 0.9, false),
-				newWord("B", 0.5, 1.0, 0.8, true),
-			},
+			newWord("A", 0.0, 0.5, 0.9, false),
+			newWord("B", 0.5, 1.0, 0.8, true),
 		)
-		setCurrentTranscript(
-			&m,
+		m.setCurrentTranscript(
 			1,
-			[]TranscriptWord{newWord("C", 1.1, 1.3, 0.7, false)},
+			newWord("C", 1.1, 1.3, 0.7, false),
 		)
 
 		expected := "A B\nC\n"
-		result := m.TranscriptView()
+		result := model(m).TranscriptView()
 
 		if result != expected {
 			t.Errorf(
@@ -69,40 +67,30 @@ func TestTranscriptView(t *testing.T) {
 
 	t.Run("Two Interleaved Sessions", func(t *testing.T) {
 		m := newTestModel()
-		addFinalTranscript(
-			&m,
+		m.addFinalTranscript(
 			1,
-			[]TranscriptWord{
-				newWord("A", 0.0, 0.5, 0.9, false),
-				newWord("B", 0.5, 1.0, 0.8, false),
-				newWord("1", 1.0, 1.5, 0.9, true),
-			},
+			newWord("A", 0.0, 0.5, 0.9, false),
+			newWord("B", 0.5, 1.0, 0.8, false),
+			newWord("1", 1.0, 1.5, 0.9, true),
 		)
-		setCurrentTranscript(
-			&m,
+		m.setCurrentTranscript(
 			1,
-			[]TranscriptWord{newWord("2", 2.5, 3.0, 0.7, true)},
+			newWord("2", 2.5, 3.0, 0.7, true),
 		)
 
-		addFinalTranscript(
-			&m,
+		m.addFinalTranscript(
 			2,
-			[]TranscriptWord{
-				newWord("C", 0.2, 0.7, 0.9, false),
-				newWord("D", 0.7, 1.2, 0.8, true),
-			},
+			newWord("C", 0.2, 0.7, 0.9, false),
+			newWord("D", 0.7, 1.2, 0.8, true),
 		)
-		setCurrentTranscript(
-			&m,
+		m.setCurrentTranscript(
 			2,
-			[]TranscriptWord{
-				newWord("3", 2.0, 2.5, 0.8, false),
-				newWord("4", 2.5, 3.0, 0.8, true),
-			},
+			newWord("3", 2.0, 2.5, 0.8, false),
+			newWord("4", 2.5, 3.0, 0.8, true),
 		)
 
 		expected := "A B 1\nC D\n2\n3 4\n"
-		result := m.TranscriptView()
+		result := model(m).TranscriptView()
 
 		if result != expected {
 			t.Errorf(
