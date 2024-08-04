@@ -34,7 +34,7 @@ type AudioStreamUpdate struct {
 
 // ConvertDBRowsToTranscriptSegments converts database rows to TranscriptSegment structs
 func ConvertDBRowsToTranscriptSegments(
-	rows []db.GetTranscriptSegmentRow,
+	rows []db.GetTranscriptsRow,
 ) []TranscriptSegment {
 	segmentMap := make(map[int64]TranscriptSegment)
 

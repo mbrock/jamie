@@ -135,29 +135,6 @@ RETURNING id;
 INSERT INTO word_alternatives (word_id, content, confidence)
 VALUES ($1, $2, $3);
 
--- name: GetTranscriptSegment :many
-SELECT ts.id,
-    ts.session_id,
-    ts.is_final,
-    tw.id AS word_id,
-    tw.start_time,
-    s.created_at AS session_created_at,
-    (s.created_at + tw.start_time)::timestamptz AS real_start_time,
-    tw.duration,
-    tw.is_eos,
-    tw.attaches_to,
-    wa.content,
-    wa.confidence
-FROM transcription_segments ts
-    JOIN transcription_words tw ON ts.id = tw.segment_id
-    AND ts.version = tw.version
-    JOIN word_alternatives wa ON tw.id = wa.word_id
-    JOIN transcription_sessions s ON ts.session_id = s.id
-WHERE ts.id = $1
-ORDER BY tw.start_time,
-    tw.id,
-    wa.confidence DESC;
-
 -- name: GetTranscripts :many
 SELECT ts.id,
     ts.session_id,
@@ -176,7 +153,8 @@ FROM transcription_segments ts
     AND ts.version = tw.version
     JOIN word_alternatives wa ON tw.id = wa.word_id
     JOIN transcription_sessions s ON ts.session_id = s.id
-WHERE ts.created_at > $1
+WHERE ($1::bigint IS NULL OR ts.id = $1)
+    AND ($2::timestamptz IS NULL OR ts.created_at > $2)
 ORDER BY ts.created_at,
     tw.start_time,
     tw.id,

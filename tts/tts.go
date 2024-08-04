@@ -174,7 +174,10 @@ func handleTranscriptionUpdate(
 		return
 	}
 
-	dbSegment, err := queries.GetTranscriptSegment(ctx, update.ID)
+	dbSegment, err := queries.GetTranscripts(ctx, db.GetTranscriptsParams{
+		ID:        pgtype.Int8{Int64: update.ID, Valid: true},
+		CreatedAt: pgtype.Timestamptz{Valid: false},
+	})
 	if err != nil {
 		log.Error("Failed to get transcription segment", "error", err)
 		return
@@ -190,7 +193,7 @@ func handleTranscriptionUpdate(
 }
 
 func convertDBRowsToTranscriptWords(
-	rows []db.GetTranscriptSegmentRow,
+	rows []db.GetTranscriptsRow,
 ) []TranscriptWord {
 	words := make([]TranscriptWord, len(rows))
 	for i, row := range rows {
