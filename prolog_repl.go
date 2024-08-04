@@ -8,8 +8,28 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/trealla-prolog/go/trealla"
 	"node.town/db"
+)
+
+var (
+	titleStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#FAFAFA")).
+		Background(lipgloss.Color("#874BFD")).
+		Padding(0, 1)
+
+	infoStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#B58900"))
+
+	errorStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#DC322F"))
+
+	promptStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#268BD2"))
+
+	solutionStyle = lipgloss.NewStyle().
+		Foreground(lipgloss.Color("#859900"))
 )
 
 type model struct {
@@ -20,6 +40,7 @@ type model struct {
 	err       error
 	query     trealla.Query
 	mode      string // "input" or "query"
+	solutions []map[string]string
 }
 
 func initialModel(queries *db.Queries) model {
@@ -81,9 +102,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter":
 				queryStr := m.textInput.Value()
 				m.query = m.prolog.Query(context.Background(), queryStr)
-				m.history = append(m.history, fmt.Sprintf("Query: %s", queryStr))
+				m.history = append(m.history, promptStyle.Render(fmt.Sprintf("Query: %s", queryStr)))
 				m.textInput.SetValue("")
 				m.mode = "query"
+				m.solutions = []map[string]string{}
+				m.iterateQuery(context.Background())
 
 			case "ctrl+c", "esc":
 				return m, tea.Quit
@@ -91,23 +114,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "query":
 			switch msg.String() {
 			case "enter", "n":
-				if m.query.Next(context.Background()) {
-					solution := m.query.Current().Solution
-					for k, v := range solution {
-						m.history = append(m.history, fmt.Sprintf("  %v = %v", k, v))
-					}
-				} else {
-					if err := m.query.Err(); err != nil {
-						m.history = append(m.history, fmt.Sprintf("Error: %v", err))
-					} else {
-						m.history = append(m.history, "No more solutions.")
-					}
-					m.query.Close()
-					m.query = nil
-					m.mode = "input"
-				}
-				m.viewport.SetContent(strings.Join(m.history, "\n\n"))
-				m.viewport.GotoBottom()
+				m.iterateQuery(context.Background())
 
 			case "ctrl+c", "esc", "q":
 				cmds = append(cmds, func() tea.Msg {
@@ -161,21 +168,22 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m model) View() string {
 	if m.err != nil {
-		return fmt.Sprintf("Error: %v", m.err)
+		return errorStyle.Render(fmt.Sprintf("Error: %v", m.err))
 	}
 
 	var footer string
 	if m.mode == "input" {
-		footer = m.textInput.View()
+		footer = promptStyle.Render(m.textInput.View())
 	} else {
-		footer = "[ N ] Next solution  [ A ] Abort query  [ Q ] Quit"
+		footer = infoStyle.Render("[ N ] Next solution  [ A ] Abort query  [ Q ] Quit")
 	}
 
 	return fmt.Sprintf(
-		"%s\n\n%s",
+		"%s\n\n%s\n\n%s",
+		titleStyle.Render(" Prolog REPL "),
 		m.viewport.View(),
 		footer,
-	) + "\n"
+	)
 }
 
 func StartPrologREPL(queries *db.Queries) {
@@ -183,4 +191,26 @@ func StartPrologREPL(queries *db.Queries) {
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Error running program: %v", err)
 	}
+}
+func (m *model) iterateQuery(ctx context.Context) {
+	if m.query.Next(ctx) {
+		solution := m.query.Current().Solution
+		m.solutions = append(m.solutions, solution)
+		solutionStr := ""
+		for k, v := range solution {
+			solutionStr += fmt.Sprintf("  %v = %v\n", k, v)
+		}
+		m.history = append(m.history, solutionStyle.Render(solutionStr))
+	} else {
+		if err := m.query.Err(); err != nil {
+			m.history = append(m.history, errorStyle.Render(fmt.Sprintf("Error: %v", err)))
+		} else {
+			m.history = append(m.history, infoStyle.Render("No more solutions."))
+		}
+		m.query.Close()
+		m.query = nil
+		m.mode = "input"
+	}
+	m.viewport.SetContent(strings.Join(m.history, "\n"))
+	m.viewport.GotoBottom()
 }
