@@ -226,7 +226,7 @@ func (m model) contentView() string {
 	return m.transcriptView()
 }
 
-func (m model) transcriptView() string {
+func (m model) TranscriptView() string {
 	var allLines []lineInfo
 
 	for _, session := range m.sessions {
