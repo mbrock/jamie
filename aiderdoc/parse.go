@@ -14,6 +14,16 @@ type Entry struct {
 	LineNumber int
 }
 
+type Section struct {
+	StartTime time.Time
+	Entries   []Entry
+}
+
+type Article struct {
+	StartTime time.Time
+	Sections  []Section
+}
+
 func ParseFile(filename string) ([]Entry, error) {
 	file, err := os.Open(filename)
 	if err != nil {

@@ -2,7 +2,7 @@ package aiderdoc
 
 import "time"
 
-templ EntriesTemplate(entries []Entry) {
+templ EntriesTemplate(articles []Article) {
 	<!DOCTYPE html>
 	<html lang="en">
 		<head>
@@ -13,17 +13,25 @@ templ EntriesTemplate(entries []Entry) {
 		</head>
 		<body class="bg-gray-100 p-8">
 			<div class="max-w-4xl mx-auto">
-				<h1 class="text-3xl font-bold mb-6">Log Entries</h1>
-				<div class="bg-white shadow-md rounded-lg p-6">
-					<ul class="space-y-4">
-						for _, entry := range entries {
-							<li class="border-b pb-2">
-								<span class="text-sm text-gray-600">{ entry.Timestamp.Format(time.RFC3339) }</span>
-								<p class="mt-1 whitespace-pre-wrap">{ entry.Content }</p>
-							</li>
+				<h1 class="text-3xl font-bold mb-6">Aider Chronicle</h1>
+				for _, article := range articles {
+					<article class="mb-8 bg-white shadow-md rounded-lg p-6">
+						<h2 class="text-2xl font-semibold mb-4">Session started at { article.StartTime.Format("January 2, 2006 15:04:05") }</h2>
+						for _, section := range article.Sections {
+							<section class="mb-6">
+								<h3 class="text-xl font-medium mb-3">Section started at { section.StartTime.Format("15:04:05") }</h3>
+								<ul class="space-y-4">
+									for _, entry := range section.Entries {
+										<li class="border-b pb-2">
+											<span class="text-sm text-gray-600">{ entry.Timestamp.Format("15:04:05") }</span>
+											<p class="mt-1 whitespace-pre-wrap">{ entry.Content }</p>
+										</li>
+									}
+								</ul>
+							</section>
 						}
-					</ul>
-				</div>
+					</article>
+				}
 			</div>
 		</body>
 	</html>

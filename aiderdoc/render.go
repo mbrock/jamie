@@ -27,7 +27,8 @@ var AiderdocCmd = &cobra.Command{
 			log.Fatalf("Error parsing aider input history file: %v", err)
 		}
 
-		component := EntriesTemplate(entries)
+		articles := ProcessEntries(entries)
+		component := EntriesTemplate(articles)
 		err = component.Render(context.Background(), os.Stdout)
 		if err != nil {
 			log.Fatalf(
