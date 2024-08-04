@@ -33,12 +33,6 @@ func initialModel(queries *db.Queries) model {
 	helpText := `Welcome to the Prolog REPL!
 Enter your queries below.
 
-Available commands:
-:listing - Show the current database
-:clear - Clear the REPL history
-:save <filename> - Save the current database to a file
-:quit - Exit the REPL
-
 For Prolog queries, simply type them and press Enter.
 Use 'N' to get the next solution when in query mode.`
 	vp.SetContent(helpText)
@@ -83,26 +77,47 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch m.mode {
 		case "input":
-			switch msg.Type {
-			case tea.KeyEnter:
+			switch msg.String() {
+			case "enter":
 				queryStr := m.textInput.Value()
 				m.query = m.prolog.Query(context.Background(), queryStr)
 				m.history = append(m.history, fmt.Sprintf("Query: %s", queryStr))
 				m.textInput.SetValue("")
 				m.mode = "query"
-				return m, m.iterateQuery()
-			case tea.KeyCtrlC, tea.KeyEsc:
+
+			case "ctrl+c", "esc":
 				return m, tea.Quit
 			}
 		case "query":
 			switch msg.String() {
-			case "n", "N":
-				return m, m.iterateQuery()
-			case "a", "A":
-				m.query.Close()
-				m.query = nil
-				m.mode = "input"
-			case "q", "Q":
+			case "enter", "n":
+				if m.query.Next(context.Background()) {
+					solution := m.query.Current().Solution
+					for k, v := range solution {
+						m.history = append(m.history, fmt.Sprintf("  %v = %v", k, v))
+					}
+				} else {
+					if err := m.query.Err(); err != nil {
+						m.history = append(m.history, fmt.Sprintf("Error: %v", err))
+					} else {
+						m.history = append(m.history, "No more solutions.")
+					}
+					m.query.Close()
+					m.query = nil
+					m.mode = "input"
+				}
+				m.viewport.SetContent(strings.Join(m.history, "\n\n"))
+				m.viewport.GotoBottom()
+
+			case "ctrl+c", "esc", "q":
+				cmds = append(cmds, func() tea.Msg {
+					m.query.Close()
+					m.query = nil
+					m.mode = "input"
+					return m
+				})
+
+			case "ctrl+d":
 				return m, tea.Quit
 			}
 		}
@@ -134,42 +149,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func iterateQueryCmd(m model) tea.Msg {
-	if m.query.Next(context.Background()) {
-		solution := m.query.Current().Solution
-		for k, v := range solution {
-			m.history = append(m.history, fmt.Sprintf("  %v = %v", k, v))
-		}
-	} else {
-		if err := m.query.Err(); err != nil {
-			m.history = append(m.history, fmt.Sprintf("Error: %v", err))
-		} else {
-			m.history = append(m.history, "No more solutions.")
-		}
-		m.query.Close()
-		m.query = nil
-		m.mode = "input"
-	}
-	m.viewport.SetContent(strings.Join(m.history, "\n\n"))
-	m.viewport.GotoBottom()
-	return m
-}
-
-func (m model) iterateQuery() tea.Cmd {
-	return func() tea.Msg {
-		return iterateQueryCmd(m)
-	}
-}
-
-func (m model) saveDatabase(fileName string) tea.Cmd {
-	return func() tea.Msg {
-		err := m.prolog.SaveDatabase(context.Background(), fileName)
-		if err != nil {
-			return fmt.Errorf("failed to save database: %w", err)
-		}
-		return fmt.Sprintf("Database saved to %s", fileName)
-	}
-}
+// func (m model) startQuery(queryStr string) tea.Cmd {
+// 	return func() tea.Msg {
+// 		m.query = m.prolog.Query(context.Background(), queryStr)
+// 		m.history = append(m.history, fmt.Sprintf("Query: %s", queryStr))
+// 		m.textInput.SetValue("")
+// 		m.mode = "query"
+// 		return m
+// 	}
+// }
 
 func (m model) View() string {
 	if m.err != nil {
