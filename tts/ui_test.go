@@ -207,8 +207,8 @@ func TestTranscriptBuilder(t *testing.T) {
 			t.Errorf("Expected 'How', got '%s'", lines[1].Spans[0].Content)
 		}
 
-		if lines[1].Spans[0].Style.GetForeground() != lipgloss.Color("240") {
-			t.Errorf("Expected partial word color, got %v", lines[1].Spans[0].Style.GetForeground())
+		if lines[1].Spans[0].Style != StylePartial {
+			t.Errorf("Expected partial word style, got %v", lines[1].Spans[0].Style)
 		}
 	})
 
