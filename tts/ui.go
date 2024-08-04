@@ -43,7 +43,7 @@ func (wb *WordBuilder) WriteWord(word TranscriptWord, isPartial bool) {
 	wb.lastWasEOS = word.IsEOS
 
 	if wb.currentStartTime.IsZero() {
-		wb.currentStartTime = word.RealStartTime
+		wb.currentStartTime = word.AbsoluteStartTime
 	}
 
 	if word.IsEOS {
@@ -84,13 +84,13 @@ type model struct {
 	sessions    map[int64]*SessionTranscript
 	logEntries  []string
 	ready       bool
-	transcripts chan TranscriptMessage
+	transcripts chan TranscriptSegment
 	showLog     bool
 	dbQueries   *db.Queries
 }
 
 func initialModel(
-	transcripts chan TranscriptMessage,
+	transcripts chan TranscriptSegment,
 	dbQueries *db.Queries,
 ) model {
 	m := model{
@@ -118,8 +118,8 @@ func initialModel(
 	return m
 }
 
-func (m *model) loadPastHourTranscripts() ([]TranscriptMessage, error) {
-	oneHourAgo := time.Now().Add(-4 * time.Hour)
+func (m *model) loadPastHourTranscripts() ([]TranscriptSegment, error) {
+	oneHourAgo := time.Now().Add(-8 * time.Hour)
 
 	// Fetch transcripts from the database
 	segments, err := m.dbQueries.GetTranscriptsFromLastHour(
@@ -130,35 +130,35 @@ func (m *model) loadPastHourTranscripts() ([]TranscriptMessage, error) {
 		return nil, err
 	}
 
-	var transcripts []TranscriptMessage
+	var transcripts []TranscriptSegment
 	for _, word := range segments {
 		words := make([]TranscriptWord, 0)
 		words = append(words, TranscriptWord{
-			Content:       word.Content,
-			Confidence:    word.Confidence,
-			IsEOS:         word.IsEos,
-			AttachesTo:    word.AttachesTo.String,
-			RealStartTime: word.RealStartTime.Time,
+			Content:           word.Content,
+			Confidence:        word.Confidence,
+			IsEOS:             word.IsEos,
+			AttachesTo:        word.AttachesTo.String,
+			AbsoluteStartTime: word.RealStartTime.Time,
 		})
 
-		transcripts = append(transcripts, TranscriptMessage{
+		transcripts = append(transcripts, TranscriptSegment{
 			SessionID: word.SessionID,
 			Words:     words,
-			IsPartial: !word.IsFinal,
+			IsFinal:   word.IsFinal,
 		})
 	}
 
 	return transcripts, nil
 }
 
-func (m *model) updateTranscript(msg TranscriptMessage) {
+func (m *model) updateTranscript(msg TranscriptSegment) {
 	session, ok := m.sessions[msg.SessionID]
 	if !ok {
 		session = &SessionTranscript{}
 		m.sessions[msg.SessionID] = session
 	}
 
-	if msg.IsPartial {
+	if !msg.IsFinal {
 		session.CurrentTranscript = msg.Words
 	} else {
 		session.FinalTranscript = append(session.FinalTranscript, msg.Words...)
@@ -170,7 +170,7 @@ func (m model) Init() tea.Cmd {
 	return waitForTranscript(m.transcripts)
 }
 
-func waitForTranscript(transcripts chan TranscriptMessage) tea.Cmd {
+func waitForTranscript(transcripts chan TranscriptSegment) tea.Cmd {
 	return func() tea.Msg {
 		return <-transcripts
 	}
@@ -207,14 +207,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.viewport.Height = msg.Height - verticalMarginHeight
 		}
 
-	case TranscriptMessage:
+	case TranscriptSegment:
 		m.updateTranscript(msg)
 		m.viewport.SetContent(m.contentView())
 		m.viewport.GotoBottom()
 
 		// Add log entry
-		prefix := getLogPrefix(msg.IsPartial)
-		logEntry := fmt.Sprintf("%s Session %d: %d words \"%s\"",
+		prefix := getLogPrefix(!msg.IsFinal)
+		logEntry := fmt.Sprintf(
+			"%s Session %d: %d words \"%s\"",
 			prefix,
 			msg.SessionID,
 			len(msg.Words),
