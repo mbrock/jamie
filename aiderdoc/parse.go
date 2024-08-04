@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -86,20 +87,42 @@ func processBackticks(content string) []Span {
 	var currentSpan strings.Builder
 	inBackticks := false
 
-	for _, char := range content {
-		if char == '`' {
+	// Regular expressions for words with underscores and camel case
+	underscoreRegex := regexp.MustCompile(`\b\w+_\w+\b`)
+	camelCaseRegex := regexp.MustCompile(`\b[a-z]+[A-Z]\w*\b`)
+
+	words := strings.Fields(content)
+
+	for i, word := range words {
+		if word == "`" {
 			if currentSpan.Len() > 0 {
 				spans = append(spans, Span{Text: currentSpan.String(), IsCode: inBackticks})
 				currentSpan.Reset()
 			}
 			inBackticks = !inBackticks
+		} else if inBackticks || underscoreRegex.MatchString(word) || camelCaseRegex.MatchString(word) {
+			if currentSpan.Len() > 0 {
+				spans = append(spans, Span{Text: currentSpan.String(), IsCode: false})
+				currentSpan.Reset()
+			}
+			spans = append(spans, Span{Text: word, IsCode: true})
 		} else {
-			currentSpan.WriteRune(char)
+			if currentSpan.Len() > 0 {
+				currentSpan.WriteString(" ")
+			}
+			currentSpan.WriteString(word)
+		}
+
+		// Add space between words, except for the last word
+		if i < len(words)-1 {
+			if currentSpan.Len() > 0 {
+				currentSpan.WriteString(" ")
+			}
 		}
 	}
 
 	if currentSpan.Len() > 0 {
-		spans = append(spans, Span{Text: currentSpan.String(), IsCode: inBackticks})
+		spans = append(spans, Span{Text: currentSpan.String(), IsCode: false})
 	}
 
 	return spans
