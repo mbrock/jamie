@@ -1,0 +1,30 @@
+package aiderdoc
+
+import "time"
+
+templ EntriesTemplate(entries []Entry) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>Aider Chronicle</title>
+			<script src="https://cdn.tailwindcss.com"></script>
+		</head>
+		<body class="bg-gray-100 p-8">
+			<div class="max-w-4xl mx-auto">
+				<h1 class="text-3xl font-bold mb-6">Log Entries</h1>
+				<div class="bg-white shadow-md rounded-lg p-6">
+					<ul class="space-y-4">
+						for _, entry := range entries {
+							<li class="border-b pb-2">
+								<span class="text-sm text-gray-600">{ entry.Timestamp.Format(time.RFC3339) }</span>
+								<p class="mt-1 whitespace-pre-wrap">{ entry.Content }</p>
+							</li>
+						}
+					</ul>
+				</div>
+			</div>
+		</body>
+	</html>
+}
