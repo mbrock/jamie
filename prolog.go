@@ -93,6 +93,52 @@ func RegisterDBQuery(
 ) {
 	err := pl.Register(
 		ctx,
+		"recent_transcription_words",
+		2,
+		func(_ trealla.Prolog, _ trealla.Subquery, goal0 trealla.Term) trealla.Term {
+			goal := goal0.(trealla.Compound)
+
+			limit, ok := goal.Args[0].(int64)
+			if !ok {
+				return terms.TypeError(
+					trealla.Atom("integer"),
+					goal.Args[0],
+					terms.PI(goal),
+				)
+			}
+
+			transcripts, err := queries.GetTranscripts(ctx, db.GetTranscriptsParams{
+				CreatedAt: pgtype.Timestamptz{
+					Time:  time.Now().Add(-24 * time.Hour),
+					Valid: true,
+				},
+				Limit: int32(limit),
+			})
+			if err != nil {
+				return terms.DomainError(
+					trealla.Atom("db_error"),
+					trealla.Atom(err.Error()),
+					terms.PI(goal),
+				)
+			}
+
+			words := make([]trealla.Term, 0, len(transcripts))
+			for _, t := range transcripts {
+				words = append(words, trealla.Atom("word").Of(
+					t.RealStartTime.Format(time.RFC3339),
+					t.Content,
+				))
+			}
+
+			return trealla.Atom("recent_transcription_words").Of(limit, words)
+		},
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	err = pl.Register(
+		ctx,
 		"last_joined_channel",
 		2,
 		func(_ trealla.Prolog, _ trealla.Subquery, goal0 trealla.Term) trealla.Term {
