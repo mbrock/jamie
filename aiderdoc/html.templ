@@ -34,8 +34,8 @@ templ head() {
 			}
 			.entry {
 				display: flex;
-                align-items: baseline;
-            }
+				align-items: baseline;
+			}
 			.timestamp {
 				font-size: 0.8rem;
 				color: #666;
@@ -50,6 +50,10 @@ templ head() {
 			.date {
 				font-weight: bold;
 				margin-bottom: 0.5rem;
+				height: 1.5em;
+			}
+			.date.hidden {
+				visibility: hidden;
 			}
 		</style>
 	</head>
@@ -57,7 +61,11 @@ templ head() {
 
 templ articleTemplate(article Article) {
 	<div class="article">
-		<div class="date">{ article.StartTime.Format("Monday, 2 January, 2006") }</div>
+		if article.StartTime != time.Time{} {
+			<div class="date">{ article.StartTime.Format("Monday, 2 January, 2006") }</div>
+		} else {
+			<div class="date hidden">Placeholder</div>
+		}
 		for _, section := range article.Sections {
 			@sectionTemplate(section)
 		}
