@@ -10,8 +10,13 @@ import (
 
 type Entry struct {
 	Timestamp  time.Time
-	Content    string
+	Content    []Span
 	LineNumber int
+}
+
+type Span struct {
+	Text  string
+	IsCode bool
 }
 
 func ParseFile(filename string) ([]Entry, error) {
@@ -76,28 +81,26 @@ func ParseFile(filename string) ([]Entry, error) {
 	return entries, nil
 }
 
-func processBackticks(content string) string {
-	var result strings.Builder
+func processBackticks(content string) []Span {
+	var spans []Span
+	var currentSpan strings.Builder
 	inBackticks := false
 
 	for _, char := range content {
-		switch char {
-		case '`':
-			if inBackticks {
-				result.WriteString("</tt>")
-			} else {
-				result.WriteString("<tt>")
+		if char == '`' {
+			if currentSpan.Len() > 0 {
+				spans = append(spans, Span{Text: currentSpan.String(), IsCode: inBackticks})
+				currentSpan.Reset()
 			}
 			inBackticks = !inBackticks
-		default:
-			result.WriteRune(char)
+		} else {
+			currentSpan.WriteRune(char)
 		}
 	}
 
-	// Close any unclosed <tt> tags
-	if inBackticks {
-		result.WriteString("</tt>")
+	if currentSpan.Len() > 0 {
+		spans = append(spans, Span{Text: currentSpan.String(), IsCode: inBackticks})
 	}
 
-	return result.String()
+	return spans
 }
