@@ -77,20 +77,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				queryStr := m.textInput.Value()
 				m.query = m.prolog.Query(context.Background(), queryStr)
 				m.history = append(m.history, fmt.Sprintf("Query: %s", queryStr))
-				m.iterateQuery()
 				m.textInput.SetValue("")
-				m.viewport.SetContent(strings.Join(m.history, "\n\n"))
-				m.viewport.GotoBottom()
 				m.mode = "query"
+				return m, iterateQueryCmd
 			case tea.KeyCtrlC, tea.KeyEsc:
 				return m, tea.Quit
 			}
 		case "query":
 			switch msg.String() {
 			case "n", "N":
-				m.iterateQuery()
-				m.viewport.SetContent(strings.Join(m.history, "\n\n"))
-				m.viewport.GotoBottom()
+				return m, iterateQueryCmd
 			case "a", "A":
 				m.query.Close()
 				m.query = nil
@@ -120,7 +116,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
-func (m *model) iterateQuery() {
+func iterateQueryCmd(m model) tea.Msg {
 	if m.query.Next(context.Background()) {
 		solution := m.query.Current().Solution
 		for k, v := range solution {
@@ -135,6 +131,15 @@ func (m *model) iterateQuery() {
 		m.query.Close()
 		m.query = nil
 		m.mode = "input"
+	}
+	m.viewport.SetContent(strings.Join(m.history, "\n\n"))
+	m.viewport.GotoBottom()
+	return m
+}
+
+func (m model) iterateQuery() tea.Cmd {
+	return func() tea.Msg {
+		return iterateQueryCmd(m)
 	}
 }
 
