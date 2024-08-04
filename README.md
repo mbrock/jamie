@@ -1,93 +1,97 @@
-# Jamie - Discord Voice Channel Transcription Bot
+# Jamie - Your Discord Voice Channel's New Best Friend 🎙️🤖
 
-Jamie is a Discord bot designed to join voice channels, record audio, and provide real-time transcription of conversations. It's built with Go and uses various technologies to process and analyze audio data.
+Welcome to Jamie, the Discord bot that's all ears (and text)! 🦻📝 Jamie is here to join your voice channels, eavesdrop on your conversations (in a totally non-creepy way), and provide real-time transcriptions that'll make you wonder if it's secretly a court stenographer in disguise.
 
-## Features
+## Features (or "Why Jamie is Cooler Than Your Human Friends")
 
-- Join Discord voice channels
-- Record and process audio in real-time
-- Store audio data as Opus packets in PostgreSQL
-- Real-time transcription using Speechmatics
-- Offline transcription and analysis using Google's Gemini multimodal generative AI model
-- Store and retrieve transcriptions
-- Generate voice activity reports
-- Provide a web interface to view transcriptions
+- 🎭 Joins Discord voice channels (No social anxiety here!)
+- 🎬 Records and processes audio in real-time (Like a spy, but legal)
+- 💾 Stores audio data as Opus packets in PostgreSQL (For those who like their data fancy)
+- 🚀 Real-time transcription using Speechmatics (Faster than your average typist)
+- 🧠 Offline transcription and analysis using Google's Gemini multimodal generative AI model (It's like having Einstein in your server)
+- 📚 Stores and retrieves transcriptions (Because scrolling through chat is so last year)
+- 📊 Generates voice activity reports (Find out who's the chatterbox in your server)
+- 🌐 Provides a web interface to view transcriptions (For when reading Discord is too mainstream)
 
-## Architecture and Key Components
+## The Secret Sauce: AIDR and CLAWD 3.5 SONNET 🧙‍♂️✨
 
-Jamie is structured around several key components:
+Here's where it gets really interesting! Jamie isn't just any bot - it's a bot with a pedigree. We use the AIDR (AI-Driven Development Revolution) coding agent with CLAWD 3.5 SONNET for most of our development work. It's like having a team of AI developers working 24/7, fueled by nothing but electricity and the occasional existential crisis.
 
-1. **Discord Bot**: Handles interactions with Discord, joining voice channels, and capturing audio.
-2. **Audio Processing**: Captures Opus packets and stores them in PostgreSQL.
-3. **Transcription Engine**: Uses Speechmatics for real-time transcription and Google's Gemini API for offline, more accurate transcription and analysis.
-4. **Database**: PostgreSQL stores Opus packets, transcriptions, and other metadata.
-5. **Web Interface**: Provides a way to view and interact with transcriptions.
+Curious about AIDR? Check out [AIDR.chat](https://AIDR.chat) and prepare to have your mind blown! 🤯
 
-## Commands
+## Architecture (or "How Jamie Keeps It All Together")
 
-Jamie offers several commands:
+Jamie is like a well-oiled machine, with several key components working in harmony:
 
-- `listen`: Starts the Discord bot and begins listening in voice channels.
-- `http`: Starts an HTTP server to display transcripts.
-- `packets`: Listens for new Opus packets and displays information about them.
-- `packetInfo`: Retrieves information about Opus packets for a given SSRC and time range.
-- `report`: Generates a voice activity report for a specified time range.
-- `transcribe`: Starts transcribing incoming audio, creating a separate transcription session per user.
-- `stream`: Displays a terminal UI showing real-time transcriptions.
+1. **Discord Bot**: The face of the operation, charming its way into your voice channels.
+2. **Audio Processing**: Turning your dulcet tones into cold, hard data.
+3. **Transcription Engine**: Where the magic happens - Speechmatics for real-time transcription, and Google's Gemini for when we need to get fancy.
+4. **Database**: PostgreSQL, because Jamie likes its data like it likes its coffee - robust and relational.
+5. **Web Interface**: For when you want to relive those voice chat moments, but in text form.
 
-## Codebase Navigation
+## Commands (or "How to Boss Jamie Around")
 
-The project is organized into several packages:
+Jamie is at your beck and call with these commands:
 
-- `bot`: Contains the Discord bot logic.
-- `db`: Database interactions and SQL queries (using sqlc).
-- `snd`: Audio processing and Opus packet handling.
-- `tts`: Transcription logic and UI rendering.
-- `gemini`: Integration with Google's Gemini API.
-- `speechmatics`: Integration with Speechmatics API.
+- `listen`: "Hey Jamie, time to earn your keep!"
+- `http`: "Jamie, show me what you've got on the web."
+- `packets`: "Jamie, what's the latest in the world of Opus packets?"
+- `packetInfo`: "Jamie, tell me everything you know about these specific packets."
+- `report`: "Jamie, who's been talking too much?"
+- `transcribe`: "Jamie, write down everything everyone says, and make it snappy!"
+- `stream`: "Jamie, show me the transcriptions in real-time, I don't want to miss a thing!"
 
-Key files to be familiar with:
+## The Codebase (or "Jamie's Brain, Dissected")
 
-- `main.go`: Entry point of the application, defines commands.
-- `db/queries.sql`: SQL queries used by sqlc to generate Go code.
-- `tts/transcript_builder.go`: Handles building and rendering transcripts.
-- `bot/bot.go`: Core Discord bot functionality.
+Jamie's inner workings are neatly organized into these packages:
 
-## Database Schema
+- `bot`: Where Jamie learns how to be a good Discord citizen.
+- `db`: Jamie's memory bank, powered by sqlc for type-safe SQL goodness.
+- `snd`: Where Jamie learns to appreciate the finer points of audio processing.
+- `tts`: Jamie's notebook, where it jots down everything it hears.
+- `gemini`: Jamie's connection to the all-knowing Google gods.
+- `speechmatics`: Jamie's ear training module.
 
-The database schema includes tables for:
+Key files you might want to buy dinner first:
 
-- Discord sessions
-- SSRC mappings
-- Opus packets
-- Voice state events
-- Bot voice joins
-- Transcription sessions, segments, and words
-- Uploaded files
+- `main.go`: The big boss, where it all begins.
+- `db/queries.sql`: Jamie's favorite bedtime stories, in SQL form.
+- `tts/transcript_builder.go`: Where Jamie practices its handwriting.
+- `bot/bot.go`: Jamie's Discord etiquette guide.
 
-This structure allows for efficient storage and retrieval of audio data, transcriptions, and related metadata.
+## Database Schema (or "Jamie's Filing System")
 
-## Project Status and Vision
+Jamie keeps track of everything in its PostgreSQL brain, including:
 
-Jamie is currently in a very early stage of development. It's designed to be extensible and serve as a solid foundation for building more complex Discord bots. While it currently doesn't respond directly to users in Discord, the vision is for Jamie to act as a kind of "secretary" for Discord servers:
+- Discord sessions (Jamie's social calendar)
+- SSRC mappings (Jamie's "who's who" guide)
+- Opus packets (Jamie's audio diary)
+- Voice state events (Jamie's mood ring)
+- Bot voice joins (Jamie's party crasher log)
+- Transcription sessions, segments, and words (Jamie's actual transcriptions)
+- Uploaded files (Jamie's scrapbook)
 
-- Keeping track of conversations
-- Finding and referencing previous discussions
-- Proactively helping users by recognizing when they're looking for information
+## Project Status and Vision (or "Jamie's Dreams of Electric Sheep")
 
-The goal is for Jamie to be a helpful presence that can step in when needed, rather than a traditional chatbot that's constantly engaging. The project is designed with a pluggable architecture to allow for easy extension and customization.
+Jamie is young, ambitious, and full of potential! While it's still learning the ropes, the end goal is for Jamie to be the ultimate Discord server sidekick:
 
-## Technologies and Tools
+- 🕵️‍♂️ Keeping track of conversations like a nosy but helpful neighbor
+- 🔍 Finding and referencing previous discussions faster than you can say "search function"
+- 🧠 Proactively helping users by recognizing when they're looking for information (It's basically psychic, but with AI)
 
-- Go 1.20 or later
-- PostgreSQL for data storage
-- sqlc for type-safe SQL in Go
-- FFmpeg for audio conversion
-- Discord API (via discordgo library)
-- Google Cloud API (for Gemini)
-- Speechmatics API
+We're aiming for Jamie to be that helpful presence that steps in when needed, like a digital butler with impeccable timing. And thanks to its pluggable architecture, Jamie can grow and adapt faster than a chameleon on a disco dance floor!
 
-## Setup
+## Technologies and Tools (or "Jamie's Toolbox")
+
+- Go 1.20 or later (Because Jamie likes to go fast)
+- PostgreSQL for data storage (Jamie's got a thing for elephants)
+- sqlc for type-safe SQL in Go (Because typos are so last century)
+- FFmpeg for audio conversion (Jamie's universal translator for audio)
+- Discord API via discordgo library (Jamie's Discord phrasebook)
+- Google Cloud API for Gemini (Jamie's hotline to the AI overlords)
+- Speechmatics API (Jamie's ear-to-text converter)
+
+## Setup (or "Teaching Jamie to Sit and Stay")
 
 1. Clone the repository:
    ```
@@ -118,7 +122,7 @@ The goal is for Jamie to be a helpful presence that can step in when needed, rat
    make
    ```
 
-## Usage
+## Usage (or "Taking Jamie for a Walk")
 
 To start the bot and listen in Discord voice channels:
 ```
@@ -145,15 +149,17 @@ For more commands and options, run:
 ./jamie --help
 ```
 
-## Contributing
+## Contributing (or "Joining Jamie's Pack")
 
-Contributions are welcome! Please feel free to submit a Pull Request. When contributing, please:
+Want to help Jamie grow? Contributions are welcome! Just remember:
 
 1. Fork the repository and create your branch from `main`.
-2. Write clear, commented code.
-3. Ensure any new features are properly tested.
-4. Update the README.md if you've made significant changes.
+2. Write clear, commented code (Jamie likes to understand what's going on).
+3. Ensure any new features are properly tested (Jamie doesn't like surprises).
+4. Update the README.md if you've made significant changes (Help keep Jamie's diary up to date).
 
 ## License
 
-This project is licensed under the GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later) - see the LICENSE file for details.
+This project is licensed under the GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later) - see the LICENSE file for details. Because Jamie believes in freedom, especially the freedom to eavesdrop on your Discord conversations (with your permission, of course).
+
+Now go forth and let Jamie revolutionize your Discord experience! 🚀🎉
