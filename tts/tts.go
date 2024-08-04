@@ -15,22 +15,8 @@ import (
 	"node.town/snd"
 )
 
-type TranscriptWord struct {
-	Content       string
-	StartTime     float64
-	EndTime       float64
-	Confidence    float64
-	IsEOS         bool
-	AttachesTo    string
-	RealStartTime time.Time
-}
-
-type TranscriptMessage struct {
-	SessionID int64
-	IsFinal   bool
-	Words     []TranscriptWord
-	IsPartial bool
-}
+// TranscriptMessage is deprecated, use TranscriptSegment instead
+type TranscriptMessage = TranscriptSegment
 
 type Config struct {
 	SpeechmaticsAPIKey string
@@ -185,45 +171,39 @@ func handleTranscriptionUpdate(
 	ctx context.Context,
 	update snd.TranscriptionUpdate,
 	queries *db.Queries,
-	transcriptChan chan<- TranscriptMessage,
+	transcriptChan chan<- TranscriptSegment,
 ) {
 	if update.Operation != "INSERT" && update.Operation != "UPDATE" {
 		return
 	}
 
-	segment, err := queries.GetTranscriptSegment(ctx, update.ID)
+	dbSegment, err := queries.GetTranscriptSegment(ctx, update.ID)
 	if err != nil {
 		log.Error("Failed to get transcription segment", "error", err)
 		return
 	}
 
-	formattedWords := formatTranscriptWords(segment)
-
-	if len(segment) > 0 {
-		transcriptChan <- TranscriptMessage{
-			SessionID: segment[0].SessionID,
-			IsFinal:   segment[0].IsFinal,
-			Words:     formattedWords,
+	if len(dbSegment) > 0 {
+		transcriptChan <- TranscriptSegment{
+			SessionID: dbSegment[0].SessionID,
+			IsFinal:   dbSegment[0].IsFinal,
+			Words:     convertDBRowsToTranscriptWords(dbSegment),
 		}
 	}
 }
 
-func formatTranscriptWords(
-	words []db.GetTranscriptSegmentRow,
-) []TranscriptWord {
-	var formattedWords []TranscriptWord
-	for _, word := range words {
-		formattedWords = append(formattedWords, TranscriptWord{
-			Content:   word.Content,
-			StartTime: float64(word.StartTime.Microseconds) / 1000000,
-			EndTime: float64(
-				word.StartTime.Microseconds+word.Duration.Microseconds,
-			) / 1000000,
-			Confidence:    word.Confidence,
-			IsEOS:         word.IsEos,
-			AttachesTo:    word.AttachesTo.String,
-			RealStartTime: word.RealStartTime.Time,
-		})
+func convertDBRowsToTranscriptWords(rows []db.GetTranscriptSegmentRow) []TranscriptWord {
+	words := make([]TranscriptWord, len(rows))
+	for i, row := range rows {
+		words[i] = TranscriptWord{
+			Content:       row.Content,
+			StartTime:     float64(row.StartTime.Microseconds) / 1000000,
+			EndTime:       float64(row.StartTime.Microseconds+row.Duration.Microseconds) / 1000000,
+			Confidence:    row.Confidence,
+			IsEOS:         row.IsEos,
+			AttachesTo:    row.AttachesTo.String,
+			RealStartTime: row.RealStartTime.Time,
+		}
 	}
-	return formattedWords
+	return words
 }
