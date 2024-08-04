@@ -31,6 +31,7 @@ type Logger interface {
 	Info(interface{}, ...interface{})
 	Error(interface{}, ...interface{})
 	Debug(interface{}, ...interface{})
+	Warn(interface{}, ...interface{})
 }
 
 // RealTimeProvider implements TimeProvider

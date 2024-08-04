@@ -4,6 +4,7 @@ import (
 	"context"
 	"embed"
 	"fmt"
+	"sync"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/spf13/viper"
@@ -13,9 +14,9 @@ import (
 var sqlFS embed.FS
 
 var (
-	dbPool   *pgxpool.Pool
+	dbPool    *pgxpool.Pool
 	dbQueries *Queries
-	dbOnce   sync.Once
+	dbOnce    sync.Once
 )
 
 func OpenDatabase() (*pgxpool.Pool, *Queries, error) {
@@ -34,13 +35,19 @@ func OpenDatabase() (*pgxpool.Pool, *Queries, error) {
 
 		sqlFile, readErr := sqlFS.ReadFile("db_init.sql")
 		if readErr != nil {
-			err = fmt.Errorf("failed to read embedded db_init.sql: %w", readErr)
+			err = fmt.Errorf(
+				"failed to read embedded db_init.sql: %w",
+				readErr,
+			)
 			return
 		}
 
 		_, execErr := dbPool.Exec(context.Background(), string(sqlFile))
 		if execErr != nil {
-			err = fmt.Errorf("failed to execute embedded db_init.sql: %w", execErr)
+			err = fmt.Errorf(
+				"failed to execute embedded db_init.sql: %w",
+				execErr,
+			)
 			return
 		}
 	})

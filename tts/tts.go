@@ -21,11 +21,6 @@ import (
 	"node.town/speechmatics"
 )
 
-var (
-	pgPool *pgxpool.Pool
-	dbQueries *db.Queries
-)
-
 var TranscribeCmd = &cobra.Command{
 	Use:   "transcribe",
 	Short: "Transcribe audio from Opus packets",
@@ -47,7 +42,7 @@ func init() {
 
 func runTranscribe(cmd *cobra.Command, args []string) {
 	var err error
-	pgPool, dbQueries, err = db.OpenDatabase()
+	pgPool, queries, err := db.OpenDatabase()
 	if err != nil {
 		log.Fatal("Failed to open database", "error", err)
 	}
@@ -66,7 +61,9 @@ func runTranscribe(cmd *cobra.Command, args []string) {
 	demuxer := snd.NewDefaultPacketDemuxer(cache, log.Default())
 	streamChan := snd.DemuxOpusPackets(ctx, demuxer, packetChan)
 
-	log.Info("Listening for demuxed Opus packet streams. Press CTRL-C to exit.")
+	log.Info(
+		"Listening for demuxed Opus packet streams. Press CTRL-C to exit.",
+	)
 	log.Info("Real-time transcription enabled")
 
 	for stream := range streamChan {
@@ -84,7 +81,7 @@ func runTranscribe(cmd *cobra.Command, args []string) {
 
 func runStream(cmd *cobra.Command, args []string) {
 	var err error
-	pgPool, dbQueries, err = db.OpenDatabase()
+	pgPool, queries, err := db.OpenDatabase()
 	if err != nil {
 		log.Fatal("Failed to open database", "error", err)
 	}

@@ -47,6 +47,7 @@ type MockLogger struct{}
 func (m *MockLogger) Info(msg interface{}, keyvals ...interface{})  {}
 func (m *MockLogger) Error(msg interface{}, keyvals ...interface{}) {}
 func (m *MockLogger) Debug(msg interface{}, keyvals ...interface{}) {}
+func (m *MockLogger) Warn(msg interface{}, keyvals ...interface{})  {}
 
 func TestOggWritePacket(t *testing.T) {
 	mockWriter := &MockOggWriter{}

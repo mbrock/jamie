@@ -46,7 +46,7 @@ func initConfig() {
 	}
 }
 
-func initPgPool(ctx context.Context) (*pgxpool.Pool, *db.Queries, error) {
+func initPgPool() (*pgxpool.Pool, *db.Queries, error) {
 	return db.OpenDatabase()
 }
 
@@ -456,7 +456,10 @@ func main() {
 
 	ctx := context.Background()
 	var err error
-	pgPool, dbQueries, err := initPgPool(ctx)
+	pgPool, _, err := func() (*pgxpool.Pool, *db.Queries, error) {
+		var _ context.Context = ctx
+		return initPgPool()
+	}()
 	if err != nil {
 		log.Fatal("Failed to initialize connection pool", "error", err)
 	}
