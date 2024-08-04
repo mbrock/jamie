@@ -437,11 +437,20 @@ func handleStreamWithTranscription(
 					return
 				}
 
+				multiWriter := io.MultiWriter(oggFile, &buffer)
+				oggWriterWrapper, err := snd.NewOggWriter(multiWriter)
+				if err != nil {
+					log.Error("Failed to create Ogg writer", "error", err)
+					return
+				}
+
 				oggWriter, err = snd.NewOgg(
 					packet.Ssrc,
 					time.Now(),
 					time.Now().Add(24*time.Hour),
-					io.MultiWriter(oggFile, &buffer),
+					oggWriterWrapper,
+					&snd.RealTimeProvider{},
+					log.Default(),
 				)
 				if err != nil {
 					log.Error("Failed to create Ogg writer", "error", err)
