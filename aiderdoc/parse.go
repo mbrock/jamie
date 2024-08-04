@@ -16,7 +16,7 @@ type Entry struct {
 }
 
 type Span struct {
-	Text  string
+	Text   string
 	IsCode bool
 }
 
@@ -84,20 +84,25 @@ func ParseFile(filename string) ([]Entry, error) {
 
 func processBackticks(content string) []Span {
 	var spans []Span
-	words := strings.Fields(content)
+	words := regexp.MustCompile(`[ =]`).Split(content, -1)
 	inBackticks := false
 
 	// Regular expressions for words with underscores, camel case, and filenames
-	underscoreRegex := regexp.MustCompile(`\b\w+_\w+\b`)
-	camelCaseRegex := regexp.MustCompile(`\b[a-z]+[A-Z]\w*\b`)
-	filenameRegex := regexp.MustCompile(`\b[\w-]+\.([\w-]+)\b|\b[\w-]+/[\w-]+\b`)
+	underscoreRegex := regexp.MustCompile(`\b[a-zA-Z0-9_]+_+[a-zA-Z0-9_]+\b`)
+	camelCaseRegex := regexp.MustCompile(
+		`[a-z][A-Z]`,
+	)
+	filenameRegex := regexp.MustCompile(`^[\w-]+\.([a-z]{1,5})$`)
 
 	for _, word := range words {
 		if strings.Contains(word, "`") {
 			parts := strings.Split(word, "`")
 			for i, part := range parts {
 				if part != "" {
-					spans = append(spans, Span{Text: part, IsCode: inBackticks})
+					spans = append(
+						spans,
+						Span{Text: part, IsCode: inBackticks},
+					)
 				}
 				if i < len(parts)-1 {
 					inBackticks = !inBackticks
