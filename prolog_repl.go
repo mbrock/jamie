@@ -134,6 +134,7 @@ func (m *model) iterateQuery() {
 		}
 		m.query.Close()
 		m.query = nil
+		m.mode = "input"
 	}
 }
 
