@@ -92,26 +92,25 @@ type OpusPacket struct {
 
 // Ogg represents an Ogg container for Opus audio
 type Ogg struct {
-	ssrc           int64
-	startTime      time.Time
-	endTime        time.Time
-	oggWriter      OggWriter
-	timeProvider   TimeProvider
-	logger         Logger
-	packetCount    int        // Total number of packets processed
-	firstTimestamp time.Time  // Timestamp of the first packet received
-	lastTimestamp  time.Time  // Timestamp of the last packet received
-	gapCount       int        // Number of gaps detected in the audio stream
-	segmentNumber  uint64     // Current segment number for RTP packets
+	ssrc              int64
+	startTime         time.Time
+	endTime           time.Time
+	oggWriter         OggWriter
+	timeProvider      TimeProvider
+	logger            Logger
+	packetCount       int       // Total number of packets processed
+	firstTimestamp    time.Time // Timestamp of the first packet received
+	lastTimestamp     time.Time // Timestamp of the last packet received
+	gapCount          int       // Number of gaps detected in the audio stream
+	segmentNumber     uint64    // Current segment number for RTP packets
 	expectedTimestamp time.Time // Expected timestamp for the next packet
 }
 
 // AudioStreamMetrics holds metrics about the audio stream
 type AudioStreamMetrics struct {
-	TotalDuration     time.Duration
-	AveragePeriod     time.Duration
-	TotalGapDuration  time.Duration
-	LargestGap        time.Duration
+	TotalDuration    time.Duration
+	AveragePeriod    time.Duration
+	TotalGapDuration time.Duration
 }
 
 // GetStreamMetrics calculates and returns metrics about the audio stream
@@ -121,12 +120,11 @@ func (o *Ogg) GetStreamMetrics() AudioStreamMetrics {
 	if o.packetCount > 1 {
 		averagePeriod = totalDuration / time.Duration(o.packetCount-1)
 	}
-	
+
 	return AudioStreamMetrics{
-		TotalDuration:     totalDuration,
-		AveragePeriod:     averagePeriod,
-		TotalGapDuration:  time.Duration(o.gapCount) * OpusFrameDuration,
-		LargestGap:        o.largestGap,
+		TotalDuration:    totalDuration,
+		AveragePeriod:    averagePeriod,
+		TotalGapDuration: time.Duration(o.gapCount) * OpusFrameDuration,
 	}
 }
 
@@ -140,8 +138,8 @@ func NewOgg(
 ) (*Ogg, error) {
 	return &Ogg{
 		ssrc:         ssrc,
-		startTime:    startTime.UTC(),
-		endTime:      endTime.UTC(),
+		startTime:    startTime,
+		endTime:      endTime,
 		oggWriter:    oggWriter,
 		timeProvider: timeProvider,
 		logger:       logger,
@@ -163,7 +161,6 @@ func (o *Ogg) Close() error {
 		"average_period", metrics.AveragePeriod,
 		"gap_count", o.gapCount,
 		"total_gap_duration", metrics.TotalGapDuration,
-		"largest_gap", metrics.LargestGap,
 	)
 
 	return nil
@@ -263,9 +260,7 @@ func (o *Ogg) handleGap(packet OpusPacket) time.Duration {
 			return 0
 		}
 		o.gapCount++
-		if gapDuration > o.largestGap {
-			o.largestGap = gapDuration
-		}
+
 		return gapDuration
 	}
 	return 0
