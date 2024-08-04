@@ -90,7 +90,60 @@ func RegisterDBQuery(ctx context.Context, queries *db.Queries) {
 		panic(err)
 	}
 
-	// ... (rest of the existing code)
+	pl.Register(
+		ctx,
+		"db_query",
+		2,
+		func(_ trealla.Prolog, _ trealla.Subquery, goal0 trealla.Term) trealla.Term {
+			goal := goal0.(trealla.Compound)
+
+			queryType, ok := goal.Args[0].(string)
+			if !ok {
+				return trealla.Atom("throw").Of(trealla.Atom("error").Of(
+					trealla.Atom("type_error").Of("atom", goal.Args[0]),
+					trealla.Atom("/").Of(trealla.Atom("db_query"), 2),
+				))
+			}
+
+			switch queryType {
+			case "get_last_joined_channel":
+				guildID, ok := goal.Args[1].(string)
+				if !ok {
+					return trealla.Atom("throw").Of(trealla.Atom("error").Of(
+						trealla.Atom("type_error").Of("string", goal.Args[1]),
+						trealla.Atom("/").Of(trealla.Atom("db_query"), 2),
+					))
+				}
+
+				channel, err := queries.GetLastJoinedChannel(ctx, db.GetLastJoinedChannelParams{
+					GuildID:  guildID,
+					BotToken: viper.GetString("DISCORD_TOKEN"),
+				})
+				if err != nil {
+					return trealla.Atom("throw").Of(trealla.Atom("error").Of(
+						trealla.Atom("db_error").Of(err.Error()),
+						trealla.Atom("/").Of(trealla.Atom("db_query"), 2),
+					))
+				}
+
+				return trealla.Atom("db_query").Of(queryType, channel)
+
+			default:
+				return trealla.Atom("throw").Of(trealla.Atom("error").Of(
+					trealla.Atom("domain_error").Of("query_type", queryType),
+					trealla.Atom("/").Of(trealla.Atom("db_query"), 2),
+				))
+			}
+		},
+	)
+
+	// Example usage
+	answer, err := pl.QueryOnce(ctx, `db_query("get_last_joined_channel", "123456789").`)
+	if err != nil {
+		fmt.Println("Failed to execute Prolog query:", err)
+	} else {
+		fmt.Println("Last joined channel:", answer.Solution["_"])
+	}
 }
 
 func StartPrologREPL() {
