@@ -1,7 +1,6 @@
 package tts
 
 import (
-	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -10,7 +9,6 @@ import (
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/jackc/pgx/v5/pgtype"
 	"node.town/db"
 )
 
@@ -117,7 +115,6 @@ func initialModel(
 
 	return m
 }
-
 
 func (m *model) updateTranscript(msg TranscriptSegment) {
 	session, ok := m.sessions[msg.SessionID]
