@@ -16,7 +16,7 @@ type lineInfo struct {
 }
 
 type WordBuilder struct {
-	lines      []lineInfo
+	lines       []lineInfo
 	currentLine strings.Builder
 	lastWasEOS  bool
 }
@@ -76,12 +76,6 @@ func (wb *WordBuilder) AppendWords(words []TranscriptWord, isPartial bool) {
 
 func (wb *WordBuilder) GetLines() []lineInfo {
 	return wb.lines
-}
-
-func (wb *WordBuilder) Reset() {
-	wb.lines = nil
-	wb.currentLine.Reset()
-	wb.lastWasEOS = true
 }
 
 type SessionTranscript struct {
