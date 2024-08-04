@@ -1,13 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/trealla-prolog/go/trealla"
+	"node.town/db"
 )
 
 var (
@@ -27,7 +28,7 @@ type model struct {
 	err       error
 }
 
-func initialModel() model {
+func initialModel(queries *db.Queries) model {
 	ti := textinput.New()
 	ti.Placeholder = "Enter Prolog query..."
 	ti.Focus()
@@ -38,6 +39,8 @@ func initialModel() model {
 	if err != nil {
 		return model{err: fmt.Errorf("failed to initialize Prolog: %w", err)}
 	}
+
+	RegisterDBQuery(prolog, context.Background(), queries)
 
 	return model{
 		textInput: ti,
@@ -58,7 +61,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.Type {
 		case tea.KeyEnter:
 			query := m.textInput.Value()
-			answer, err := m.prolog.QueryOnce(nil, query)
+			answer, err := m.prolog.QueryOnce(context.Background(), query)
 			if err != nil {
 				m.output = fmt.Sprintf("Error: %v", err)
 			} else {
@@ -92,8 +95,8 @@ func (m model) View() string {
 	) + "\n"
 }
 
-func StartPrologREPL() {
-	p := tea.NewProgram(initialModel())
+func StartPrologREPL(queries *db.Queries) {
+	p := tea.NewProgram(initialModel(queries))
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Error running program: %v", err)
 	}
