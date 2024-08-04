@@ -192,8 +192,9 @@ func (o *Ogg) handleGap(packet OpusPacket) time.Duration {
 	actualGap := packet.CreatedAt.Sub(expectedTimestamp)
 
 	if actualGap > 20*time.Millisecond {
-		gapDuration := actualGap.Round(20 * time.Millisecond)
-		silentFrames := int(gapDuration / (20 * time.Millisecond))
+		// Calculate frames without rounding
+		silentFrames := int(actualGap / (20 * time.Millisecond))
+		gapDuration := time.Duration(silentFrames) * 20 * time.Millisecond
 
 		log.Info("Audio gap detected",
 			"gap_duration", gapDuration,
