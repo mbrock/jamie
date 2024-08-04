@@ -61,7 +61,7 @@ templ head() {
 
 templ articleTemplate(article Article) {
 	<div class="article">
-		<div class="date">{ article.StartTime.Format("Monday, 2 January") }</div>
+		<div class={ "date", templ.KV("hidden", !article.NewDay) }>{ article.StartTime.Format("Monday, 2 January") }</div>
 		for _, section := range article.Sections {
 			@sectionTemplate(section)
 		}
