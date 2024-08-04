@@ -9,14 +9,15 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
+	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"node.town/db"
 	"node.town/snd"
 )
 
-func Routes(mux *http.ServeMux, queries *db.Queries) {
-	mux.HandleFunc("/tts/", handleTranscriptPage(queries))
-	mux.HandleFunc("/tts/audio/", handleAudioRequest(queries))
+func Routes(r chi.Router, queries *db.Queries) {
+	r.Get("/tts/", handleTranscriptPage(queries))
+	r.Get("/tts/audio/{sessionID}/{startTime}/{endTime}", handleAudioRequest(queries))
 }
 
 func handleTranscriptPage(queries *db.Queries) http.HandlerFunc {

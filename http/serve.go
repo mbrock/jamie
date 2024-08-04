@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"github.com/charmbracelet/log"
+	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/spf13/cobra"
 	"node.town/aiderdoc"
 	"node.town/db"
@@ -12,18 +14,20 @@ import (
 )
 
 func Serve(port int) error {
-	mux := http.NewServeMux()
+	r := chi.NewRouter()
+	r.Use(middleware.Logger)
+	r.Use(middleware.Recoverer)
 
 	_, queries, err := db.OpenDatabase()
 	if err != nil {
 		return fmt.Errorf("failed to open database: %w", err)
 	}
 
-	tts.Routes(mux, queries)
-	aiderdoc.Routes(mux)
+	tts.Routes(r, queries)
+	aiderdoc.Routes(r)
 
 	log.Info("http", "url", fmt.Sprintf("http://localhost:%d", port))
-	return http.ListenAndServe(fmt.Sprintf(":%d", port), mux)
+	return http.ListenAndServe(fmt.Sprintf(":%d", port), r)
 }
 
 var ServeCmd = &cobra.Command{

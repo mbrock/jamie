@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/spf13/cobra"
 )
 
@@ -41,8 +42,8 @@ var AiderdocCmd = &cobra.Command{
 	},
 }
 
-func Routes(mux *http.ServeMux) {
-	mux.HandleFunc("/aider/", handleAiderRequest)
+func Routes(r chi.Router) {
+	r.Get("/aider/", handleAiderRequest)
 }
 
 func handleAiderRequest(w http.ResponseWriter, r *http.Request) {
