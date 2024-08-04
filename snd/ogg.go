@@ -194,9 +194,20 @@ func (o *Ogg) Close() error {
 
 // WritePacket writes an OpusPacket to the Ogg container
 func (o *Ogg) WritePacket(packet OpusPacket) error {
-	silenceDuration := o.insertSilenceIfNeeded(packet.CreatedAt)
-	if silenceDuration > 0 {
-		packet.CreatedAt = o.expectedTimestamp.Add(silenceDuration)
+	if o.isFirstPacket() {
+		silenceDuration := packet.CreatedAt.Sub(o.startTime)
+		if silenceDuration > 0 {
+			if err := o.WriteSilence(silenceDuration); err != nil {
+				return err
+			}
+		}
+		o.firstTimestamp = packet.CreatedAt
+		o.expectedTimestamp = packet.CreatedAt
+	} else {
+		silenceDuration := o.insertSilenceIfNeeded(packet.CreatedAt)
+		if silenceDuration > 0 {
+			packet.CreatedAt = o.expectedTimestamp.Add(silenceDuration)
+		}
 	}
 
 	if err := o.writeRTPPacket(packet.OpusData); err != nil {
@@ -235,12 +246,18 @@ func (o *Ogg) calculateSilenceDuration(packetTimestamp time.Time) time.Duration 
 
 // insertSilenceIfNeeded adds silence if there's a gap between the expected and actual timestamp
 func (o *Ogg) insertSilenceIfNeeded(packetTimestamp time.Time) time.Duration {
-	silenceDuration := o.calculateSilenceDuration(packetTimestamp)
-	if silenceDuration == 0 {
+	if packetTimestamp.Before(o.expectedTimestamp) {
 		return 0
 	}
 
+	silenceDuration := packetTimestamp.Sub(o.expectedTimestamp)
+	if silenceDuration < OpusFrameDuration {
+		return 0
+	}
+
+	silenceDuration = silenceDuration.Truncate(OpusFrameDuration)
 	silentFrames := int(silenceDuration / OpusFrameDuration)
+	
 	if err := o.writeSilentFrames(silentFrames); err != nil {
 		o.logger.Error("Error inserting silence", "error", err)
 		return 0
