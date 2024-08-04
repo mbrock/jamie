@@ -15,35 +15,35 @@ import (
 
 var (
 	baseStyle = lipgloss.NewStyle().
-		Background(lipgloss.Color("#0A0A1F")).
-		Foreground(lipgloss.Color("#F0F0FF"))
+			Background(lipgloss.Color("#0A0A1F")).
+			Foreground(lipgloss.Color("#F0F0FF"))
 
 	titleStyle = baseStyle.Copy().
-		Foreground(lipgloss.Color("#FF00FF")).
-		Background(lipgloss.Color("#000033")).
-		Bold(true).
-		Padding(0, 1).
-		BorderStyle(lipgloss.DoubleBorder()).
-		BorderForeground(lipgloss.Color("#00FFFF"))
+			Foreground(lipgloss.Color("#FF00FF")).
+			Background(lipgloss.Color("#000033")).
+			Bold(true).
+			Padding(0, 1).
+			BorderStyle(lipgloss.DoubleBorder()).
+			BorderForeground(lipgloss.Color("#00FFFF"))
 
 	infoStyle = baseStyle.Copy().
-		Foreground(lipgloss.Color("#00FFFF"))
+			Foreground(lipgloss.Color("#00FFFF"))
 
 	errorStyle = baseStyle.Copy().
-		Foreground(lipgloss.Color("#FF0000")).
-		Bold(true)
+			Foreground(lipgloss.Color("#FF0000")).
+			Bold(true)
 
 	promptStyle = baseStyle.Copy().
-		Foreground(lipgloss.Color("#FF00FF")).
-		Bold(true)
+			Foreground(lipgloss.Color("#FF00FF")).
+			Bold(true)
 
 	solutionStyle = baseStyle.Copy().
-		Foreground(lipgloss.Color("#00FF00"))
+			Foreground(lipgloss.Color("#00FF00"))
 
 	viewportStyle = baseStyle.Copy().
-		Padding(1, 2).
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("#FF00FF"))
+			Padding(1, 2).
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("#FF00FF"))
 )
 
 type model struct {
@@ -127,7 +127,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 
 			default:
-				_, cmd = m.textInput.Update(msg)
+				m.textInput, cmd = m.textInput.Update(msg)
 				cmds = append(cmds, cmd)
 			}
 		case "query":
@@ -147,8 +147,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		m.viewport.Width = msg.Width
-		m.viewport.Height = msg.Height - 3 // Reserve space for input or button menu
-		m.textInput.Width = msg.Width - 2
+		m.viewport.Height = msg.Height - 8
+		m.textInput.Width = msg.Width - 4
 
 	case error:
 		m.err = msg
