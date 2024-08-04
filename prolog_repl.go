@@ -30,7 +30,18 @@ func initialModel(queries *db.Queries) model {
 	ti.Width = 80
 
 	vp := viewport.New(80, 20)
-	vp.SetContent("Welcome to the Prolog REPL!\nEnter your queries below.")
+	helpText := `Welcome to the Prolog REPL!
+Enter your queries below.
+
+Available commands:
+:listing - Show the current database
+:clear - Clear the REPL history
+:save <filename> - Save the current database to a file
+:quit - Exit the REPL
+
+For Prolog queries, simply type them and press Enter.
+Use 'N' to get the next solution when in query mode.`
+	vp.SetContent(helpText)
 
 	prolog, err := trealla.New()
 	if err != nil {
@@ -103,7 +114,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case error:
 		m.err = msg
+		m.history = append(m.history, fmt.Sprintf("Error: %v", msg))
+		m.viewport.SetContent(strings.Join(m.history, "\n\n"))
+		m.viewport.GotoBottom()
 		return m, nil
+	case string:
+		m.history = append(m.history, msg)
+		m.viewport.SetContent(strings.Join(m.history, "\n\n"))
+		m.viewport.GotoBottom()
 	}
 
 	if m.mode == "input" {
@@ -140,6 +158,16 @@ func iterateQueryCmd(m model) tea.Msg {
 func (m model) iterateQuery() tea.Cmd {
 	return func() tea.Msg {
 		return iterateQueryCmd(m)
+	}
+}
+
+func (m model) saveDatabase(fileName string) tea.Cmd {
+	return func() tea.Msg {
+		err := m.prolog.SaveDatabase(context.Background(), fileName)
+		if err != nil {
+			return fmt.Errorf("failed to save database: %w", err)
+		}
+		return fmt.Sprintf("Database saved to %s", fileName)
 	}
 }
 
