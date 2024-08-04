@@ -118,11 +118,12 @@ func TestOggSilenceAndGapInsertion(t *testing.T) {
 	}
 
 	// Test initial silence insertion
-	firstPacketTime := startTime.Add(2 * time.Second)
+	initialSilenceDuration := 2 * time.Second
+	firstPacketTime := startTime.Add(initialSilenceDuration)
 	err = ogg.WritePacket(OpusPacket{
 		ID:        1,
 		Sequence:  1,
-		Timestamp: 960,
+		Timestamp: 960, // 20ms at 48kHz
 		CreatedAt: firstPacketTime,
 		OpusData:  []byte{0x01, 0x02, 0x03},
 	})
@@ -131,14 +132,12 @@ func TestOggSilenceAndGapInsertion(t *testing.T) {
 	}
 
 	// Test gap insertion
-	// We add 20ms because we've sent 2s of silence plus the real 20ms packet
-	secondPacketTime := firstPacketTime.Add(
-		3*time.Second + 20*time.Millisecond,
-	)
+	gapDuration := 3 * time.Second
+	secondPacketTime := firstPacketTime.Add(gapDuration + 20*time.Millisecond)
 	err = ogg.WritePacket(OpusPacket{
 		ID:        2,
 		Sequence:  2,
-		Timestamp: 960 * 152,
+		Timestamp: 960 * 251, // (2s + 3s + 20ms) / 20ms = 251 packets
 		CreatedAt: secondPacketTime,
 		OpusData:  []byte{0x04, 0x05, 0x06},
 	})
@@ -147,17 +146,13 @@ func TestOggSilenceAndGapInsertion(t *testing.T) {
 	}
 
 	// Calculate expected packets
-	initialSilencePackets := 2 * 50                                      // 2 seconds / 20ms per packet
-	gapSilencePackets := 3 * 50                                          // 3 seconds / 20ms per packet
+	initialSilencePackets := int(initialSilenceDuration / (20 * time.Millisecond))
+	gapSilencePackets := int(gapDuration / (20 * time.Millisecond))
 	expectedPackets := initialSilencePackets + 1 + gapSilencePackets + 1 // Initial silence + first packet + gap silence + second packet
 
 	// Verify the written packets
 	if len(mockWriter.Packets) != expectedPackets {
-		t.Errorf(
-			"Expected %d packets, got %d",
-			expectedPackets,
-			len(mockWriter.Packets),
-		)
+		t.Errorf("Expected %d packets, got %d", expectedPackets, len(mockWriter.Packets))
 	}
 
 	// Check initial silence packets
@@ -168,11 +163,7 @@ func TestOggSilenceAndGapInsertion(t *testing.T) {
 	}
 
 	// Check first real packet
-	if string(
-		mockWriter.Packets[initialSilencePackets].Payload,
-	) != string(
-		[]byte{0x01, 0x02, 0x03},
-	) {
+	if string(mockWriter.Packets[initialSilencePackets].Payload) != string([]byte{0x01, 0x02, 0x03}) {
 		t.Errorf("First real packet payload mismatch")
 	}
 
@@ -184,12 +175,18 @@ func TestOggSilenceAndGapInsertion(t *testing.T) {
 	}
 
 	// Check second real packet
-	if string(
-		mockWriter.Packets[expectedPackets-1].Payload,
-	) != string(
-		[]byte{0x04, 0x05, 0x06},
-	) {
+	if string(mockWriter.Packets[expectedPackets-1].Payload) != string([]byte{0x04, 0x05, 0x06}) {
 		t.Errorf("Second real packet payload mismatch")
+	}
+
+	// Verify timestamps
+	firstRealPacketTimestamp := mockWriter.Packets[initialSilencePackets].Timestamp
+	secondRealPacketTimestamp := mockWriter.Packets[expectedPackets-1].Timestamp
+	expectedTimestampDiff := uint32(960 * 251) // (2s + 3s + 20ms) / 20ms * 960 samples
+	actualTimestampDiff := secondRealPacketTimestamp - firstRealPacketTimestamp
+
+	if actualTimestampDiff != expectedTimestampDiff {
+		t.Errorf("Expected timestamp difference of %d, got %d", expectedTimestampDiff, actualTimestampDiff)
 	}
 }
 
