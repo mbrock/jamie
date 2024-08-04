@@ -46,12 +46,8 @@ func initConfig() {
 	}
 }
 
-func initPgPool(ctx context.Context) (*pgxpool.Pool, error) {
-	pool, err := pgxpool.New(ctx, viper.GetString("DATABASE_URL"))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create connection pool: %w", err)
-	}
-	return pool, nil
+func initPgPool(ctx context.Context) (*pgxpool.Pool, *db.Queries, error) {
+	return db.OpenDatabase()
 }
 
 func handleError(err error, message string) {
@@ -460,7 +456,7 @@ func main() {
 
 	ctx := context.Background()
 	var err error
-	pgPool, err = initPgPool(ctx)
+	pgPool, dbQueries, err := initPgPool(ctx)
 	if err != nil {
 		log.Fatal("Failed to initialize connection pool", "error", err)
 	}

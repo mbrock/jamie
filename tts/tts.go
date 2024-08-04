@@ -21,7 +21,10 @@ import (
 	"node.town/speechmatics"
 )
 
-var pgPool *pgxpool.Pool
+var (
+	pgPool *pgxpool.Pool
+	dbQueries *db.Queries
+)
 
 var TranscribeCmd = &cobra.Command{
 	Use:   "transcribe",
@@ -43,11 +46,12 @@ func init() {
 }
 
 func runTranscribe(cmd *cobra.Command, args []string) {
-	sqlDB, queries, err := db.OpenDatabase()
+	var err error
+	pgPool, dbQueries, err = db.OpenDatabase()
 	if err != nil {
 		log.Fatal("Failed to open database", "error", err)
 	}
-	defer sqlDB.Close()
+	defer pgPool.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -79,11 +83,12 @@ func runTranscribe(cmd *cobra.Command, args []string) {
 }
 
 func runStream(cmd *cobra.Command, args []string) {
-	sqlDB, queries, err := db.OpenDatabase()
+	var err error
+	pgPool, dbQueries, err = db.OpenDatabase()
 	if err != nil {
 		log.Fatal("Failed to open database", "error", err)
 	}
-	defer sqlDB.Close()
+	defer pgPool.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
