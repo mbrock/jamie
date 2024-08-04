@@ -98,11 +98,36 @@ type Ogg struct {
 	oggWriter      OggWriter
 	timeProvider   TimeProvider
 	logger         Logger
-	packetCount    int
-	firstTimestamp time.Time
-	lastTimestamp  time.Time
-	gapCount       int
-	segmentNumber  uint64
+	packetCount    int        // Total number of packets processed
+	firstTimestamp time.Time  // Timestamp of the first packet received
+	lastTimestamp  time.Time  // Timestamp of the last packet received
+	gapCount       int        // Number of gaps detected in the audio stream
+	segmentNumber  uint64     // Current segment number for RTP packets
+	expectedTimestamp time.Time // Expected timestamp for the next packet
+}
+
+// AudioStreamMetrics holds metrics about the audio stream
+type AudioStreamMetrics struct {
+	TotalDuration     time.Duration
+	AveragePeriod     time.Duration
+	TotalGapDuration  time.Duration
+	LargestGap        time.Duration
+}
+
+// GetStreamMetrics calculates and returns metrics about the audio stream
+func (o *Ogg) GetStreamMetrics() AudioStreamMetrics {
+	totalDuration := o.lastTimestamp.Sub(o.firstTimestamp)
+	averagePeriod := time.Duration(0)
+	if o.packetCount > 1 {
+		averagePeriod = totalDuration / time.Duration(o.packetCount-1)
+	}
+	
+	return AudioStreamMetrics{
+		TotalDuration:     totalDuration,
+		AveragePeriod:     averagePeriod,
+		TotalGapDuration:  time.Duration(o.gapCount) * OpusFrameDuration,
+		LargestGap:        o.largestGap,
+	}
 }
 
 // NewOgg creates a new Ogg instance
@@ -131,10 +156,14 @@ func (o *Ogg) Close() error {
 		}
 	}
 
+	metrics := o.GetStreamMetrics()
 	o.logger.Info("Ogg processing summary",
 		"total_packets", o.packetCount,
-		"time_range", o.lastTimestamp.Sub(o.firstTimestamp),
+		"total_duration", metrics.TotalDuration,
+		"average_period", metrics.AveragePeriod,
 		"gap_count", o.gapCount,
+		"total_gap_duration", metrics.TotalGapDuration,
+		"largest_gap", metrics.LargestGap,
 	)
 
 	return nil
@@ -151,11 +180,17 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 
 	if o.packetCount == 0 {
 		o.firstTimestamp = packet.CreatedAt
+		o.expectedTimestamp = packet.CreatedAt
 		o.addInitialSilence(packet.CreatedAt)
 	} else {
 		gapDuration := o.handleGap(packet)
 		if gapDuration > 0 {
-			packet.CreatedAt = packet.CreatedAt.Add(gapDuration)
+			o.logger.Info("Gap detected",
+				"gap_duration", gapDuration,
+				"expected_timestamp", o.expectedTimestamp,
+				"actual_timestamp", packet.CreatedAt,
+			)
+			packet.CreatedAt = o.expectedTimestamp.Add(gapDuration)
 		}
 	}
 
@@ -165,6 +200,7 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 
 	o.lastTimestamp = packet.CreatedAt
 	o.packetCount++
+	o.expectedTimestamp = o.lastTimestamp.Add(OpusFrameDuration)
 
 	return nil
 }
@@ -203,12 +239,11 @@ func (o *Ogg) handleGap(packet OpusPacket) time.Duration {
 		return 0 // No gap for the first packet
 	}
 
-	expectedTimestamp := o.lastTimestamp.Add(OpusFrameDuration)
-	actualGap := packet.CreatedAt.Sub(expectedTimestamp)
+	actualGap := packet.CreatedAt.Sub(o.expectedTimestamp)
 
 	o.logger.Info("Packet gap analysis",
 		"gap", actualGap,
-		"expected", expectedTimestamp,
+		"expected", o.expectedTimestamp,
 		"created_at", packet.CreatedAt,
 		"last_timestamp", o.lastTimestamp,
 	)
@@ -228,6 +263,9 @@ func (o *Ogg) handleGap(packet OpusPacket) time.Duration {
 			return 0
 		}
 		o.gapCount++
+		if gapDuration > o.largestGap {
+			o.largestGap = gapDuration
+		}
 		return gapDuration
 	}
 	return 0
