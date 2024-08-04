@@ -14,38 +14,26 @@ import (
 )
 
 var (
-	baseStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#0000AA")).
-			Foreground(lipgloss.Color("#FFFFFF"))
+	baseStyle = lipgloss.NewStyle()
 
 	titleStyle = baseStyle.Copy().
 			Foreground(lipgloss.Color("#FFFF00")).
 			Background(lipgloss.Color("#000088")).
 			Bold(true).
-			Padding(0, 1).
-			BorderStyle(lipgloss.NormalBorder()).
-			BorderForeground(lipgloss.Color("#FFFFFF"))
-
-	infoStyle = baseStyle.Copy().
-			Foreground(lipgloss.Color("#00FFFF"))
+			Padding(0, 2).
+			Margin(0, 0).
+			AlignHorizontal(lipgloss.Center)
 
 	errorStyle = baseStyle.Copy().
 			Foreground(lipgloss.Color("#FF0000")).
 			Bold(true)
 
 	promptStyle = baseStyle.Copy().
-			Foreground(lipgloss.Color("#FFFFFF")).
-			Bold(true)
-
-	solutionStyle = baseStyle.Copy().
-			Foreground(lipgloss.Color("#00FF00"))
+			Bold(true).
+			Padding(0, 2)
 
 	viewportStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#AAAAAA")).
-			Foreground(lipgloss.Color("#000000")).
-			Padding(1, 2).
-			BorderStyle(lipgloss.DoubleBorder()).
-			BorderForeground(lipgloss.Color("#FFFFFF"))
+			Padding(1, 1).Border(lipgloss.RoundedBorder(), true)
 )
 
 type model struct {
@@ -67,11 +55,18 @@ func initialModel(queries *db.Queries) model {
 	ti.Width = 80
 
 	vp := viewport.New(80, 20)
-	helpText := `Welcome to the Prolog REPL!
-Enter your queries below.
+	helpText := `Welcome to Jamie Prolog.
 
-For Prolog queries, simply type them and press Enter.
-Use 'N' to get the next solution when in query mode.`
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+`
 	vp.SetContent(helpText)
 	vp.Style = viewportStyle
 
@@ -119,7 +114,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter":
 				queryStr := m.textInput.Value()
 				m.query = m.prolog.Query(context.Background(), queryStr)
-				m.history = append(m.history, promptStyle.Render(fmt.Sprintf("Query: %s", queryStr)))
+				m.history = append(m.history, fmt.Sprintf("  ⎆ %s", queryStr))
 				m.textInput.SetValue("")
 				m.mode = "query"
 				m.solutions = []map[string]trealla.Term{}
@@ -148,19 +143,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 	case tea.WindowSizeMsg:
-		m.viewport.Width = msg.Width
-		m.viewport.Height = msg.Height - 8
-		m.textInput.Width = msg.Width - 4
+		m.viewport.Width = msg.Width - 1
+		m.viewport.Height = msg.Height - 2
+		m.textInput.Width = msg.Width - 1
 
 	case error:
 		m.err = msg
 		m.history = append(m.history, fmt.Sprintf("Error: %v", msg))
-		m.viewport.SetContent(strings.Join(m.history, "\n\n"))
+		m.viewport.SetContent(lipgloss.JoinVertical(lipgloss.Left, m.history...))
 		m.viewport.GotoBottom()
 		return m, nil
 	case string:
 		m.history = append(m.history, msg)
-		m.viewport.SetContent(strings.Join(m.history, "\n\n"))
+		m.viewport.SetContent(lipgloss.JoinVertical(lipgloss.Left, m.history...))
 		m.viewport.GotoBottom()
 	}
 
@@ -189,21 +184,59 @@ func (m model) View() string {
 	if m.mode == "input" {
 		footer = promptStyle.Render(m.textInput.View())
 	} else {
-		footer = infoStyle.Render("[ N ] Next solution  [ A ] Abort query  [ Q ] Quit")
+		footer = promptStyle.Render(
+			lipgloss.JoinHorizontal(
+				lipgloss.Center,
+				lipgloss.NewStyle().
+					Bold(true).
+					Underline(true).
+					Foreground(lipgloss.Color("#888888")).
+					Background(lipgloss.Color("#FFFFFF")).
+					Render("n"),
+				" Next  ",
+				lipgloss.NewStyle().
+					Bold(true).
+					Underline(true).
+					Foreground(lipgloss.Color("#888888")).
+					Background(lipgloss.Color("#FFFFFF")).
+					Render("a"),
+				" Abort  ",
+				lipgloss.NewStyle().
+					Bold(true).
+					Underline(true).
+					Foreground(lipgloss.Color("#888888")).
+					Background(lipgloss.Color("#FFFFFF")).
+					Render("q"),
+				" Quit",
+			),
+		)
 	}
 
-	content := viewportStyle.Render(m.viewport.View())
+	content := m.viewport.View()
 
-	mainContent := lipgloss.JoinVertical(
-		lipgloss.Left,
-		content,
-		footer,
+	titleWidth := m.viewport.Width
+	leftText := "Jamie Prolog v3"
+	rightText := "Unauthorized"
+	spacing := titleWidth - lipgloss.Width(
+		leftText,
+	) - lipgloss.Width(
+		rightText,
+	) - 4
+
+	title := titleStyle.Render(
+		lipgloss.JoinHorizontal(
+			lipgloss.Center,
+			leftText,
+			strings.Repeat(" ", spacing),
+			rightText,
+		),
 	)
 
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
-		titleStyle.Render(" Prolog REPL "),
-		baseStyle.Render(mainContent),
+		title,
+		content,
+		footer,
 	)
 }
 
@@ -219,19 +252,21 @@ func (m *model) iterateQuery(ctx context.Context) {
 		m.solutions = append(m.solutions, solution)
 		solutionStr := ""
 		for k, v := range solution {
-			solutionStr += fmt.Sprintf("  %v = %v\n", k, v)
+			solutionStr += fmt.Sprintf("  ⦿ %v = %v", k, v)
 		}
-		m.history = append(m.history, solutionStyle.Render(solutionStr))
+		m.history = append(m.history, solutionStr)
 	} else {
 		if err := m.query.Err(); err != nil {
 			m.history = append(m.history, errorStyle.Render(fmt.Sprintf("Error: %v", err)))
 		} else {
-			m.history = append(m.history, infoStyle.Render("No more solutions."))
+			m.history = append(m.history, "  ◼︎")
 		}
 		m.query.Close()
 		m.query = nil
 		m.mode = "input"
 	}
-	m.viewport.SetContent(strings.Join(m.history, "\n"))
+	m.viewport.SetContent(
+		lipgloss.JoinVertical(lipgloss.Left, m.history...),
+	)
 	m.viewport.GotoBottom()
 }

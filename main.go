@@ -312,7 +312,11 @@ func init() {
 		Short: "Start a Prolog REPL",
 		Long:  `This command starts a simple Prolog REPL using a bubble TUI.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			StartPrologREPL()
+			sqlDB, queries, err := db.OpenDatabase()
+			handleError(err, "Failed to open database")
+			defer sqlDB.Close()
+
+			StartPrologREPL(queries)
 		},
 	}
 	rootCmd.AddCommand(prologCmd)
@@ -465,7 +469,7 @@ func main() {
 
 	ctx := context.Background()
 	var err error
-	pgPool, queries, err := func() (*pgxpool.Pool, *db.Queries, error) {
+	pgPool, _, err := func() (*pgxpool.Pool, *db.Queries, error) {
 		var _ context.Context = ctx
 		return initPgPool()
 	}()
@@ -474,13 +478,10 @@ func main() {
 	}
 	defer pgPool.Close()
 
-	registerDBQuery(ctx, queries)
-
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal("Error executing root command", "error", err)
 	}
 }
-
 
 func transcribeAudio(
 	ctx context.Context,

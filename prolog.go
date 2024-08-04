@@ -131,7 +131,7 @@ func RegisterDBQuery(
 
 	err = pl.Register(
 		ctx,
-		"known_guild",
+		"known_guilds",
 		1,
 		func(_ trealla.Prolog, _ trealla.Subquery, goal0 trealla.Term) trealla.Term {
 			guildIDs, err := queries.GetKnownGuildIDs(ctx)
@@ -147,26 +147,10 @@ func RegisterDBQuery(
 				guildAtoms[i] = trealla.Atom(id)
 			}
 
-			return trealla.Atom("member").Of(goal0, trealla.List(guildAtoms...))
+			return trealla.Atom("known_guilds").Of(guildAtoms)
 		},
 	)
 	if err != nil {
 		panic(err)
 	}
-
-	// Example usage for last_joined_channel
-	// answer, err := pl.QueryOnce(ctx, `last_joined_channel("123412341234", ChannelID).`)
-	// if err != nil {
-	// 	fmt.Println("Failed to execute Prolog query:", err)
-	// } else {
-	// 	fmt.Println("Last joined channel:", answer.Solution["ChannelID"])
-	// }
-
-	// Example usage for known_guild
-	// answer, err := pl.QueryOnce(ctx, `known_guild(GuildID).`)
-	// if err != nil {
-	// 	fmt.Println("Failed to execute Prolog query:", err)
-	// } else {
-	// 	fmt.Println("Known guild ID:", answer.Solution["GuildID"])
-	// }
 }

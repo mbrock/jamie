@@ -22,18 +22,8 @@ clean:
 
 run: build
 	./$(BINARY_NAME)
+
 .PHONY: all build test clean sqlc templ init
-
-all: build
-
-build:
-	go build -o jamie
-
-test:
-	go test ./...
-
-clean:
-	rm -f jamie
 
 sqlc:
 	sqlc generate
