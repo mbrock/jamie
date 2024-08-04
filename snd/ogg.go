@@ -5,10 +5,23 @@ import (
 	"io"
 	"time"
 
-	"github.com/charmbracelet/log"
 	"github.com/pion/rtp"
-	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
 )
+
+type TimeProvider interface {
+	Now() time.Time
+}
+
+type OggWriter interface {
+	WriteRTP(*rtp.Packet) error
+	Close() error
+}
+
+type Logger interface {
+	Info(msg string, keyvals ...interface{})
+	Error(msg string, keyvals ...interface{})
+	Debug(msg string, keyvals ...interface{})
+}
 
 func createRTPPacket(
 	sequenceNumber uint16,
@@ -44,7 +57,9 @@ type Ogg struct {
 	ssrc              int64
 	startTime         time.Time
 	endTime           time.Time
-	oggWriter         *oggwriter.OggWriter
+	oggWriter         OggWriter
+	timeProvider      TimeProvider
+	logger            Logger
 	packetCount       int
 	firstTimestamp    time.Time
 	lastTimestamp     time.Time
@@ -56,18 +71,17 @@ type Ogg struct {
 func NewOgg(
 	ssrc int64,
 	startTime, endTime time.Time,
-	writer io.Writer,
+	oggWriter OggWriter,
+	timeProvider TimeProvider,
+	logger Logger,
 ) (*Ogg, error) {
-	oggWriter, err := oggwriter.NewWith(writer, 48000, 2)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create OggWriter: %w", err)
-	}
-
 	return &Ogg{
-		ssrc:      ssrc,
-		startTime: startTime.UTC(),
-		endTime:   endTime.UTC(),
-		oggWriter: oggWriter,
+		ssrc:         ssrc,
+		startTime:    startTime.UTC(),
+		endTime:      endTime.UTC(),
+		oggWriter:    oggWriter,
+		timeProvider: timeProvider,
+		logger:       logger,
 	}, nil
 }
 
