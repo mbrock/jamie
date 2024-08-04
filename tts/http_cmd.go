@@ -12,6 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/spf13/cobra"
 	"node.town/db"
+	"node.town/http"
 	"node.town/snd"
 )
 
@@ -24,15 +25,15 @@ var HTTPCmd = &cobra.Command{
 
 func init() {
 	HTTPCmd.Flags().IntP("port", "p", 8080, "Port to run the HTTP server on")
+	http.RegisterRoute("/tts/", handleTTSRequests)
 }
 
 func runHTTPServer(cmd *cobra.Command, args []string) {
 	port, _ := cmd.Flags().GetInt("port")
 
-	sqlDB, queries, err := db.OpenDatabase()
+	err := http.Serve(port)
 	if err != nil {
-		fmt.Printf("Failed to open database: %v\n", err)
-		return
+		fmt.Printf("Failed to start HTTP server: %v\n", err)
 	}
 	defer sqlDB.Close()
 

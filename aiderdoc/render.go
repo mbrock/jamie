@@ -2,11 +2,14 @@ package aiderdoc
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
+	"node.town/http"
 )
 
 var AiderdocCmd = &cobra.Command{
@@ -40,5 +43,22 @@ var AiderdocCmd = &cobra.Command{
 }
 
 func init() {
-	// Add any flags here if needed
+	http.RegisterRoute("/aider/", handleAiderRequest)
+}
+
+func handleAiderRequest(w http.ResponseWriter, r *http.Request) {
+	inputFile := filepath.Join(".", ".aider.input.history")
+	entries, err := ParseFile(inputFile)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error parsing aider input history file: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	articles := ProcessEntries(entries)
+	component := EntriesTemplate(articles)
+	err = component.Render(r.Context(), w)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error rendering aider input history template: %v", err), http.StatusInternalServerError)
+		return
+	}
 }
