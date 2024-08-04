@@ -1,11 +1,17 @@
 package tts
 
 import (
+	"bytes"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
+	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
 	"node.town/db"
+	"node.town/snd"
 )
 
 var HTTPCmd = &cobra.Command{
@@ -43,7 +49,11 @@ func handleTranscriptPage(queries *db.Queries) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		transcripts, err := LoadRecentTranscripts(queries)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to load transcripts: %v", err), http.StatusInternalServerError)
+			http.Error(
+				w,
+				fmt.Sprintf("Failed to load transcripts: %v", err),
+				http.StatusInternalServerError,
+			)
 			return
 		}
 
@@ -54,7 +64,11 @@ func handleTranscriptPage(queries *db.Queries) http.HandlerFunc {
 
 		html, err := builder.RenderHTML()
 		if err != nil {
-			http.Error(w, "Failed to render HTML", http.StatusInternalServerError)
+			http.Error(
+				w,
+				"Failed to render HTML",
+				http.StatusInternalServerError,
+			)
 			return
 		}
 
@@ -92,30 +106,46 @@ func handleAudioRequest(queries *db.Queries) http.HandlerFunc {
 		// Fetch the SSRC for the given session ID
 		ssrc, err := queries.GetSSRCForSession(r.Context(), sessionID)
 		if err != nil {
-			http.Error(w, "Failed to get SSRC for session", http.StatusInternalServerError)
+			http.Error(
+				w,
+				"Failed to get SSRC for session",
+				http.StatusInternalServerError,
+			)
 			return
 		}
 
 		// Fetch opus packets for the given time range
-		packets, err := queries.GetOpusPacketsForTimeRange(r.Context(), db.GetOpusPacketsForTimeRangeParams{
-			Ssrc:      ssrc,
-			StartTime: startTime,
-			EndTime:   endTime,
-		})
+		packets, err := queries.GetOpusPacketsForTimeRange(
+			r.Context(),
+			db.GetOpusPacketsForTimeRangeParams{
+				Ssrc:      ssrc,
+				StartTime: startTime,
+				EndTime:   endTime,
+			},
+		)
 		if err != nil {
-			http.Error(w, "Failed to fetch opus packets", http.StatusInternalServerError)
+			http.Error(
+				w,
+				"Failed to fetch opus packets",
+				http.StatusInternalServerError,
+			)
 			return
 		}
 
 		// Generate OGG file
 		oggData, err := generateOggFile(packets)
 		if err != nil {
-			http.Error(w, "Failed to generate OGG file", http.StatusInternalServerError)
+			http.Error(
+				w,
+				"Failed to generate OGG file",
+				http.StatusInternalServerError,
+			)
 			return
 		}
 
 		w.Header().Set("Content-Type", "audio/ogg")
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"audio_%d_%s_%s.ogg\"", sessionID, startTime.Format(time.RFC3339), endTime.Format(time.RFC3339)))
+		w.Header().
+			Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"audio_%d_%s_%s.ogg\"", sessionID, startTime.Format(time.RFC3339), endTime.Format(time.RFC3339)))
 		w.Write(oggData)
 	}
 }
