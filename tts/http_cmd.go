@@ -10,34 +10,20 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/spf13/cobra"
 	"node.town/db"
-	"node.town/http"
+	nt "node.town/http"
 	"node.town/snd"
 )
 
-var HTTPCmd = &cobra.Command{
-	Use:   "http",
-	Short: "Start an HTTP server to display transcripts",
-	Long:  `This command starts an HTTP server that displays the past eight hours of transcripts using HTML rendering.`,
-	Run:   runHTTPServer,
-}
-
 func init() {
-	HTTPCmd.Flags().IntP("port", "p", 8080, "Port to run the HTTP server on")
-	http.RegisterRoute("/tts/", handleTTSRequests)
-}
-
-func runHTTPServer(cmd *cobra.Command, args []string) {
-	port, _ := cmd.Flags().GetInt("port")
-
-	http.RegisterRoute("/tts/", handleTranscriptPage(queries))
-	http.RegisterRoute("/tts/audio/", handleAudioRequest(queries))
-
-	err := http.Serve(port)
+	_, queries, err := db.OpenDatabase()
 	if err != nil {
-		fmt.Printf("Failed to start HTTP server: %v\n", err)
+		fmt.Printf("Failed to open database: %v\n", err)
+		return
 	}
+
+	nt.RegisterRoute("/tts/", handleTranscriptPage(queries))
+	nt.RegisterRoute("/tts/audio/", handleAudioRequest(queries))
 }
 
 func handleTranscriptPage(queries *db.Queries) http.HandlerFunc {

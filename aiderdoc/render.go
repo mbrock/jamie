@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	"node.town/http"
+	nt "node.town/http"
 )
 
 var AiderdocCmd = &cobra.Command{
@@ -43,14 +43,18 @@ var AiderdocCmd = &cobra.Command{
 }
 
 func init() {
-	http.RegisterRoute("/aider/", handleAiderRequest)
+	nt.RegisterRoute("/aider/", handleAiderRequest)
 }
 
 func handleAiderRequest(w http.ResponseWriter, r *http.Request) {
 	inputFile := filepath.Join(".", ".aider.input.history")
 	entries, err := ParseFile(inputFile)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Error parsing aider input history file: %v", err), http.StatusInternalServerError)
+		http.Error(
+			w,
+			fmt.Sprintf("Error parsing aider input history file: %v", err),
+			http.StatusInternalServerError,
+		)
 		return
 	}
 
@@ -59,7 +63,14 @@ func handleAiderRequest(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	err = component.Render(r.Context(), w)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Error rendering aider input history template: %v", err), http.StatusInternalServerError)
+		http.Error(
+			w,
+			fmt.Sprintf(
+				"Error rendering aider input history template: %v",
+				err,
+			),
+			http.StatusInternalServerError,
+		)
 		return
 	}
 }
