@@ -15,21 +15,21 @@ import (
 
 var (
 	titleStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#FAFAFA")).
-		Background(lipgloss.Color("#874BFD")).
-		Padding(0, 1)
+			Foreground(lipgloss.Color("#FAFAFA")).
+			Background(lipgloss.Color("#874BFD")).
+			Padding(0, 1)
 
 	infoStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#B58900"))
+			Foreground(lipgloss.Color("#B58900"))
 
 	errorStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#DC322F"))
+			Foreground(lipgloss.Color("#DC322F"))
 
 	promptStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#268BD2"))
+			Foreground(lipgloss.Color("#268BD2"))
 
 	solutionStyle = lipgloss.NewStyle().
-		Foreground(lipgloss.Color("#859900"))
+			Foreground(lipgloss.Color("#859900"))
 )
 
 type model struct {
@@ -40,7 +40,7 @@ type model struct {
 	err       error
 	query     trealla.Query
 	mode      string // "input" or "query"
-	solutions []map[string]string
+	solutions []map[string]trealla.Term
 }
 
 func initialModel(queries *db.Queries) model {
@@ -105,11 +105,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.history = append(m.history, promptStyle.Render(fmt.Sprintf("Query: %s", queryStr)))
 				m.textInput.SetValue("")
 				m.mode = "query"
-				m.solutions = []map[string]string{}
+				m.solutions = []map[string]trealla.Term{}
 				m.iterateQuery(context.Background())
 
 			case "ctrl+c", "esc":
 				return m, tea.Quit
+
+			default:
+				_, cmd = m.textInput.Update(msg)
+				cmds = append(cmds, cmd)
 			}
 		case "query":
 			switch msg.String() {
@@ -117,12 +121,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.iterateQuery(context.Background())
 
 			case "ctrl+c", "esc", "q":
-				cmds = append(cmds, func() tea.Msg {
-					m.query.Close()
-					m.query = nil
-					m.mode = "input"
-					return m
-				})
+				m.query.Close()
+				m.query = nil
+				m.mode = "input"
 
 			case "ctrl+d":
 				return m, tea.Quit
@@ -146,10 +147,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.viewport.GotoBottom()
 	}
 
-	if m.mode == "input" {
-		m.textInput, cmd = m.textInput.Update(msg)
-		cmds = append(cmds, cmd)
-	}
 	m.viewport, cmd = m.viewport.Update(msg)
 	cmds = append(cmds, cmd)
 
