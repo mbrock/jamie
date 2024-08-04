@@ -232,7 +232,7 @@ func (o *Ogg) writeSilentFrames(frames int) error {
 			return fmt.Errorf("error writing silent frame: %w", err)
 		}
 	}
-	o.packetCount += frames
+	o.packetCount += uint64(frames)
 	return nil
 }
 
