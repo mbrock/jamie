@@ -50,9 +50,10 @@ func ParseFile(filename string) ([]Entry, error) {
 		case strings.HasPrefix(line, "+"):
 			// Content line
 			currentContent = strings.TrimPrefix(line, "+")
+			processedContent := processBackticks(currentContent)
 			entries = append(entries, Entry{
 				Timestamp:  currentTimestamp,
-				Content:    currentContent,
+				Content:    processedContent,
 				LineNumber: lineNumber,
 			})
 
@@ -73,4 +74,30 @@ func ParseFile(filename string) ([]Entry, error) {
 	}
 
 	return entries, nil
+}
+
+func processBackticks(content string) string {
+	var result strings.Builder
+	inBackticks := false
+
+	for _, char := range content {
+		switch char {
+		case '`':
+			if inBackticks {
+				result.WriteString("</tt>")
+			} else {
+				result.WriteString("<tt>")
+			}
+			inBackticks = !inBackticks
+		default:
+			result.WriteRune(char)
+		}
+	}
+
+	// Close any unclosed <tt> tags
+	if inBackticks {
+		result.WriteString("</tt>")
+	}
+
+	return result.String()
 }

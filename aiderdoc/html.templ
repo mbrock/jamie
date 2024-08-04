@@ -70,6 +70,6 @@ templ sectionTemplate(section Section) {
 templ entryTemplate(entry Entry) {
 	<div class="entry">
 		<div class="timestamp">{ entry.Timestamp.Format("15:04") }</div>
-		<div class="content">{ entry.Content }</div>
+		<div class="content">{ templ.Raw(entry.Content) }</div>
 	</div>
 }
