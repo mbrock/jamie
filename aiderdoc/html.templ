@@ -25,9 +25,6 @@ templ head() {
 				margin: 0 auto;
 				padding: 1rem;
 				color: #333;
-				display: grid;
-				grid-template-columns: 180px 1fr;
-				gap: 2rem;
 			}
 			.article {
 				margin-bottom: 2rem;
@@ -36,16 +33,19 @@ templ head() {
 				margin-bottom: 1rem;
 			}
 			.entry {
+				display: flex;
 				margin-bottom: 0.5rem;
 			}
 			.timestamp {
 				font-size: 0.8rem;
 				color: #666;
+				min-width: 180px;
 				text-align: right;
 				padding-right: 1rem;
 			}
 			.content {
 				white-space: pre-wrap;
+				flex: 1;
 			}
 			.date {
 				font-weight: bold;
@@ -56,25 +56,12 @@ templ head() {
 }
 
 templ articleTemplate(article Article) {
-	<div class="timestamp">
-		@timestampColumn(article)
-	</div>
 	<div class="article">
-		@articleContent(article)
+		<div class="date">{ article.StartTime.Format("Monday, 2 January, 2006") }</div>
+		for _, section := range article.Sections {
+			@sectionTemplate(section)
+		}
 	</div>
-}
-
-templ timestampColumn(article Article) {
-	<div class="date">{ article.StartTime.Format("Monday, 2 January, 2006") }</div>
-	for _, section := range article.Sections {
-		<div class="timestamp">{ section.StartTime.Format("15:04:05") }</div>
-	}
-}
-
-templ articleContent(article Article) {
-	for _, section := range article.Sections {
-		@sectionTemplate(section)
-	}
 }
 
 templ sectionTemplate(section Section) {
@@ -87,6 +74,7 @@ templ sectionTemplate(section Section) {
 
 templ entryTemplate(entry Entry) {
 	<div class="entry">
+		<div class="timestamp">{ entry.Timestamp.Format("15:04:05") }</div>
 		<div class="content">{ entry.Content }</div>
 	</div>
 }
