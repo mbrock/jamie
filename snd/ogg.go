@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/pion/rtp"
+	"github.com/pion/webrtc/v3/pkg/media/oggwriter"
 )
 
 type TimeProvider interface {
@@ -21,6 +22,30 @@ type Logger interface {
 	Info(msg string, keyvals ...interface{})
 	Error(msg string, keyvals ...interface{})
 	Debug(msg string, keyvals ...interface{})
+}
+
+type RealTimeProvider struct{}
+
+func (r *RealTimeProvider) Now() time.Time {
+	return time.Now()
+}
+
+type OggWriterWrapper struct {
+	writer *oggwriter.OggWriter
+}
+
+func NewOggWriter(w io.Writer) *OggWriterWrapper {
+	return &OggWriterWrapper{
+		writer: oggwriter.NewWith(w),
+	}
+}
+
+func (o *OggWriterWrapper) WriteRTP(packet *rtp.Packet) error {
+	return o.writer.WriteRTP(packet)
+}
+
+func (o *OggWriterWrapper) Close() error {
+	return o.writer.Close()
 }
 
 func createRTPPacket(
