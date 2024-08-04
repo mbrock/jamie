@@ -153,4 +153,12 @@ FROM transcription_segments ts
 WHERE ts.id = $1
 ORDER BY tw.start_time,
     tw.id,
-    wa.confidence DESC;
+    wa.confidence DESC;-- name: GetTranscriptsFromLastHour :many
+SELECT ts.id AS segment_id, ts.session_id, ts.is_final,
+       tw.id AS word_id, tw.start_time, tw.duration, tw.is_eos, tw.attaches_to,
+       wa.content, wa.confidence
+FROM transcription_segments ts
+JOIN transcription_words tw ON ts.id = tw.segment_id AND ts.version = tw.version
+JOIN word_alternatives wa ON tw.id = wa.word_id
+WHERE ts.created_at > $1
+ORDER BY ts.created_at, tw.start_time, tw.id, wa.confidence DESC;
