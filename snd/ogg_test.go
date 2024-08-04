@@ -150,7 +150,7 @@ func TestOggSilenceAndGapInsertion(t *testing.T) {
 	// Calculate expected packets
 	initialSilencePackets := int(initialSilenceDuration / (20 * time.Millisecond))
 	gapSilencePackets := int(gapDuration / (20 * time.Millisecond))
-	expectedPackets := totalPackets + 1 // Total duration packets + 1 for the last packet
+	expectedPackets := initialSilencePackets + 1 + gapSilencePackets + 1 // Initial silence + first packet + gap silence + second packet
 
 	// Verify the written packets
 	if len(mockWriter.Packets) != expectedPackets {
@@ -196,7 +196,7 @@ func TestOggSilenceAndGapInsertion(t *testing.T) {
 	// Verify timestamps
 	firstRealPacketTimestamp := mockWriter.Packets[initialSilencePackets].Timestamp
 	secondRealPacketTimestamp := mockWriter.Packets[expectedPackets-1].Timestamp
-	expectedTimestampDiff := uint32(totalPackets-1) * 960 // Subtract 1 because we're measuring the difference
+	expectedTimestampDiff := uint32(totalPackets - initialSilencePackets - 1) * 960 // Subtract initial silence and 1 for the difference
 	actualTimestampDiff := secondRealPacketTimestamp - firstRealPacketTimestamp
 
 	if actualTimestampDiff != expectedTimestampDiff {
