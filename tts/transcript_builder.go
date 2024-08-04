@@ -17,6 +17,10 @@ const (
 	StyleLowConfidence
 )
 
+func (s SpanStyle) Render(content string) string {
+	return content // For now, just return the content without styling
+}
+
 type Span struct {
 	Content string
 	Style   SpanStyle
