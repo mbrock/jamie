@@ -50,14 +50,8 @@ func runTranscribe(cmd *cobra.Command, args []string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	pool, err := pgxpool.New(ctx, viper.GetString("DATABASE_URL"))
-	if err != nil {
-		log.Fatal("Failed to create connection pool", "error", err)
-	}
-	defer pool.Close()
-
 	cache := snd.NewSSRCUserIDCache(queries)
-	streamer := snd.NewPostgresPacketStreamer(pool, cache, log.Default())
+	streamer := snd.NewPostgresPacketStreamer(pgPool, cache, log.Default())
 	packetChan, err := snd.StreamOpusPackets(ctx, streamer)
 	if err != nil {
 		log.Fatal("Error setting up opus packet stream", "error", err)
@@ -106,13 +100,7 @@ func runStream(cmd *cobra.Command, args []string) {
 	}()
 
 	// Listen for transcription updates from the database
-	pool, err := pgxpool.New(ctx, viper.GetString("DATABASE_URL"))
-	if err != nil {
-		log.Fatal("Failed to create connection pool", "error", err)
-	}
-	defer pool.Close()
-
-	updates, err := snd.ListenForTranscriptionChanges(ctx, pool)
+	updates, err := snd.ListenForTranscriptionChanges(ctx, pgPool)
 	if err != nil {
 		log.Fatal(
 			"Failed to set up transcription change listener",

@@ -35,6 +35,8 @@ import (
 	"node.town/speechmatics"
 )
 
+var pgPool *pgxpool.Pool
+
 func initConfig() {
 	viper.SetConfigFile(".env")
 	viper.AutomaticEnv()
@@ -42,6 +44,14 @@ func initConfig() {
 	if err := viper.ReadInConfig(); err != nil {
 		log.Warn("Error reading config file", "error", err)
 	}
+}
+
+func initPgPool(ctx context.Context) (*pgxpool.Pool, error) {
+	pool, err := pgxpool.New(ctx, viper.GetString("DATABASE_URL"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create connection pool: %w", err)
+	}
+	return pool, nil
 }
 
 func handleError(err error, message string) {
@@ -447,6 +457,15 @@ func convertOggToMp3(inputFile, outputFile string) error {
 
 func main() {
 	initConfig()
+
+	ctx := context.Background()
+	var err error
+	pgPool, err = initPgPool(ctx)
+	if err != nil {
+		log.Fatal("Failed to initialize connection pool", "error", err)
+	}
+	defer pgPool.Close()
+
 	if err := rootCmd.Execute(); err != nil {
 		log.Fatal("Error executing root command", "error", err)
 	}
