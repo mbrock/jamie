@@ -15,6 +15,25 @@ import (
 	"node.town/db"
 )
 
+type UserIDCache interface {
+	Get(ssrc int64) (string, error)
+}
+
+type PacketStreamer interface {
+	Stream(ctx context.Context) (<-chan OpusPacketNotification, error)
+}
+
+type PacketDemuxer interface {
+	Demux(
+		ctx context.Context,
+		inputChan <-chan OpusPacketNotification,
+	) <-chan (<-chan OpusPacketNotification)
+}
+
+type TranscriptionChangeListener interface {
+	Listen(ctx context.Context) (<-chan TranscriptionUpdate, error)
+}
+
 type SSRCUserIDCache struct {
 	mu      sync.RWMutex
 	cache   map[int64]string
@@ -255,7 +274,10 @@ func ListenForTranscriptionChanges(
 		)
 	}
 
-	updateChan := make(chan TranscriptionUpdate, 100) // Buffered channel with capacity of 100
+	updateChan := make(
+		chan TranscriptionUpdate,
+		100,
+	) // Buffered channel with capacity of 100
 
 	go func() {
 		defer close(updateChan)
@@ -286,7 +308,11 @@ func ListenForTranscriptionChanges(
 			case <-ctx.Done():
 				return
 			default:
-				log.Warn("Update channel full, dropping update", "update", update)
+				log.Warn(
+					"Update channel full, dropping update",
+					"update",
+					update,
+				)
 			}
 		}
 	}()
