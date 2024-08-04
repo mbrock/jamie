@@ -84,39 +84,39 @@ func ParseFile(filename string) ([]Entry, error) {
 
 func processBackticks(content string) []Span {
 	var spans []Span
-	var currentSpan strings.Builder
+	words := strings.Fields(content)
 	inBackticks := false
 
 	// Regular expressions for words with underscores and camel case
 	underscoreRegex := regexp.MustCompile(`\b\w+_\w+\b`)
 	camelCaseRegex := regexp.MustCompile(`\b[a-z]+[A-Z]\w*\b`)
 
-	runes := []rune(content)
-	for i := 0; i < len(runes); i++ {
-		char := runes[i]
-
-		if char == '`' {
-			if currentSpan.Len() > 0 {
-				spans = append(spans, Span{Text: currentSpan.String(), IsCode: inBackticks})
-				currentSpan.Reset()
-			}
-			inBackticks = !inBackticks
-		} else {
-			currentSpan.WriteRune(char)
-
-			// Check for word boundaries
-			if i == len(runes)-1 || runes[i+1] == ' ' {
-				word := currentSpan.String()
-				if inBackticks || underscoreRegex.MatchString(word) || camelCaseRegex.MatchString(word) {
-					spans = append(spans, Span{Text: word, IsCode: true})
-					currentSpan.Reset()
+	for _, word := range words {
+		if strings.Contains(word, "`") {
+			parts := strings.Split(word, "`")
+			for i, part := range parts {
+				if part != "" {
+					spans = append(spans, Span{Text: part, IsCode: inBackticks})
+				}
+				if i < len(parts)-1 {
+					inBackticks = !inBackticks
 				}
 			}
+		} else if inBackticks || underscoreRegex.MatchString(word) || camelCaseRegex.MatchString(word) {
+			spans = append(spans, Span{Text: word, IsCode: true})
+		} else {
+			spans = append(spans, Span{Text: word, IsCode: false})
+		}
+
+		// Add a space after each word, except for the last one
+		if len(spans) > 0 && spans[len(spans)-1].Text != "" {
+			spans = append(spans, Span{Text: " ", IsCode: false})
 		}
 	}
 
-	if currentSpan.Len() > 0 {
-		spans = append(spans, Span{Text: currentSpan.String(), IsCode: inBackticks})
+	// Remove the trailing space if it exists
+	if len(spans) > 0 && spans[len(spans)-1].Text == " " {
+		spans = spans[:len(spans)-1]
 	}
 
 	return spans
