@@ -117,11 +117,9 @@ func handleAudioRequest(queries *db.Queries) http.HandlerFunc {
 		// Fetch opus packets for the given time range
 		packets, err := queries.GetOpusPacketsForTimeRange(
 			r.Context(),
-			db.GetOpusPacketsForTimeRangeParams{
-				Ssrc:      ssrc,
-				StartTime: startTime,
-				EndTime:   endTime,
-			},
+			ssrc,
+			startTime,
+			endTime,
 		)
 		if err != nil {
 			http.Error(

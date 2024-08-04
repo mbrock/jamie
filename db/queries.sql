@@ -86,6 +86,14 @@ WHERE ssrc = $1
     AND created_at BETWEEN $2 AND $3
 ORDER BY created_at;
 
+-- name: GetSSRCForSession :one
+SELECT ssrc FROM transcription_sessions WHERE id = $1 LIMIT 1;
+
+-- name: GetOpusPacketsForTimeRange :many
+SELECT * FROM opus_packets
+WHERE ssrc = $1 AND created_at BETWEEN $2 AND $3
+ORDER BY created_at;
+
 -- name: GetUploadedFileByHash :one
 SELECT remote_uri
 FROM uploaded_files

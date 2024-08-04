@@ -17,6 +17,7 @@ type TranscriptWord struct {
 	IsEOS             bool      // Indicates if this word is at the end of a sentence
 	AttachesTo        string    // Indicates how this word attaches to the previous word
 	AbsoluteStartTime time.Time // The absolute start time of the word in real-world time
+	SessionID         int64     // ID of the transcription session
 }
 
 // TranscriptSegment represents a segment of transcription, which may be partial or final
