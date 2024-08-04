@@ -96,3 +96,84 @@ func TestOggWritePacket(t *testing.T) {
 		t.Errorf("Payload mismatch")
 	}
 }
+
+func TestOggSilenceAndGapInsertion(t *testing.T) {
+	mockWriter := &MockOggWriter{}
+	mockTime := &MockTimeProvider{currentTime: time.Now()}
+	mockLogger := &MockLogger{}
+
+	startTime := mockTime.Now()
+	endTime := startTime.Add(time.Minute)
+
+	ogg, err := NewOgg(
+		12345,     // ssrc
+		startTime, // startTime
+		endTime,   // endTime
+		mockWriter,
+		mockTime,
+		mockLogger,
+	)
+	if err != nil {
+		t.Fatalf("Failed to create Ogg: %v", err)
+	}
+
+	// Test initial silence insertion
+	firstPacketTime := startTime.Add(2 * time.Second)
+	err = ogg.WritePacket(OpusPacket{
+		ID:        1,
+		Sequence:  1,
+		Timestamp: 960,
+		CreatedAt: firstPacketTime,
+		OpusData:  []byte{0x01, 0x02, 0x03},
+	})
+	if err != nil {
+		t.Fatalf("Failed to write first packet: %v", err)
+	}
+
+	// Test gap insertion
+	secondPacketTime := firstPacketTime.Add(3 * time.Second)
+	err = ogg.WritePacket(OpusPacket{
+		ID:        2,
+		Sequence:  4, // Simulating a gap of 2 packets
+		Timestamp: 3840,
+		CreatedAt: secondPacketTime,
+		OpusData:  []byte{0x04, 0x05, 0x06},
+	})
+	if err != nil {
+		t.Fatalf("Failed to write second packet: %v", err)
+	}
+
+	// Verify the written packets
+	expectedPackets := 5 // 2 initial silence + 1 first packet + 2 gap silence + 1 second packet
+	if len(mockWriter.Packets) != expectedPackets {
+		t.Fatalf("Expected %d packets, got %d", expectedPackets, len(mockWriter.Packets))
+	}
+
+	// Check initial silence packets
+	for i := 0; i < 2; i++ {
+		if !issilentPacket(mockWriter.Packets[i]) {
+			t.Errorf("Expected silent packet at index %d", i)
+		}
+	}
+
+	// Check first real packet
+	if string(mockWriter.Packets[2].Payload) != string([]byte{0x01, 0x02, 0x03}) {
+		t.Errorf("First real packet payload mismatch")
+	}
+
+	// Check gap silence packets
+	for i := 3; i < 5; i++ {
+		if !issilentPacket(mockWriter.Packets[i]) {
+			t.Errorf("Expected silent packet at index %d", i)
+		}
+	}
+
+	// Check second real packet
+	if string(mockWriter.Packets[5].Payload) != string([]byte{0x04, 0x05, 0x06}) {
+		t.Errorf("Second real packet payload mismatch")
+	}
+}
+
+func issilentPacket(packet MockRTPPacket) bool {
+	return len(packet.Payload) == 3 && packet.Payload[0] == 0xf8 && packet.Payload[1] == 0xff && packet.Payload[2] == 0xfe
+}
