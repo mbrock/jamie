@@ -143,33 +143,37 @@ func TestOggSilenceAndGapInsertion(t *testing.T) {
 		t.Fatalf("Failed to write second packet: %v", err)
 	}
 
+	// Calculate expected packets
+	initialSilencePackets := 2 * 50 // 2 seconds / 20ms per packet
+	gapSilencePackets := 3 * 50     // 3 seconds / 20ms per packet
+	expectedPackets := initialSilencePackets + 1 + gapSilencePackets + 1 // Initial silence + first packet + gap silence + second packet
+
 	// Verify the written packets
-	expectedPackets := 5 // 2 initial silence + 1 first packet + 2 gap silence + 1 second packet
 	if len(mockWriter.Packets) != expectedPackets {
 		t.Fatalf("Expected %d packets, got %d", expectedPackets, len(mockWriter.Packets))
 	}
 
 	// Check initial silence packets
-	for i := 0; i < 2; i++ {
+	for i := 0; i < initialSilencePackets; i++ {
 		if !issilentPacket(mockWriter.Packets[i]) {
 			t.Errorf("Expected silent packet at index %d", i)
 		}
 	}
 
 	// Check first real packet
-	if string(mockWriter.Packets[2].Payload) != string([]byte{0x01, 0x02, 0x03}) {
+	if string(mockWriter.Packets[initialSilencePackets].Payload) != string([]byte{0x01, 0x02, 0x03}) {
 		t.Errorf("First real packet payload mismatch")
 	}
 
 	// Check gap silence packets
-	for i := 3; i < 5; i++ {
+	for i := initialSilencePackets + 1; i < initialSilencePackets + 1 + gapSilencePackets; i++ {
 		if !issilentPacket(mockWriter.Packets[i]) {
 			t.Errorf("Expected silent packet at index %d", i)
 		}
 	}
 
 	// Check second real packet
-	if string(mockWriter.Packets[5].Payload) != string([]byte{0x04, 0x05, 0x06}) {
+	if string(mockWriter.Packets[expectedPackets-1].Payload) != string([]byte{0x04, 0x05, 0x06}) {
 		t.Errorf("Second real packet payload mismatch")
 	}
 }
