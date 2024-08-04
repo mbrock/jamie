@@ -39,7 +39,7 @@ func (m *testModel) setCurrentTranscript(
 
 func word(
 	content string,
-	startTime, endTime float64,
+	startTime int,
 	isEOS bool,
 ) TranscriptWord {
 	now := time.Now()
@@ -66,15 +66,15 @@ func TestTranscriptView(t *testing.T) {
 		m := newTestModel()
 		m.addFinalTranscript(
 			1,
-			word("A", 0.0, 0.5, false),
-			word("B", 0.5, 1.0, true),
+			word("A", 0, false),
+			word("B", 1, true),
 		)
 		m.setCurrentTranscript(
 			1,
-			word("C", 1.1, 1.3, false),
+			word("C", 2, false),
 		)
 
-		expected := "A B\nC\n"
+		expected := "(00:00:00) A B\n(00:00:02) C\n"
 		result := model(m).TranscriptView()
 
 		if result != expected {
@@ -90,7 +90,7 @@ func TestTranscriptView(t *testing.T) {
 		m := newTestModel()
 		m.addFinalTranscript(
 			1,
-			word("This is a sentence", 0.0, 1.0, false),
+			word("This is a sentence", 0, false),
 			TranscriptWord{
 				Content:    ".",
 				Confidence: 1.0,
@@ -100,10 +100,10 @@ func TestTranscriptView(t *testing.T) {
 		)
 		m.setCurrentTranscript(
 			1,
-			word("Another sentence", 1.2, 2.0, false),
+			word("Another sentence", 2, false),
 		)
 
-		expected := "This is a sentence.\nAnother sentence\n"
+		expected := "(00:00:00) This is a sentence.\n(00:00:02) Another sentence\n"
 		result := model(m).TranscriptView()
 
 		if result != expected {
@@ -119,28 +119,28 @@ func TestTranscriptView(t *testing.T) {
 		m := newTestModel()
 		m.addFinalTranscript(
 			1,
-			word("A", 0.0, 0.5, false),
-			word("B", 0.5, 1.0, false),
-			word("C", 1.0, 1.5, false),
-			word("D", 1.5, 2.0, true),
+			word("A", 0, false),
+			word("B", 1, false),
+			word("C", 2, false),
+			word("D", 3, true),
 		)
 		m.setCurrentTranscript(
 			1,
-			word("E", 2.5, 3.0, true),
+			word("E", 5, true),
 		)
 
 		m.addFinalTranscript(
 			2,
-			word("1", 0.2, 0.7, false),
-			word("2", 0.7, 1.2, true),
+			word("1", 1, false),
+			word("2", 2, true),
 		)
 		m.setCurrentTranscript(
 			2,
-			word("3", 2.0, 2.5, false),
-			word("4", 2.5, 3.0, true),
+			word("3", 4, false),
+			word("4", 5, true),
 		)
 
-		expected := "A B C D\n1 2\n3 4\nE\n"
+		expected := "(00:00:00) A B C D\n(00:00:01) 1 2\n(00:00:04) 3 4\n(00:00:05) E\n"
 		result := model(m).TranscriptView()
 
 		if result != expected {
