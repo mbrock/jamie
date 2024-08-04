@@ -3,8 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/trealla-prolog/go/trealla"
@@ -23,8 +25,9 @@ var (
 
 type model struct {
 	textInput textinput.Model
+	viewport  viewport.Model
 	prolog    trealla.Prolog
-	output    string
+	history   []string
 	err       error
 }
 
@@ -35,6 +38,9 @@ func initialModel(queries *db.Queries) model {
 	ti.CharLimit = 156
 	ti.Width = 80
 
+	vp := viewport.New(80, 20)
+	vp.SetContent("Welcome to the Prolog REPL!\nEnter your queries below.")
+
 	prolog, err := trealla.New()
 	if err != nil {
 		return model{err: fmt.Errorf("failed to initialize Prolog: %w", err)}
@@ -44,7 +50,9 @@ func initialModel(queries *db.Queries) model {
 
 	return model{
 		textInput: ti,
+		viewport:  vp,
 		prolog:    prolog,
+		history:   []string{},
 		err:       nil,
 	}
 }
@@ -54,7 +62,10 @@ func (m model) Init() tea.Cmd {
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
+	var (
+		cmd  tea.Cmd
+		cmds []tea.Cmd
+	)
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -63,23 +74,33 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			query := m.textInput.Value()
 			answer, err := m.prolog.QueryOnce(context.Background(), query)
 			if err != nil {
-				m.output = fmt.Sprintf("Error: %v", err)
+				m.history = append(m.history, fmt.Sprintf("Error: %v", err))
 			} else {
-				m.output = fmt.Sprintf("Result: %v", answer.Solution)
+				m.history = append(m.history, fmt.Sprintf("Query: %s\nResult: %v", query, answer.Solution))
 			}
 			m.textInput.SetValue("")
+			m.viewport.SetContent(strings.Join(m.history, "\n\n"))
+			m.viewport.GotoBottom()
 		case tea.KeyCtrlC, tea.KeyEsc:
 			return m, tea.Quit
 		}
 
-	// We handle errors just like any other message
+	case tea.WindowSizeMsg:
+		m.viewport.Width = msg.Width
+		m.viewport.Height = msg.Height - 3 // Reserve space for input
+		m.textInput.Width = msg.Width - 2
+
 	case error:
 		m.err = msg
 		return m, nil
 	}
 
 	m.textInput, cmd = m.textInput.Update(msg)
-	return m, cmd
+	cmds = append(cmds, cmd)
+	m.viewport, cmd = m.viewport.Update(msg)
+	cmds = append(cmds, cmd)
+
+	return m, tea.Batch(cmds...)
 }
 
 func (m model) View() string {
@@ -88,10 +109,9 @@ func (m model) View() string {
 	}
 
 	return fmt.Sprintf(
-		"Enter your Prolog query:\n\n%s\n\n%s\n\n%s",
+		"%s\n\n%s",
+		m.viewport.View(),
 		m.textInput.View(),
-		focusedButton,
-		m.output,
 	) + "\n"
 }
 
