@@ -87,11 +87,16 @@ WHERE ssrc = $1
 ORDER BY created_at;
 
 -- name: GetSSRCForSession :one
-SELECT ssrc FROM transcription_sessions WHERE id = $1 LIMIT 1;
+SELECT ssrc
+FROM transcription_sessions
+WHERE id = $1
+LIMIT 1;
 
 -- name: GetOpusPacketsForTimeRange :many
-SELECT * FROM opus_packets
-WHERE ssrc = $1 AND created_at BETWEEN $2 AND $3
+SELECT *
+FROM opus_packets
+WHERE ssrc = $1
+    AND created_at BETWEEN $2 AND $3
 ORDER BY created_at;
 
 -- name: GetUploadedFileByHash :one
@@ -172,10 +177,4 @@ WHERE (
 ORDER BY ts.created_at,
     tw.start_time,
     tw.id,
-    wa.confidence DESC;-- name: GetSSRCForSession :one
-SELECT ssrc FROM transcription_sessions WHERE id = $1 LIMIT 1;
-
--- name: GetOpusPacketsForTimeRange :many
-SELECT * FROM opus_packets
-WHERE ssrc = $1 AND created_at BETWEEN $2 AND $3
-ORDER BY created_at;
+    wa.confidence DESC;
