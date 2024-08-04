@@ -28,22 +28,10 @@ func Serve(port int) error {
 
 	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintf(w, "<h1>Available Routes</h1>")
-		tree := r.Routes()
-		for _, route := range tree {
-			for method := range route.Handlers {
-				if method == "GET" {
-					fmt.Fprintf(
-						w,
-						"<p><a href='%s'>%s %s</a></p>",
-						route.Pattern,
-						method,
-						route.Pattern,
-					)
-				} else {
-					fmt.Fprintf(w, "<p>%s %s</p>", method, route.Pattern)
-				}
-			}
+		component := RoutesList(r.Routes())
+		err := component.Render(req.Context(), w)
+		if err != nil {
+			http.Error(w, "Failed to render routes list", http.StatusInternalServerError)
 		}
 	})
 
