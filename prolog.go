@@ -115,10 +115,13 @@ func RegisterDBQuery(ctx context.Context, queries *db.Queries) {
 					))
 				}
 
-				channel, err := queries.GetLastJoinedChannel(ctx, db.GetLastJoinedChannelParams{
-					GuildID:  guildID,
-					BotToken: viper.GetString("DISCORD_TOKEN"),
-				})
+				channel, err := queries.GetLastJoinedChannel(
+					ctx,
+					db.GetLastJoinedChannelParams{
+						GuildID:  guildID,
+						BotToken: viper.GetString("DISCORD_TOKEN"),
+					},
+				)
 				if err != nil {
 					return trealla.Atom("throw").Of(trealla.Atom("error").Of(
 						trealla.Atom("db_error").Of(err.Error()),
@@ -137,15 +140,14 @@ func RegisterDBQuery(ctx context.Context, queries *db.Queries) {
 		},
 	)
 
-	// Example usage
-	answer, err := pl.QueryOnce(ctx, `db_query("get_last_joined_channel", "123456789").`)
-	if err != nil {
-		fmt.Println("Failed to execute Prolog query:", err)
-	} else {
-		fmt.Println("Last joined channel:", answer.Solution["_"])
-	}
-}
-
-func StartPrologREPL() {
-	// This function is implemented in prolog_repl.go
+	// // Example usage
+	// answer, err := pl.QueryOnce(
+	// 	ctx,
+	// 	`db_query("get_last_joined_channel", "123456789").`,
+	// )
+	// if err != nil {
+	// 	fmt.Println("Failed to execute Prolog query:", err)
+	// } else {
+	// 	fmt.Println("Last joined channel:", answer.Solution["_"])
+	// }
 }
