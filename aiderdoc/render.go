@@ -56,6 +56,7 @@ func handleAiderRequest(w http.ResponseWriter, r *http.Request) {
 
 	articles := ProcessEntries(entries)
 	component := EntriesTemplate(articles)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	err = component.Render(r.Context(), w)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error rendering aider input history template: %v", err), http.StatusInternalServerError)

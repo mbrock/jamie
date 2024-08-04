@@ -31,17 +31,10 @@ func init() {
 func runHTTPServer(cmd *cobra.Command, args []string) {
 	port, _ := cmd.Flags().GetInt("port")
 
+	http.RegisterRoute("/tts/", handleTranscriptPage(queries))
+	http.RegisterRoute("/tts/audio/", handleAudioRequest(queries))
+
 	err := http.Serve(port)
-	if err != nil {
-		fmt.Printf("Failed to start HTTP server: %v\n", err)
-	}
-	defer sqlDB.Close()
-
-	http.HandleFunc("/", handleTranscriptPage(queries))
-	http.HandleFunc("/audio/", handleAudioRequest(queries))
-
-	fmt.Printf("Starting HTTP server on port %d...\n", port)
-	err = http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
 	if err != nil {
 		fmt.Printf("Failed to start HTTP server: %v\n", err)
 	}
