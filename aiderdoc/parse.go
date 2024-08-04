@@ -91,38 +91,32 @@ func processBackticks(content string) []Span {
 	underscoreRegex := regexp.MustCompile(`\b\w+_\w+\b`)
 	camelCaseRegex := regexp.MustCompile(`\b[a-z]+[A-Z]\w*\b`)
 
-	words := strings.Fields(content)
+	runes := []rune(content)
+	for i := 0; i < len(runes); i++ {
+		char := runes[i]
 
-	for i, word := range words {
-		if word == "`" {
+		if char == '`' {
 			if currentSpan.Len() > 0 {
 				spans = append(spans, Span{Text: currentSpan.String(), IsCode: inBackticks})
 				currentSpan.Reset()
 			}
 			inBackticks = !inBackticks
-		} else if inBackticks || underscoreRegex.MatchString(word) || camelCaseRegex.MatchString(word) {
-			if currentSpan.Len() > 0 {
-				spans = append(spans, Span{Text: currentSpan.String(), IsCode: false})
-				currentSpan.Reset()
-			}
-			spans = append(spans, Span{Text: word, IsCode: true})
 		} else {
-			if currentSpan.Len() > 0 {
-				currentSpan.WriteString(" ")
-			}
-			currentSpan.WriteString(word)
-		}
+			currentSpan.WriteRune(char)
 
-		// Add space between words, except for the last word
-		if i < len(words)-1 {
-			if currentSpan.Len() > 0 {
-				currentSpan.WriteString(" ")
+			// Check for word boundaries
+			if i == len(runes)-1 || runes[i+1] == ' ' {
+				word := currentSpan.String()
+				if inBackticks || underscoreRegex.MatchString(word) || camelCaseRegex.MatchString(word) {
+					spans = append(spans, Span{Text: word, IsCode: true})
+					currentSpan.Reset()
+				}
 			}
 		}
 	}
 
 	if currentSpan.Len() > 0 {
-		spans = append(spans, Span{Text: currentSpan.String(), IsCode: false})
+		spans = append(spans, Span{Text: currentSpan.String(), IsCode: inBackticks})
 	}
 
 	return spans
