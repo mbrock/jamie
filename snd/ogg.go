@@ -230,20 +230,6 @@ func (o *Ogg) WriteSilence(duration time.Duration) error {
 	return nil
 }
 
-// calculateSilenceDuration calculates the duration of silence to insert
-func (o *Ogg) calculateSilenceDuration(packetTimestamp time.Time) time.Duration {
-	if packetTimestamp.Before(o.expectedTimestamp) || o.isFirstPacket() {
-		return 0
-	}
-
-	silenceDuration := packetTimestamp.Sub(o.expectedTimestamp)
-	if silenceDuration < OpusFrameDuration {
-		return 0
-	}
-
-	return silenceDuration.Truncate(OpusFrameDuration)
-}
-
 // insertSilenceIfNeeded adds silence if there's a gap between the expected and actual timestamp
 func (o *Ogg) insertSilenceIfNeeded(packetTimestamp time.Time) time.Duration {
 	if packetTimestamp.Before(o.expectedTimestamp) {
@@ -257,7 +243,7 @@ func (o *Ogg) insertSilenceIfNeeded(packetTimestamp time.Time) time.Duration {
 
 	silenceDuration = silenceDuration.Truncate(OpusFrameDuration)
 	silentFrames := int(silenceDuration / OpusFrameDuration)
-	
+
 	if err := o.writeSilentFrames(silentFrames); err != nil {
 		o.logger.Error("Error inserting silence", "error", err)
 		return 0

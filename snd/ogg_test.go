@@ -1,6 +1,9 @@
 package snd
 
 import (
+	"os"
+	"os/exec"
+	"strings"
 	"testing"
 	"time"
 
@@ -238,11 +241,13 @@ func TestOggWriteSilentPacketsToFile(t *testing.T) {
 	// Write 1 second of silent packets (50 packets of 20ms each)
 	for i := 0; i < 50; i++ {
 		err = ogg.WritePacket(OpusPacket{
-			ID:        int64(i + 1),
+			ID:        i + 1,
 			Sequence:  uint16(i + 1),
 			Timestamp: uint32((i + 1) * 960),
-			CreatedAt: startTime.Add(time.Duration(i) * 20 * time.Millisecond),
-			OpusData:  []byte{0xf8, 0xff, 0xfe}, // Silent Opus packet
+			CreatedAt: startTime.Add(
+				time.Duration(i) * 20 * time.Millisecond,
+			),
+			OpusData: []byte{0xf8, 0xff, 0xfe}, // Silent Opus packet
 		})
 		if err != nil {
 			t.Fatalf("Failed to write silent packet: %v", err)
@@ -272,7 +277,10 @@ func TestOggWriteSilentPacketsToFile(t *testing.T) {
 
 	for _, expected := range expectedStrings {
 		if !strings.Contains(string(output), expected) {
-			t.Errorf("opusinfo output doesn't contain expected string: %s", expected)
+			t.Errorf(
+				"opusinfo output doesn't contain expected string: %s",
+				expected,
+			)
 		}
 	}
 }
