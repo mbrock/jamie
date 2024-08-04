@@ -101,30 +101,33 @@ type TranscriptionUpdate struct {
 	IsFinal   bool   `json:"is_final"`
 }
 
-func StreamOpusPackets(
-	ctx context.Context,
-	pool *pgxpool.Pool,
-	queries *db.Queries,
-) (<-chan OpusPacketNotification, *SSRCUserIDCache, error) {
-	conn, err := pool.Acquire(ctx)
+type PostgresPacketStreamer struct {
+	pool   *pgxpool.Pool
+	cache  UserIDCache
+	logger Logger
+}
+
+func NewPostgresPacketStreamer(pool *pgxpool.Pool, cache UserIDCache, logger Logger) *PostgresPacketStreamer {
+	return &PostgresPacketStreamer{
+		pool:   pool,
+		cache:  cache,
+		logger: logger,
+	}
+}
+
+func (s *PostgresPacketStreamer) Stream(ctx context.Context) (<-chan OpusPacketNotification, error) {
+	conn, err := s.pool.Acquire(ctx)
 	if err != nil {
-		return nil, nil, fmt.Errorf(
-			"failed to acquire database connection: %w",
-			err,
-		)
+		return nil, fmt.Errorf("failed to acquire database connection: %w", err)
 	}
 
 	_, err = conn.Exec(ctx, "LISTEN new_opus_packet")
 	if err != nil {
 		conn.Release()
-		return nil, nil, fmt.Errorf(
-			"failed to listen for new_opus_packet: %w",
-			err,
-		)
+		return nil, fmt.Errorf("failed to listen for new_opus_packet: %w", err)
 	}
 
 	packetChan := make(chan OpusPacketNotification)
-	cache := NewSSRCUserIDCache(queries)
 
 	go func() {
 		defer close(packetChan)
@@ -136,39 +139,35 @@ func StreamOpusPackets(
 				if err == context.Canceled {
 					return
 				}
-				log.Error("Error waiting for notification", "error", err)
+				s.logger.Error("Error waiting for notification", "error", err)
 				return
 			}
 
 			var packet OpusPacketNotification
 			err = json.Unmarshal([]byte(notification.Payload), &packet)
 			if err != nil {
-				log.Error("Error unmarshalling payload", "error", err)
+				s.logger.Error("Error unmarshalling payload", "error", err)
 				continue
 			}
 
 			// Decode the hex-encoded opus data
-			decodedData, err := hex.DecodeString(
-				strings.TrimPrefix(packet.OpusData, "\\x"),
-			)
+			decodedData, err := hex.DecodeString(strings.TrimPrefix(packet.OpusData, "\\x"))
 			if err != nil {
-				log.Fatal("Error decoding hex string", "error", err)
+				s.logger.Error("Error decoding hex string", "error", err)
+				continue
 			}
 			packet.OpusData = string(decodedData)
 
 			// Log the first few bytes of the decoded opus data
 			if len(packet.OpusData) > 0 {
-				log.Debug(
+				s.logger.Debug(
 					"Decoded opus packet data",
 					"first_bytes",
-					fmt.Sprintf(
-						"%x",
-						packet.OpusData[:min(4, len(packet.OpusData))],
-					),
+					fmt.Sprintf("%x", packet.OpusData[:min(4, len(packet.OpusData))]),
 				)
 			}
 
-			packet.UserID = getUserIDFromCache(cache, packet.Ssrc)
+			packet.UserID = s.getUserIDFromCache(packet.Ssrc)
 
 			select {
 			case packetChan <- packet:
@@ -178,13 +177,33 @@ func StreamOpusPackets(
 		}
 	}()
 
-	return packetChan, cache, nil
+	return packetChan, nil
 }
 
-func DemuxOpusPackets(
+func (s *PostgresPacketStreamer) getUserIDFromCache(ssrc int64) string {
+	userID, err := s.cache.Get(ssrc)
+	if err != nil {
+		s.logger.Error("Error looking up user ID in cache", "error", err)
+		return ""
+	}
+	return userID
+}
+
+type DefaultPacketDemuxer struct {
+	cache  UserIDCache
+	logger Logger
+}
+
+func NewDefaultPacketDemuxer(cache UserIDCache, logger Logger) *DefaultPacketDemuxer {
+	return &DefaultPacketDemuxer{
+		cache:  cache,
+		logger: logger,
+	}
+}
+
+func (d *DefaultPacketDemuxer) Demux(
 	ctx context.Context,
 	inputChan <-chan OpusPacketNotification,
-	cache *SSRCUserIDCache,
 ) <-chan (<-chan OpusPacketNotification) {
 	outputChan := make(chan (<-chan OpusPacketNotification))
 
@@ -206,37 +225,29 @@ func DemuxOpusPackets(
 
 				streamChan, exists := streams[packet.Ssrc]
 				if !exists {
-					streamChan = make(
-						chan OpusPacketNotification,
-						1000,
-					) // Buffer size of 100, adjust as needed
+					streamChan = make(chan OpusPacketNotification, 1000) // Buffer size of 1000, adjust as needed
 					streams[packet.Ssrc] = streamChan
 					outputChan <- streamChan
 
 					// Log the new stream with UserID from cache
-					userID := getUserIDFromCache(cache, packet.Ssrc)
+					userID, _ := d.cache.Get(packet.Ssrc)
 					if userID != "" {
-						log.Info(
+						d.logger.Info(
 							"New stream started",
-							"ssrc",
-							packet.Ssrc,
-							"userID",
-							userID,
+							"ssrc", packet.Ssrc,
+							"userID", userID,
 						)
 					} else {
-						log.Info("New stream started", "ssrc", packet.Ssrc, "userID", "unknown")
+						d.logger.Info("New stream started", "ssrc", packet.Ssrc, "userID", "unknown")
 					}
-
-					streamChan <- packet
 				}
 
 				select {
 				case streamChan <- packet:
 				default:
-					log.Warn(
+					d.logger.Warn(
 						"Stream channel buffer full, dropping packet",
-						"ssrc",
-						packet.Ssrc,
+						"ssrc", packet.Ssrc,
 					)
 				}
 
@@ -253,31 +264,31 @@ func DemuxOpusPackets(
 	return outputChan
 }
 
-func ListenForTranscriptionChanges(
-	ctx context.Context,
-	pool *pgxpool.Pool,
-) (<-chan TranscriptionUpdate, error) {
-	conn, err := pool.Acquire(ctx)
+type PostgresTranscriptionChangeListener struct {
+	pool   *pgxpool.Pool
+	logger Logger
+}
+
+func NewPostgresTranscriptionChangeListener(pool *pgxpool.Pool, logger Logger) *PostgresTranscriptionChangeListener {
+	return &PostgresTranscriptionChangeListener{
+		pool:   pool,
+		logger: logger,
+	}
+}
+
+func (l *PostgresTranscriptionChangeListener) Listen(ctx context.Context) (<-chan TranscriptionUpdate, error) {
+	conn, err := l.pool.Acquire(ctx)
 	if err != nil {
-		return nil, fmt.Errorf(
-			"failed to acquire database connection: %w",
-			err,
-		)
+		return nil, fmt.Errorf("failed to acquire database connection: %w", err)
 	}
 
 	_, err = conn.Exec(ctx, "LISTEN transcription_change")
 	if err != nil {
 		conn.Release()
-		return nil, fmt.Errorf(
-			"failed to listen for transcription_change: %w",
-			err,
-		)
+		return nil, fmt.Errorf("failed to listen for transcription_change: %w", err)
 	}
 
-	updateChan := make(
-		chan TranscriptionUpdate,
-		100,
-	) // Buffered channel with capacity of 100
+	updateChan := make(chan TranscriptionUpdate, 100) // Buffered channel with capacity of 100
 
 	go func() {
 		defer close(updateChan)
@@ -289,29 +300,28 @@ func ListenForTranscriptionChanges(
 				if err == context.Canceled {
 					return
 				}
-				log.Error("Error waiting for notification", "error", err)
+				l.logger.Error("Error waiting for notification", "error", err)
 				return
 			}
 
 			var update TranscriptionUpdate
 			err = json.Unmarshal([]byte(notification.Payload), &update)
 			if err != nil {
-				log.Error("Error unmarshalling payload", "error", err)
+				l.logger.Error("Error unmarshalling payload", "error", err)
 				continue
 			}
 
-			log.Info("Received update", "update", update)
+			l.logger.Info("Received update", "update", update)
 
 			select {
 			case updateChan <- update:
-				log.Debug("Sent update to channel", "update", update)
+				l.logger.Debug("Sent update to channel", "update", update)
 			case <-ctx.Done():
 				return
 			default:
-				log.Warn(
+				l.logger.Warn(
 					"Update channel full, dropping update",
-					"update",
-					update,
+					"update", update,
 				)
 			}
 		}
