@@ -25,6 +25,7 @@ templ head() {
 				margin: 0 auto;
 				padding: 1rem;
 				color: #333;
+				background-color: #fff;
 			}
 			.article {
 				margin-bottom: 2rem;
@@ -54,6 +55,15 @@ templ head() {
 			}
 			.date.hidden {
 				display: none;
+			}
+			@media (prefers-color-scheme: dark) {
+				body {
+					background-color: #000;
+					color: ivory;
+				}
+				.timestamp {
+					color: #aaa;
+				}
 			}
 		</style>
 	</head>
