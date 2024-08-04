@@ -7,7 +7,8 @@ Jamie is a Discord bot designed to join voice channels, record audio, and provid
 - Join Discord voice channels
 - Record and process audio in real-time
 - Store audio data as Opus packets in PostgreSQL
-- Transcribe conversations using either Google's Gemini API or Speechmatics
+- Real-time transcription using Speechmatics
+- Offline transcription and analysis using Google's Gemini multimodal generative AI model
 - Store and retrieve transcriptions
 - Generate voice activity reports
 - Provide a web interface to view transcriptions
@@ -18,7 +19,7 @@ Jamie is structured around several key components:
 
 1. **Discord Bot**: Handles interactions with Discord, joining voice channels, and capturing audio.
 2. **Audio Processing**: Captures Opus packets and stores them in PostgreSQL.
-3. **Transcription Engine**: Uses Speechmatics or Google's Gemini API to transcribe audio.
+3. **Transcription Engine**: Uses Speechmatics for real-time transcription and Google's Gemini API for offline, more accurate transcription and analysis.
 4. **Database**: PostgreSQL stores Opus packets, transcriptions, and other metadata.
 5. **Web Interface**: Provides a way to view and interact with transcriptions.
 
@@ -52,6 +53,30 @@ Key files to be familiar with:
 - `tts/transcript_builder.go`: Handles building and rendering transcripts.
 - `bot/bot.go`: Core Discord bot functionality.
 
+## Database Schema
+
+The database schema includes tables for:
+
+- Discord sessions
+- SSRC mappings
+- Opus packets
+- Voice state events
+- Bot voice joins
+- Transcription sessions, segments, and words
+- Uploaded files
+
+This structure allows for efficient storage and retrieval of audio data, transcriptions, and related metadata.
+
+## Project Status and Vision
+
+Jamie is currently in a very early stage of development. It's designed to be extensible and serve as a solid foundation for building more complex Discord bots. While it currently doesn't respond directly to users in Discord, the vision is for Jamie to act as a kind of "secretary" for Discord servers:
+
+- Keeping track of conversations
+- Finding and referencing previous discussions
+- Proactively helping users by recognizing when they're looking for information
+
+The goal is for Jamie to be a helpful presence that can step in when needed, rather than a traditional chatbot that's constantly engaging. The project is designed with a pluggable architecture to allow for easy extension and customization.
+
 ## Technologies and Tools
 
 - Go 1.20 or later
@@ -70,9 +95,9 @@ Key files to be familiar with:
    cd jamie
    ```
 
-2. Install dependencies:
+2. Initialize the project:
    ```
-   go mod tidy
+   make init
    ```
 
 3. Set up your PostgreSQL database and run the initialization script:
