@@ -19,6 +19,7 @@ type model struct {
 	history   []string
 	err       error
 	query     trealla.Query
+	mode      string // "input" or "query"
 }
 
 func initialModel(queries *db.Queries) model {
@@ -53,6 +54,7 @@ func initialModel(queries *db.Queries) model {
 		prolog:    prolog,
 		history:   []string{},
 		err:       nil,
+		mode:      "input",
 	}
 }
 
@@ -68,32 +70,39 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.Type {
-		case tea.KeyEnter:
-			queryStr := m.textInput.Value()
-			m.query = m.prolog.Query(context.Background(), queryStr)
-
-			m.history = append(m.history, fmt.Sprintf("Query: %s", queryStr))
-			m.iterateQuery()
-
-			m.textInput.SetValue("")
-			m.viewport.SetContent(strings.Join(m.history, "\n\n"))
-			m.viewport.GotoBottom()
-		case tea.KeyRunes:
-			if string(msg.Runes) == "," {
-				if m.query != nil {
-					m.iterateQuery()
-					m.viewport.SetContent(strings.Join(m.history, "\n\n"))
-					m.viewport.GotoBottom()
-				}
+		switch m.mode {
+		case "input":
+			switch msg.Type {
+			case tea.KeyEnter:
+				queryStr := m.textInput.Value()
+				m.query = m.prolog.Query(context.Background(), queryStr)
+				m.history = append(m.history, fmt.Sprintf("Query: %s", queryStr))
+				m.iterateQuery()
+				m.textInput.SetValue("")
+				m.viewport.SetContent(strings.Join(m.history, "\n\n"))
+				m.viewport.GotoBottom()
+				m.mode = "query"
+			case tea.KeyCtrlC, tea.KeyEsc:
+				return m, tea.Quit
 			}
-		case tea.KeyCtrlC, tea.KeyEsc:
-			return m, tea.Quit
+		case "query":
+			switch msg.String() {
+			case "n", "N":
+				m.iterateQuery()
+				m.viewport.SetContent(strings.Join(m.history, "\n\n"))
+				m.viewport.GotoBottom()
+			case "a", "A":
+				m.query.Close()
+				m.query = nil
+				m.mode = "input"
+			case "q", "Q":
+				return m, tea.Quit
+			}
 		}
 
 	case tea.WindowSizeMsg:
 		m.viewport.Width = msg.Width
-		m.viewport.Height = msg.Height - 3 // Reserve space for input
+		m.viewport.Height = msg.Height - 3 // Reserve space for input or button menu
 		m.textInput.Width = msg.Width - 2
 
 	case error:
@@ -101,8 +110,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	m.textInput, cmd = m.textInput.Update(msg)
-	cmds = append(cmds, cmd)
+	if m.mode == "input" {
+		m.textInput, cmd = m.textInput.Update(msg)
+		cmds = append(cmds, cmd)
+	}
 	m.viewport, cmd = m.viewport.Update(msg)
 	cmds = append(cmds, cmd)
 
@@ -131,10 +142,17 @@ func (m model) View() string {
 		return fmt.Sprintf("Error: %v", m.err)
 	}
 
+	var footer string
+	if m.mode == "input" {
+		footer = m.textInput.View()
+	} else {
+		footer = "[ N ] Next solution  [ A ] Abort query  [ Q ] Quit"
+	}
+
 	return fmt.Sprintf(
 		"%s\n\n%s",
 		m.viewport.View(),
-		m.textInput.View(),
+		footer,
 	) + "\n"
 }
 
