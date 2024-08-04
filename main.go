@@ -129,32 +129,46 @@ var listenPacketsCmd = &cobra.Command{
 		ctx := context.Background()
 		defer sqlDB.Close()
 
-		packetChan, _, err := snd.StreamOpusPackets(ctx, sqlDB, queries)
+		pool, err := pgxpool.New(ctx, viper.GetString("DATABASE_URL"))
+		if err != nil {
+			log.Fatal("Failed to create connection pool", "error", err)
+		}
+		defer pool.Close()
+
+		cache := snd.NewSSRCUserIDCache(queries)
+		streamer := snd.NewPostgresPacketStreamer(pool, cache, log.Default())
+		packetChan, err := snd.StreamOpusPackets(ctx, streamer)
 		if err != nil {
 			log.Fatal("Error setting up opus packet stream", "error", err)
 		}
 
-		log.Info("Listening for new opus packets. Press CTRL-C to exit.")
+		demuxer := snd.NewDefaultPacketDemuxer(cache, log.Default())
+		streamChan := snd.DemuxOpusPackets(ctx, demuxer, packetChan)
 
-		var lastPrintTime time.Time
-		packetCount := 0
+		log.Info("Listening for demuxed Opus packet streams. Press CTRL-C to exit.")
 
-		for packet := range packetChan {
-			packetCount++
-			now := time.Now()
+		for stream := range streamChan {
+			go func(s <-chan snd.OpusPacketNotification) {
+				var lastPrintTime time.Time
+				packetCount := 0
 
-			if lastPrintTime.IsZero() ||
-				now.Sub(lastPrintTime) >= time.Second {
-				log.Info(
-					"Opus packets received",
-					"count",
-					packetCount,
-					"last_packet",
-					packet.ID,
-				)
-				lastPrintTime = now
-				packetCount = 0
-			}
+				for packet := range s {
+					packetCount++
+					now := time.Now()
+
+					if lastPrintTime.IsZero() ||
+						now.Sub(lastPrintTime) >= time.Second {
+						log.Info(
+							"Opus packets received",
+							"count", packetCount,
+							"last_packet", packet.ID,
+							"ssrc", packet.Ssrc,
+						)
+						lastPrintTime = now
+						packetCount = 0
+					}
+				}
+			}(stream)
 		}
 	},
 }

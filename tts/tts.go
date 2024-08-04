@@ -50,16 +50,23 @@ func runTranscribe(cmd *cobra.Command, args []string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	packetChan, ssrcCache, err := snd.StreamOpusPackets(ctx, sqlDB, queries)
+	pool, err := pgxpool.New(ctx, viper.GetString("DATABASE_URL"))
+	if err != nil {
+		log.Fatal("Failed to create connection pool", "error", err)
+	}
+	defer pool.Close()
+
+	cache := snd.NewSSRCUserIDCache(queries)
+	streamer := snd.NewPostgresPacketStreamer(pool, cache, log.Default())
+	packetChan, err := snd.StreamOpusPackets(ctx, streamer)
 	if err != nil {
 		log.Fatal("Error setting up opus packet stream", "error", err)
 	}
 
-	streamChan := snd.DemuxOpusPackets(ctx, packetChan, ssrcCache)
+	demuxer := snd.NewDefaultPacketDemuxer(cache, log.Default())
+	streamChan := snd.DemuxOpusPackets(ctx, demuxer, packetChan)
 
-	log.Info(
-		"Listening for demuxed Opus packet streams. Press CTRL-C to exit.",
-	)
+	log.Info("Listening for demuxed Opus packet streams. Press CTRL-C to exit.")
 	log.Info("Real-time transcription enabled")
 
 	for stream := range streamChan {
@@ -67,7 +74,7 @@ func runTranscribe(cmd *cobra.Command, args []string) {
 			ctx,
 			stream,
 			queries,
-			sqlDB,
+			pool,
 		)
 	}
 
