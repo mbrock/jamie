@@ -71,3 +71,30 @@ func ConvertDBRowsToTranscriptSegments(
 
 	return segments
 }
+package tts
+
+import (
+	"context"
+	"time"
+
+	"github.com/jackc/pgx/v5/pgtype"
+	"node.town/db"
+)
+
+func LoadRecentTranscripts(dbQueries *db.Queries) ([]TranscriptSegment, error) {
+	// Fetch transcripts from the last 8 hours
+	eightHoursAgo := time.Now().Add(-8 * time.Hour)
+
+	segments, err := dbQueries.GetTranscripts(
+		context.Background(),
+		db.GetTranscriptsParams{
+			SegmentID: pgtype.Int8{Valid: false},
+			CreatedAt: pgtype.Timestamptz{Time: eightHoursAgo, Valid: true},
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return ConvertDBRowsToTranscriptSegments(segments), nil
+}

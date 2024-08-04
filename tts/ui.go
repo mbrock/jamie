@@ -103,7 +103,7 @@ func initialModel(
 	}
 
 	// Load recent transcripts
-	recentTranscripts, err := m.loadRecentTranscripts()
+	recentTranscripts, err := LoadRecentTranscripts(dbQueries)
 	if err != nil {
 		m.logEntries = append(
 			m.logEntries,
@@ -118,23 +118,6 @@ func initialModel(
 	return m
 }
 
-func (m *model) loadRecentTranscripts() ([]TranscriptSegment, error) {
-	// Fetch transcripts from the last 8 hours
-	eightHoursAgo := time.Now().Add(-8 * time.Hour)
-
-	segments, err := m.dbQueries.GetTranscripts(
-		context.Background(),
-		db.GetTranscriptsParams{
-			SegmentID: pgtype.Int8{Valid: false},
-			CreatedAt: pgtype.Timestamptz{Time: eightHoursAgo, Valid: true},
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return ConvertDBRowsToTranscriptSegments(segments), nil
-}
 
 func (m *model) updateTranscript(msg TranscriptSegment) {
 	session, ok := m.sessions[msg.SessionID]
