@@ -65,28 +65,28 @@ func TestTranscriptView(t *testing.T) {
 								EndTime:    0.5,
 								Confidence: 0.9,
 							},
-						},
-						{
 							{
 								Content:    "from",
+								StartTime:  0.5,
+								EndTime:    1.0,
+								Confidence: 0.8,
+							},
+							{
+								Content:    "session",
 								StartTime:  1.0,
 								EndTime:    1.5,
-								Confidence: 0.8,
+								Confidence: 0.9,
+								IsEOS:      true,
 							},
 						},
 					},
 					CurrentTranscript: []TranscriptWord{
 						{
-							Content:    "session",
-							StartTime:  2.0,
-							EndTime:    2.5,
-							Confidence: 0.7,
-						},
-						{
 							Content:    "one",
 							StartTime:  2.5,
 							EndTime:    3.0,
 							Confidence: 0.7,
+							IsEOS:      true,
 						},
 					},
 				},
@@ -95,37 +95,39 @@ func TestTranscriptView(t *testing.T) {
 						{
 							{
 								Content:    "Greetings",
-								StartTime:  0.5,
-								EndTime:    1.0,
+								StartTime:  0.2,
+								EndTime:    0.7,
 								Confidence: 0.9,
+							},
+							{
+								Content:    "from",
+								StartTime:  0.7,
+								EndTime:    1.2,
+								Confidence: 0.8,
+								IsEOS:      true,
 							},
 						},
 					},
 					CurrentTranscript: []TranscriptWord{
 						{
-							Content:    "from",
-							StartTime:  1.5,
-							EndTime:    2.0,
-							Confidence: 0.8,
-						},
-						{
 							Content:    "session",
-							StartTime:  3.0,
-							EndTime:    3.5,
+							StartTime:  2.0,
+							EndTime:    2.5,
 							Confidence: 0.8,
 						},
 						{
 							Content:    "two",
-							StartTime:  3.5,
-							EndTime:    4.0,
+							StartTime:  2.5,
+							EndTime:    3.0,
 							Confidence: 0.8,
+							IsEOS:      true,
 						},
 					},
 				},
 			},
 		}
 
-		expected := "Hello Greetings from from session one session two\n"
+		expected := "Hello from session\nGreetings from\none\nsession two\n"
 		result := m.TranscriptView()
 
 		if result != expected {
