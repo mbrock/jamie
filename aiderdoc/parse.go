@@ -9,10 +9,21 @@ import (
 	"time"
 )
 
+type EntryType int
+
+const (
+	EntryTypeNormal EntryType = iota
+	EntryTypeAsk
+	EntryTypeRun
+	EntryTypeUndo
+	EntryTypeClear
+)
+
 type Entry struct {
 	Timestamp  time.Time
 	Content    []Span
 	LineNumber int
+	Type       EntryType
 }
 
 type Span struct {
@@ -61,6 +72,36 @@ func ParseFile(filename string) ([]Entry, error) {
 				Timestamp:  currentTimestamp,
 				Content:    processedContent,
 				LineNumber: lineNumber,
+				Type:       EntryTypeNormal,
+			})
+
+		case strings.HasPrefix(line, "/ask ") || strings.HasPrefix(line, "/run "):
+			// Ask or Run command
+			entryType := EntryTypeAsk
+			if strings.HasPrefix(line, "/run ") {
+				entryType = EntryTypeRun
+			}
+			currentContent = strings.TrimSpace(strings.TrimPrefix(line, "/ask "))
+			currentContent = strings.TrimSpace(strings.TrimPrefix(currentContent, "/run "))
+			processedContent := processBackticks(currentContent)
+			entries = append(entries, Entry{
+				Timestamp:  currentTimestamp,
+				Content:    processedContent,
+				LineNumber: lineNumber,
+				Type:       entryType,
+			})
+
+		case line == "/undo" || line == "/clear":
+			// Undo or Clear command
+			entryType := EntryTypeUndo
+			if line == "/clear" {
+				entryType = EntryTypeClear
+			}
+			entries = append(entries, Entry{
+				Timestamp:  currentTimestamp,
+				Content:    []Span{{Text: line, IsCode: false}},
+				LineNumber: lineNumber,
+				Type:       entryType,
 			})
 
 		case strings.TrimSpace(line) == "":
