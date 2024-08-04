@@ -2,6 +2,7 @@ package tts
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/viewport"
@@ -231,18 +232,12 @@ func (m model) transcriptView() string {
 		wb := &WordBuilder{lastWasEOS: true}
 		for _, transcript := range session.FinalTranscripts {
 			wb.AppendWords(transcript, false) // Final transcripts
-			lines = append(lines, lineInfo{
-				content:   fmt.Sprintf("Session %d: %s", sessionID, wb.String()),
-				startTime: transcript[0].StartTime,
-			})
-			wb.Reset()
 		}
 		if len(session.CurrentTranscript) > 0 {
-			wb.AppendWords(session.CurrentTranscript, true) // Partial transcript
-			lines = append(lines, lineInfo{
-				content:   fmt.Sprintf("Session %d (partial): %s", sessionID, wb.String()),
-				startTime: session.CurrentTranscript[0].StartTime,
-			})
+			wb.AppendWords(
+				session.CurrentTranscript,
+				true,
+			)
 		}
 	}
 
