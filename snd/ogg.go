@@ -62,7 +62,12 @@ func (o *OggWriterWrapper) Close() error {
 }
 
 // createRTPPacket creates an RTP packet with the given parameters
-func createRTPPacket(sequenceNumber uint16, timestamp uint32, ssrc uint32, payload []byte) *rtp.Packet {
+func createRTPPacket(
+	sequenceNumber uint16,
+	timestamp uint32,
+	ssrc uint32,
+	payload []byte,
+) *rtp.Packet {
 	log.Debug("Creating RTP packet", "seq", sequenceNumber, "ts", timestamp)
 	return &rtp.Packet{
 		Header: rtp.Header{
@@ -101,7 +106,13 @@ type Ogg struct {
 }
 
 // NewOgg creates a new Ogg instance
-func NewOgg(ssrc int64, startTime, endTime time.Time, oggWriter OggWriter, timeProvider TimeProvider, logger Logger) (*Ogg, error) {
+func NewOgg(
+	ssrc int64,
+	startTime, endTime time.Time,
+	oggWriter OggWriter,
+	timeProvider TimeProvider,
+	logger Logger,
+) (*Ogg, error) {
 	return &Ogg{
 		ssrc:         ssrc,
 		startTime:    startTime.UTC(),
