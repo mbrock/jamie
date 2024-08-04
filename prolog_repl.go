@@ -15,16 +15,16 @@ import (
 
 var (
 	baseStyle = lipgloss.NewStyle().
-			Background(lipgloss.Color("#0A0A1F")).
-			Foreground(lipgloss.Color("#F0F0FF"))
+			Background(lipgloss.Color("#0000AA")).
+			Foreground(lipgloss.Color("#FFFFFF"))
 
 	titleStyle = baseStyle.Copy().
-			Foreground(lipgloss.Color("#FF00FF")).
-			Background(lipgloss.Color("#000033")).
+			Foreground(lipgloss.Color("#FFFF00")).
+			Background(lipgloss.Color("#000088")).
 			Bold(true).
 			Padding(0, 1).
-			BorderStyle(lipgloss.DoubleBorder()).
-			BorderForeground(lipgloss.Color("#00FFFF"))
+			BorderStyle(lipgloss.NormalBorder()).
+			BorderForeground(lipgloss.Color("#FFFFFF"))
 
 	infoStyle = baseStyle.Copy().
 			Foreground(lipgloss.Color("#00FFFF"))
@@ -34,16 +34,18 @@ var (
 			Bold(true)
 
 	promptStyle = baseStyle.Copy().
-			Foreground(lipgloss.Color("#FF00FF")).
+			Foreground(lipgloss.Color("#FFFFFF")).
 			Bold(true)
 
 	solutionStyle = baseStyle.Copy().
 			Foreground(lipgloss.Color("#00FF00"))
 
-	viewportStyle = baseStyle.Copy().
+	viewportStyle = lipgloss.NewStyle().
+			Background(lipgloss.Color("#AAAAAA")).
+			Foreground(lipgloss.Color("#000000")).
 			Padding(1, 2).
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("#FF00FF"))
+			BorderStyle(lipgloss.DoubleBorder()).
+			BorderForeground(lipgloss.Color("#FFFFFF"))
 )
 
 type model struct {
@@ -192,11 +194,16 @@ func (m model) View() string {
 
 	content := viewportStyle.Render(m.viewport.View())
 
+	mainContent := lipgloss.JoinVertical(
+		lipgloss.Left,
+		content,
+		footer,
+	)
+
 	return lipgloss.JoinVertical(
 		lipgloss.Left,
 		titleStyle.Render(" Prolog REPL "),
-		content,
-		footer,
+		baseStyle.Render(mainContent),
 	)
 }
 
