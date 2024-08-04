@@ -15,6 +15,18 @@ import (
 	"node.town/snd"
 )
 
+type TranscriptWord struct {
+	Word      string
+	StartTime float64
+	EndTime   float64
+}
+
+type TranscriptMessage struct {
+	SessionID int64
+	IsFinal   bool
+	Words     []TranscriptWord
+}
+
 type Config struct {
 	SpeechmaticsAPIKey string
 	DatabaseURL        string
@@ -202,7 +214,7 @@ func formatTranscriptWords(
 		formattedWords = append(formattedWords, TranscriptWord{
 			Word:      word.Content,
 			StartTime: float64(word.StartTime),
-			EndTime:   float64(word.StartTime + word.Duration),
+			EndTime:   float64(word.StartTime) + float64(word.Duration),
 		})
 	}
 	return formattedWords
