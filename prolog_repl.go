@@ -252,7 +252,9 @@ func (m *model) iterateQuery(ctx context.Context) {
 		m.solutions = append(m.solutions, solution)
 		solutionStr := ""
 		for k, v := range solution {
-			solutionStr += fmt.Sprintf("  ⦿ %v = %v", k, v)
+			if !strings.HasPrefix(k, "_") {
+				solutionStr += fmt.Sprintf("  ⦿ %v = %v", k, v)
+			}
 		}
 		m.history = append(m.history, solutionStr)
 	} else {
