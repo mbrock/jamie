@@ -119,9 +119,6 @@ func runStream(cmd *cobra.Command, args []string) {
 
 	// Wait for context cancellation
 	<-ctx.Done()
-
-	// Wait for CTRL-C
-	<-ctx.Done()
 }
 
 func handleTranscript(
@@ -236,10 +233,6 @@ func handleTranscriptionUpdate(
 	var words []TranscriptWord
 	for _, row := range segment {
 		word := TranscriptWord{
-			StartTime: float64(row.StartTime.Microseconds) / 1000000,
-			EndTime: float64(
-				row.StartTime.Microseconds+row.Duration.Microseconds,
-			) / 1000000,
 			RealStartTime: row.RealStartTime.Time,
 			IsEOS:         row.IsEos,
 			Content:       row.Content,
@@ -250,10 +243,9 @@ func handleTranscriptionUpdate(
 	}
 
 	transcriptMessage := TranscriptMessage{
-		Words:            words,
-		IsPartial:        !update.IsFinal,
-		SessionID:        update.SessionID,
-		SessionStartTime: segment[0].SessionCreatedAt.Time,
+		Words:     words,
+		IsPartial: !update.IsFinal,
+		SessionID: update.SessionID,
 	}
 
 	select {
@@ -286,8 +278,6 @@ type TranscriptWord struct {
 	RealStartTime time.Time
 	Content       string
 	Confidence    float64
-	StartTime     float64
-	EndTime       float64
 	IsEOS         bool
 	Type          string
 	AttachesTo    string
@@ -300,57 +290,11 @@ type Alternative struct {
 }
 
 type TranscriptMessage struct {
-	SessionID        int64
-	SessionStartTime time.Time
-	Words            []TranscriptWord
-	IsPartial        bool
+	SessionID int64
+	Words     []TranscriptWord
+	IsPartial bool
 }
 
-func handleStream(stream <-chan snd.OpusPacketNotification) {
-	var lastPrintTime time.Time
-	packetCount := 0
-	var firstPacket, lastPacket snd.OpusPacketNotification
-
-	for packet := range stream {
-		if packetCount == 0 {
-			firstPacket = packet
-		}
-		lastPacket = packet
-		packetCount++
-
-		now := time.Now()
-		if lastPrintTime.IsZero() || now.Sub(lastPrintTime) >= time.Second {
-			firstTime, _ := time.Parse(
-				time.RFC3339Nano,
-				firstPacket.CreatedAt,
-			)
-			lastTime, _ := time.Parse(time.RFC3339Nano, lastPacket.CreatedAt)
-			duration := lastTime.Sub(firstTime)
-			log.Info("Stream info",
-				"ssrc", packet.Ssrc,
-				"packets", packetCount,
-				"duration", duration.Round(time.Second),
-				"guild_id", packet.GuildID,
-				"channel_id", packet.ChannelID,
-				"user_id", packet.UserID,
-			)
-			lastPrintTime = now
-		}
-	}
-
-	// Print final summary when the stream ends
-	lastTime, _ := time.Parse(time.RFC3339, lastPacket.CreatedAt)
-	firstTime, _ := time.Parse(time.RFC3339, firstPacket.CreatedAt)
-	duration := lastTime.Sub(firstTime)
-	log.Info("Stream ended",
-		"ssrc", lastPacket.Ssrc,
-		"total_packets", packetCount,
-		"total_duration", duration.Round(time.Second),
-		"guild_id", lastPacket.GuildID,
-		"channel_id", lastPacket.ChannelID,
-		"user_id", lastPacket.UserID,
-	)
-}
 func handleStreamWithTranscription(
 	ctx context.Context,
 	stream <-chan snd.OpusPacketNotification,
