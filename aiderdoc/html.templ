@@ -5,37 +5,36 @@ import "node.town/http"
 templ EntriesTemplate(articles []Article) {
 	@http.RootTemplate("Aider Chronicle") {
 		<style>
-			.article {
-				margin-bottom: 2.6rem;
-				padding-left: 1rem;
+			table {
+				width: 100%;
+				border-collapse: collapse;
 			}
-			.section {
-				margin-bottom: 1.3rem;
-			}
-			.entry {
-				display: flex;
-				align-items: baseline;
-				margin-bottom: .5rem;
+			td {
+				padding: 5px;
+				vertical-align: top;
 			}
 			.timestamp {
 				font-size: 0.8rem;
 				opacity: 0.5;
 				text-align: right;
-				padding-right: 1rem;
 				width: 3rem;
+				white-space: nowrap;
+			}
+			.entry-type {
+				font-family: 'DM Mono', monospace;
+				font-weight: 600;
+				font-size: 0.7rem;
+				width: 3rem;
+				text-align: right;
 			}
 			.content {
 				white-space: pre-wrap;
-				flex: 1;
 			}
 			.date {
 				font-size: 0.8rem;
-				line-height: calc(1.3rem * 3);
 				opacity: 0.5;
 				text-align: center;
-			}
-			.date.hidden {
-				display: none;
+				padding: 10px 0;
 			}
 			tt {
 				font-weight: 400;
@@ -48,31 +47,6 @@ templ EntriesTemplate(articles []Article) {
 				opacity: 0.8;
 				font-family: 'Big Caslon', serif;
 			}
-			.ask .content::before {
-				content: "ASK";
-			}
-			.ask .content::before, .add .content::before, .run .content::before, .drop .content::before, .code .content::before {
-				font-style: normal;
-				font-family: 'DM Mono', monospace;
-				margin-right: .5rem;
-				font-weight: 600;
-				font-size: 0.7rem;
-				display: inline-block;
-				width: 3rem;
-				text-align: right;
-			}
-			.add .content::before {
-				content: "ADD";
-			}
-			.run .content::before {
-				content: "RUN";
-			}
-			.drop .content::before {
-				content: "DROP";
-			}
-			.code .content::before {
-				content: "CODE";
-			}
 			.run {
 				font-family: 'DM Mono', monospace;
 			}
@@ -83,12 +57,6 @@ templ EntriesTemplate(articles []Article) {
 				font-weight: bold;
 				text-align: center;
 			}
-			.undo .timestamp, .clear .timestamp, .add .timestamp, .drop .timestamp {
-				display: none;
-			}
-			.undo, .clear {
-				margin: 1.3rem 0;
-			}
 
 			@media (prefers-color-scheme: dark) {
 				.timestamp {
@@ -96,33 +64,53 @@ templ EntriesTemplate(articles []Article) {
 				}
 			}
 		</style>
-		for _, article := range articles {
-			@articleTemplate(article)
-		}
+		<table>
+			for _, article := range articles {
+				@articleTemplate(article)
+			}
+		</table>
 	}
 }
 
 templ articleTemplate(article Article) {
-	<div class="article">
-		<div class={ "date", templ.KV("hidden", !article.NewDay) }>{ article.StartTime.Format("Monday, 2 January") }</div>
-		for _, section := range article.Sections {
-			@sectionTemplate(section)
-		}
-	</div>
+	if article.NewDay {
+		<tr>
+			<td colspan="3" class="date">{ article.StartTime.Format("Monday, 2 January") }</td>
+		</tr>
+	}
+	for _, section := range article.Sections {
+		@sectionTemplate(section)
+	}
 }
 
 templ sectionTemplate(section Section) {
-	<div class="section">
-		for _, entry := range section.Entries {
-			@entryTemplate(entry)
-		}
-	</div>
+	for _, entry := range section.Entries {
+		@entryTemplate(entry)
+	}
 }
 
 templ entryTemplate(entry Entry) {
-	<div class={ "entry", templ.KV("ask", entry.Type == EntryTypeAsk), templ.KV("run", entry.Type == EntryTypeRun), templ.KV("undo", entry.Type == EntryTypeUndo), templ.KV("clear", entry.Type == EntryTypeClear), templ.KV("add", entry.Type == EntryTypeAdd), templ.KV("drop", entry.Type == EntryTypeDrop), templ.KV("code", entry.Type == EntryTypeNormal) }>
-		<div class="timestamp">{ entry.Timestamp.Format("15:04") }</div>
-		<div class="content">
+	<tr class={ templ.KV("ask", entry.Type == EntryTypeAsk), templ.KV("run", entry.Type == EntryTypeRun), templ.KV("undo", entry.Type == EntryTypeUndo), templ.KV("clear", entry.Type == EntryTypeClear), templ.KV("add", entry.Type == EntryTypeAdd), templ.KV("drop", entry.Type == EntryTypeDrop), templ.KV("code", entry.Type == EntryTypeNormal) }>
+		<td class="timestamp">{ entry.Timestamp.Format("15:04") }</td>
+		<td class="entry-type">
+			switch entry.Type {
+				case EntryTypeAsk:
+					{ "ASK" }
+				case EntryTypeRun:
+					{ "RUN" }
+				case EntryTypeUndo:
+					{ "UNDO" }
+				case EntryTypeClear:
+					{ "CLEAR" }
+				case EntryTypeAdd:
+					{ "ADD" }
+				case EntryTypeDrop:
+					{ "DROP" }
+				default:
+					{ "CODE" }
+			}
+		</td>
+		<td class="content">
 			for _, span := range entry.Content {
 				if span.IsCode {
 					<tt>{ span.Text }</tt>
@@ -130,6 +118,6 @@ templ entryTemplate(entry Entry) {
 					{ span.Text }
 				}
 			}
-		</div>
-	</div>
+		</td>
+	</tr>
 }
