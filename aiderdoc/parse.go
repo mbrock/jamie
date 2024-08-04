@@ -67,42 +67,27 @@ func ParseFile(filename string) ([]Entry, error) {
 		case strings.HasPrefix(line, "+"):
 			// Content line
 			currentContent = strings.TrimPrefix(line, "+")
-			processedContent := processBackticks(currentContent)
-			entries = append(entries, Entry{
-				Timestamp:  currentTimestamp,
-				Content:    processedContent,
-				LineNumber: lineNumber,
-				Type:       EntryTypeNormal,
-			})
-
-		case strings.HasPrefix(line, "/ask ") || strings.HasPrefix(line, "/run "):
-			// Ask or Run command
-			entryType := EntryTypeAsk
-			if strings.HasPrefix(line, "/run ") {
+			entryType := EntryTypeNormal
+			if strings.HasPrefix(currentContent, "/ask ") {
+				currentContent = strings.TrimPrefix(currentContent, "/ask ")
+				entryType = EntryTypeAsk
+			} else if strings.HasPrefix(currentContent, "/run ") {
+				currentContent = strings.TrimPrefix(currentContent, "/run ")
 				entryType = EntryTypeRun
-			}
-			currentContent = strings.TrimSpace(strings.TrimPrefix(line, "/ask "))
-			currentContent = strings.TrimSpace(strings.TrimPrefix(currentContent, "/run "))
-			processedContent := processBackticks(currentContent)
-			entries = append(entries, Entry{
-				Timestamp:  currentTimestamp,
-				Content:    processedContent,
-				LineNumber: lineNumber,
-				Type:       entryType,
-			})
-
-		case line == "/undo" || line == "/clear":
-			// Undo or Clear command
-			entryType := EntryTypeUndo
-			if line == "/clear" {
+			} else if currentContent == "/undo" {
+				entryType = EntryTypeUndo
+			} else if currentContent == "/clear" {
 				entryType = EntryTypeClear
 			}
+			
+			processedContent := processBackticks(currentContent)
 			entries = append(entries, Entry{
 				Timestamp:  currentTimestamp,
-				Content:    []Span{{Text: line, IsCode: false}},
+				Content:    processedContent,
 				LineNumber: lineNumber,
 				Type:       entryType,
 			})
+
 
 		case strings.TrimSpace(line) == "":
 			// Empty line, ignore
