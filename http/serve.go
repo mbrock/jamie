@@ -26,6 +26,27 @@ func Serve(port int) error {
 	tts.Routes(r, queries)
 	aiderdoc.Routes(r)
 
+	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		fmt.Fprintf(w, "<h1>Available Routes</h1>")
+		tree := r.Routes()
+		for _, route := range tree {
+			for method := range route.Handlers {
+				if method == "GET" {
+					fmt.Fprintf(
+						w,
+						"<p><a href='%s'>%s %s</a></p>",
+						route.Pattern,
+						method,
+						route.Pattern,
+					)
+				} else {
+					fmt.Fprintf(w, "<p>%s %s</p>", method, route.Pattern)
+				}
+			}
+		}
+	})
+
 	log.Info("http", "url", fmt.Sprintf("http://localhost:%d", port))
 	return http.ListenAndServe(fmt.Sprintf(":%d", port), r)
 }
