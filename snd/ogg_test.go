@@ -134,8 +134,8 @@ func TestOggSilenceAndGapInsertion(t *testing.T) {
 	secondPacketTime := firstPacketTime.Add(3 * time.Second)
 	err = ogg.WritePacket(OpusPacket{
 		ID:        2,
-		Sequence:  2,
-		Timestamp: 960 * (3 * 50),
+		Sequence:  151, // 3 seconds * 50 packets per second + 1
+		Timestamp: 960 * 151,
 		CreatedAt: secondPacketTime,
 		OpusData:  []byte{0x04, 0x05, 0x06},
 	})
@@ -144,14 +144,14 @@ func TestOggSilenceAndGapInsertion(t *testing.T) {
 	}
 
 	// Calculate expected packets
-	initialSilencePackets := 2 * 50                                      // 2 seconds / 20ms per packet
-	gapSilencePackets := 3 * 50                                          // 3 seconds / 20ms per packet
+	initialSilencePackets := 2 * 50  // 2 seconds / 20ms per packet
+	gapSilencePackets := 3 * 50      // 3 seconds / 20ms per packet
 	expectedPackets := initialSilencePackets + 1 + gapSilencePackets + 1 // Initial silence + first packet + gap silence + second packet
 
-	//// Verify the written packets
-	//if len(mockWriter.Packets) != expectedPackets {
-	//	t.Errorf("Expected %d packets, got %d", expectedPackets, len(mockWriter.Packets))
-	//}
+	// Verify the written packets
+	if len(mockWriter.Packets) != expectedPackets {
+		t.Errorf("Expected %d packets, got %d", expectedPackets, len(mockWriter.Packets))
+	}
 
 	// Check initial silence packets
 	for i := 0; i < initialSilencePackets; i++ {
@@ -161,11 +161,7 @@ func TestOggSilenceAndGapInsertion(t *testing.T) {
 	}
 
 	// Check first real packet
-	if string(
-		mockWriter.Packets[initialSilencePackets].Payload,
-	) != string(
-		[]byte{0x01, 0x02, 0x03},
-	) {
+	if string(mockWriter.Packets[initialSilencePackets].Payload) != string([]byte{0x01, 0x02, 0x03}) {
 		t.Errorf("First real packet payload mismatch")
 	}
 
@@ -177,11 +173,7 @@ func TestOggSilenceAndGapInsertion(t *testing.T) {
 	}
 
 	// Check second real packet
-	if string(
-		mockWriter.Packets[expectedPackets-1].Payload,
-	) != string(
-		[]byte{0x04, 0x05, 0x06},
-	) {
+	if string(mockWriter.Packets[expectedPackets-1].Payload) != string([]byte{0x04, 0x05, 0x06}) {
 		t.Errorf("Second real packet payload mismatch")
 	}
 }

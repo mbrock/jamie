@@ -136,7 +136,7 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 		o.firstTimestamp = packet.CreatedAt
 		o.addInitialSilence(packet.CreatedAt)
 	} else {
-		gapDuration := o.handleGap(o.segmentNumber, packet.CreatedAt)
+		gapDuration := o.handleGap(packet)
 		if gapDuration > 0 {
 			packet.CreatedAt = packet.CreatedAt.Add(gapDuration)
 		}
@@ -148,7 +148,7 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 	}
 
 	o.lastTimestamp = packet.CreatedAt
-	o.lastSegmentNumber = o.segmentNumber
+	o.segmentNumber = uint64(packet.Sequence)
 	o.packetCount++
 
 	return nil
@@ -183,22 +183,24 @@ func (o *Ogg) addInitialSilence(createdAt time.Time) {
 	}
 }
 
-func (o *Ogg) handleGap(
-	segmentNumber uint64,
-	createdAt time.Time,
-) time.Duration {
-	segmentDiff := segmentNumber - o.lastSegmentNumber
-	log.Info("Segment diff", "segment_diff", segmentDiff)
-	if segmentDiff > 1 { // If there's a gap of more than one segment
-		gapDuration := time.Duration(
-			segmentDiff-1,
-		) * 20 * time.Millisecond // Each segment is 20ms
+func (o *Ogg) handleGap(packet OpusPacket) time.Duration {
+	if o.lastTimestamp.IsZero() {
+		return 0 // No gap for the first packet
+	}
+
+	expectedTimestamp := o.lastTimestamp.Add(20 * time.Millisecond)
+	actualGap := packet.CreatedAt.Sub(expectedTimestamp)
+
+	if actualGap > 20*time.Millisecond {
+		gapDuration := actualGap.Round(20 * time.Millisecond)
+		silentFrames := int(gapDuration / (20 * time.Millisecond))
+
 		log.Info("Audio gap detected",
 			"gap_duration", gapDuration,
-			"created_at", createdAt,
+			"silent_frames", silentFrames,
+			"created_at", packet.CreatedAt,
 		)
 
-		silentFrames := int(segmentDiff - 1)
 		err := o.writeSilentFrames(silentFrames)
 		if err != nil {
 			log.Error("Error handling gap", "error", err)
