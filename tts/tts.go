@@ -191,13 +191,13 @@ func handleTranscriptionUpdate(
 		return
 	}
 
-	segment, err := queries.GetTranscriptionSegmentByID(ctx, update.ID)
+	segment, err := queries.GetTranscriptSegment(ctx, update.ID)
 	if err != nil {
 		log.Error("Failed to get transcription segment", "error", err)
 		return
 	}
 
-	words, err := queries.GetTranscriptionWordsBySegmentID(ctx, update.ID)
+	words, err := queries.GetTranscriptWords(ctx, update.ID)
 	if err != nil {
 		log.Error("Failed to get transcription words", "error", err)
 		return
@@ -213,14 +213,14 @@ func handleTranscriptionUpdate(
 }
 
 func formatTranscriptWords(
-	words []db.TranscriptionWord,
+	words []db.GetTranscriptWordsRow,
 ) []TranscriptWord {
 	var formattedWords []TranscriptWord
 	for _, word := range words {
 		formattedWords = append(formattedWords, TranscriptWord{
 			Content:       word.Content,
-			StartTime:     float64(word.StartTime),
-			EndTime:       float64(word.StartTime) + float64(word.Duration),
+			StartTime:     float64(word.StartTime.Microseconds) / 1000000,
+			EndTime:       float64(word.StartTime.Microseconds+word.Duration.Microseconds) / 1000000,
 			Confidence:    word.Confidence,
 			IsEOS:         word.IsEos,
 			AttachesTo:    word.AttachesTo.String,
