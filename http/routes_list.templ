@@ -6,14 +6,16 @@ import (
 )
 
 templ RoutesList(routes []chi.Route) {
-	<h1>Available Routes</h1>
-	for _, route := range routes {
-		if !strings.Contains(route.Pattern, "{") {
-			for method := range route.Handlers {
-				if method == "GET" {
-					<p><a href={ templ.SafeURL(route.Pattern) }>{ method } { route.Pattern }</a></p>
-				} else {
-					<p>{ method } { route.Pattern }</p>
+	@RootTemplate("Available Routes") {
+		<h1>Available Routes</h1>
+		for _, route := range routes {
+			if !strings.Contains(route.Pattern, "{") {
+				for method := range route.Handlers {
+					if method == "GET" {
+						<p><a href={ templ.SafeURL(route.Pattern) }>{ method } { route.Pattern }</a></p>
+					} else {
+						<p>{ method } { route.Pattern }</p>
+					}
 				}
 			}
 		}

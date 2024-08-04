@@ -3,47 +3,69 @@ package tts
 import (
 	"fmt"
 	"time"
+	"node.town/http"
 )
 
 templ TranscriptTemplate(lines []Line) {
-	<html>
-		<head>
-			<script src="https://cdn.tailwindcss.com"></script>
-		</head>
-		<body class="bg-gray-100 p-8">
-			<div class="transcript max-w-3xl mx-auto bg-white shadow-lg rounded-lg p-6">
-				for _, line := range lines {
-					<div class="line mb-4">
-						<span class="timestamp text-sm text-gray-500 mr-2">
-							<a href={ templ.SafeURL(fmt.Sprintf("/audio/%d/%s/%s", line.SessionID, line.StartTime.Format(time.RFC3339), line.EndTime.Format(time.RFC3339))) } class="hover:underline">
-								{ line.StartTime.Format("15:04:05") }
-							</a>
+	@http.RootTemplate("Transcript") {
+		<style>
+			.transcript {
+				max-width: 48rem;
+				margin: 0 auto;
+				background-color: var(--bg-color);
+				box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+				border-radius: 0.5rem;
+				padding: 1.5rem;
+			}
+			.line {
+				margin-bottom: 1rem;
+			}
+			.timestamp {
+				font-size: 0.875rem;
+				color: #666;
+				margin-right: 0.5rem;
+			}
+			.timestamp a:hover {
+				text-decoration: underline;
+			}
+			.span-normal { color: var(--text-color); }
+			.span-partial { color: #666; font-style: italic; }
+			.span-high-confidence { color: #22c55e; font-weight: 600; }
+			.span-medium-confidence { color: #eab308; }
+			.span-low-confidence { color: #ef4444; }
+		</style>
+		<div class="transcript">
+			for _, line := range lines {
+				<div class="line">
+					<span class="timestamp">
+						<a href={ templ.SafeURL(fmt.Sprintf("/audio/%d/%s/%s", line.SessionID, line.StartTime.Format(time.RFC3339), line.EndTime.Format(time.RFC3339))) }>
+							{ line.StartTime.Format("15:04:05") }
+						</a>
+					</span>
+					for _, x := range line.Spans {
+						<span class={ getSpanClass(x.Style) }>
+							{ x.Content }
 						</span>
-						for _, x := range line.Spans {
-							<span class={ getSpanClass(x.Style) }>
-								{ x.Content }
-							</span>
-						}
-					</div>
-				}
-			</div>
-		</body>
-	</html>
+					}
+				</div>
+			}
+		</div>
+	}
 }
 
 templ getSpanClass(style SpanStyle) {
 	switch style {
 		case StyleNormal:
-			return "text-gray-900"
+			return "span-normal"
 		case StylePartial:
-			return "text-gray-500 italic"
+			return "span-partial"
 		case StyleHighConfidence:
-			return "text-green-600 font-semibold"
+			return "span-high-confidence"
 		case StyleMediumConfidence:
-			return "text-yellow-600"
+			return "span-medium-confidence"
 		case StyleLowConfidence:
-			return "text-red-600"
+			return "span-low-confidence"
 		default:
-			return "text-gray-900"
+			return "span-normal"
 	}
 }

@@ -1,0 +1,52 @@
+package http
+
+templ RootTemplate(title string) {
+	<!DOCTYPE html>
+	<html lang="en">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ title }</title>
+			<style>
+				:root {
+					--bg-color: #ffffff;
+					--text-color: #333333;
+					--link-color: #0066cc;
+					--link-hover-color: #004499;
+				}
+				@media (prefers-color-scheme: dark) {
+					:root {
+						--bg-color: #1a1a1a;
+						--text-color: #e0e0e0;
+						--link-color: #4da6ff;
+						--link-hover-color: #80bfff;
+					}
+				}
+				body {
+					font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+					line-height: 1.6;
+					color: var(--text-color);
+					background-color: var(--bg-color);
+					max-width: 800px;
+					margin: 0 auto;
+					padding: 20px;
+				}
+				a {
+					color: var(--link-color);
+					text-decoration: none;
+				}
+				a:hover {
+					color: var(--link-hover-color);
+					text-decoration: underline;
+				}
+				h1, h2, h3, h4, h5, h6 {
+					margin-top: 1.5em;
+					margin-bottom: 0.5em;
+				}
+			</style>
+		</head>
+		<body>
+			{ children... }
+		</body>
+	</html>
+}
