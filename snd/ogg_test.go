@@ -216,9 +216,9 @@ func TestOggWriteSilentPacketsToFile(t *testing.T) {
 	//	defer os.Remove(tempFile.Name())
 	defer tempFile.Close()
 
-	oggWriter, err := NewOggWriter(tempFile)
+	oggWriter, err := NewOggFile(tempFile)
 	if err != nil {
-		t.Fatalf("Failed to create OggWriter: %v", err)
+		t.Fatalf("Failed to create OggFile: %v", err)
 	}
 
 	mockTime := &MockTimeProvider{currentTime: time.Unix(0, 0).UTC()}
