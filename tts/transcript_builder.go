@@ -3,6 +3,7 @@ package tts
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -76,8 +77,10 @@ func (tb *TranscriptBuilder) WriteWord(word TranscriptWord, isPartial bool) {
 	if word.IsEOS || tb.currentStartTime.IsZero() {
 		tb.lines = append(tb.lines, Line{
 			Spans:     tb.currentLine,
-			StartTime: tb.currentStartTime.IsZero() ? word.AbsoluteStartTime : tb.currentStartTime,
-			EndTime:   word.AbsoluteStartTime.Add(time.Duration(word.RelativeEndTime * float64(time.Second))),
+			StartTime: tb.currentStartTime,
+			EndTime: tb.currentStartTime.Add(
+				time.Duration(word.RelativeEndTime * float64(time.Second)),
+			),
 			SessionID: word.SessionID,
 		})
 
@@ -125,9 +128,12 @@ func (tb *TranscriptBuilder) RenderLines() string {
 }
 
 func (tb *TranscriptBuilder) RenderHTML() (string, error) {
-	component := TranscriptTemplate(tb.GetLines())
+	lines := tb.GetLines()
+	sort.Slice(lines, func(i, j int) bool {
+		return lines[i].StartTime.Before(lines[j].StartTime)
+	})
 	var buf strings.Builder
-	err := component.Render(context.Background(), &buf)
+	err := TranscriptTemplate(lines).Render(context.Background(), &buf)
 	if err != nil {
 		return "", err
 	}

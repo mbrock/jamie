@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/log"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/spf13/cobra"
 	"node.town/db"
 	"node.town/snd"
@@ -117,9 +118,11 @@ func handleAudioRequest(queries *db.Queries) http.HandlerFunc {
 		// Fetch opus packets for the given time range
 		packets, err := queries.GetOpusPacketsForTimeRange(
 			r.Context(),
-			ssrc,
-			startTime,
-			endTime,
+			db.GetOpusPacketsForTimeRangeParams{
+				Ssrc:        ssrc,
+				CreatedAt:   pgtype.Timestamptz{Time: startTime, Valid: true},
+				CreatedAt_2: pgtype.Timestamptz{Time: endTime, Valid: true},
+			},
 		)
 		if err != nil {
 			http.Error(

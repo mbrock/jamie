@@ -160,8 +160,7 @@ SELECT ts.id,
     tw.is_eos,
     tw.attaches_to,
     wa.content,
-    wa.confidence,
-    s.id AS session_id
+    wa.confidence
 FROM transcription_segments ts
     JOIN transcription_words tw ON ts.id = tw.segment_id
     AND ts.version = tw.version
@@ -173,9 +172,8 @@ WHERE (
     )
     AND (
         sqlc.narg(created_at)::TIMESTAMPTZ IS NULL
-        OR ts.created_at > sqlc.narg(created_at)::TIMESTAMPTZ
+        OR (s.created_at + tw.start_time)::TIMESTAMPTZ > sqlc.narg(created_at)::TIMESTAMPTZ
     )
-ORDER BY ts.created_at,
-    tw.start_time,
+ORDER BY real_start_time,
     tw.id,
     wa.confidence DESC;

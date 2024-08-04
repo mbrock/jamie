@@ -3,8 +3,6 @@ package tts
 import (
 	"testing"
 	"time"
-
-	"github.com/charmbracelet/lipgloss"
 )
 
 type testModel model
@@ -29,7 +27,11 @@ func TestTranscriptBuilderHTML(t *testing.T) {
 	expectedHTML := `<div class="transcript"><div class="line"><span class="timestamp">(00:00:00)</span><span style="color:#FFFFFF">Hello</span><span> </span><span style="color:#FFFFFF">world</span></div><div class="line"><span class="timestamp">(00:00:02)</span><span style="color:#808080">How</span></div></div>`
 
 	if html != expectedHTML {
-		t.Errorf("HTML rendering doesn't match expected output.\nExpected:\n%s\nGot:\n%s", expectedHTML, html)
+		t.Errorf(
+			"HTML rendering doesn't match expected output.\nExpected:\n%s\nGot:\n%s",
+			expectedHTML,
+			html,
+		)
 	}
 }
 
@@ -188,7 +190,10 @@ func TestTranscriptBuilder(t *testing.T) {
 		}
 
 		if len(lines[0].Spans) != 2 {
-			t.Errorf("Expected 2 spans in first line, got %d", len(lines[0].Spans))
+			t.Errorf(
+				"Expected 2 spans in first line, got %d",
+				len(lines[0].Spans),
+			)
 		}
 
 		if lines[0].Spans[0].Content != "Hello" {
@@ -200,7 +205,10 @@ func TestTranscriptBuilder(t *testing.T) {
 		}
 
 		if len(lines[1].Spans) != 1 {
-			t.Errorf("Expected 1 span in second line, got %d", len(lines[1].Spans))
+			t.Errorf(
+				"Expected 1 span in second line, got %d",
+				len(lines[1].Spans),
+			)
 		}
 
 		if lines[1].Spans[0].Content != "How" {
@@ -208,7 +216,10 @@ func TestTranscriptBuilder(t *testing.T) {
 		}
 
 		if lines[1].Spans[0].Style != StylePartial {
-			t.Errorf("Expected partial word style, got %v", lines[1].Spans[0].Style)
+			t.Errorf(
+				"Expected partial word style, got %v",
+				lines[1].Spans[0].Style,
+			)
 		}
 	})
 
