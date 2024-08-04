@@ -17,6 +17,7 @@ const (
 	EntryTypeRun
 	EntryTypeUndo
 	EntryTypeClear
+	EntryTypeAdd
 )
 
 type Entry struct {
@@ -80,6 +81,9 @@ func ParseFile(filename string) ([]Entry, error) {
 			} else if currentContent == "/clear" {
 				currentContent = "clear"
 				entryType = EntryTypeClear
+			} else if strings.HasPrefix(currentContent, "/add ") {
+				currentContent = strings.TrimPrefix(currentContent, "/add ")
+				entryType = EntryTypeAdd
 			}
 
 			processedContent := processBackticks(currentContent)
