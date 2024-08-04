@@ -98,11 +98,10 @@ type Ogg struct {
 	oggWriter         OggWriter
 	timeProvider      TimeProvider
 	logger            Logger
-	packetCount       int           // Total number of packets processed
+	packetCount       uint64        // Total number of packets processed
 	firstTimestamp    time.Time     // Timestamp of the first packet received
 	lastTimestamp     time.Time     // Timestamp of the last packet received
 	gapCount          int           // Number of gaps detected in the audio stream
-	segmentNumber     uint64        // Current segment number for RTP packets
 	expectedTimestamp time.Time     // Expected timestamp for the next packet
 	silenceDuration   time.Duration // Total duration of inserted silence
 }
@@ -239,10 +238,10 @@ func (o *Ogg) writeSilentFrames(frames int) error {
 
 // writeRTPPacket writes an RTP packet to the Ogg container
 func (o *Ogg) writeRTPPacket(payload []byte) error {
-	o.segmentNumber++
+	o.packetCount++
 	rtpPacket := createRTPPacket(
-		uint16(o.segmentNumber),
-		uint32(o.segmentNumber*960),
+		uint16(o.packetCount),
+		uint32(o.packetCount*960),
 		uint32(o.ssrc),
 		payload,
 	)
