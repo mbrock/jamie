@@ -6,24 +6,24 @@ import (
 
 	"github.com/charmbracelet/log"
 	"github.com/spf13/cobra"
+	"node.town/aiderdoc"
+	"node.town/db"
+	"node.town/tts"
 )
 
-var routes = make(map[string]func(http.ResponseWriter, *http.Request))
-
-func RegisterRoute(
-	path string,
-	handler func(http.ResponseWriter, *http.Request),
-) {
-	routes[path] = handler
-}
-
 func Serve(port int) error {
-	for path, handler := range routes {
-		http.HandleFunc(path, handler)
+	mux := http.NewServeMux()
+
+	_, queries, err := db.OpenDatabase()
+	if err != nil {
+		return fmt.Errorf("failed to open database: %w", err)
 	}
 
+	tts.Routes(mux, queries)
+	aiderdoc.Routes(mux)
+
 	log.Info("http", "url", fmt.Sprintf("http://localhost:%d", port))
-	return http.ListenAndServe(fmt.Sprintf(":%d", port), nil)
+	return http.ListenAndServe(fmt.Sprintf(":%d", port), mux)
 }
 
 var ServeCmd = &cobra.Command{
@@ -32,7 +32,9 @@ var ServeCmd = &cobra.Command{
 	Long:  `This command starts an HTTP server.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		port, _ := cmd.Flags().GetInt("port")
-		Serve(port)
+		if err := Serve(port); err != nil {
+			log.Fatal("Failed to start server", "error", err)
+		}
 	},
 }
 

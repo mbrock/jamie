@@ -11,19 +11,12 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/jackc/pgx/v5/pgtype"
 	"node.town/db"
-	nt "node.town/http"
 	"node.town/snd"
 )
 
-func init() {
-	_, queries, err := db.OpenDatabase()
-	if err != nil {
-		fmt.Printf("Failed to open database: %v\n", err)
-		return
-	}
-
-	nt.RegisterRoute("/tts/", handleTranscriptPage(queries))
-	nt.RegisterRoute("/tts/audio/", handleAudioRequest(queries))
+func Routes(mux *http.ServeMux, queries *db.Queries) {
+	mux.HandleFunc("/tts/", handleTranscriptPage(queries))
+	mux.HandleFunc("/tts/audio/", handleAudioRequest(queries))
 }
 
 func handleTranscriptPage(queries *db.Queries) http.HandlerFunc {

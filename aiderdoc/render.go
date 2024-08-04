@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/cobra"
-	nt "node.town/http"
 )
 
 var AiderdocCmd = &cobra.Command{
@@ -42,8 +41,8 @@ var AiderdocCmd = &cobra.Command{
 	},
 }
 
-func init() {
-	nt.RegisterRoute("/aider/", handleAiderRequest)
+func Routes(mux *http.ServeMux) {
+	mux.HandleFunc("/aider/", handleAiderRequest)
 }
 
 func handleAiderRequest(w http.ResponseWriter, r *http.Request) {
