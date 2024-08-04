@@ -218,7 +218,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			prefix,
 			msg.SessionID,
 			len(msg.Words),
-			formatTranscriptWords(msg.Words))
+			formatTranscriptWordsForLog(msg.Words))
 		m.logEntries = append(m.logEntries, logEntry)
 
 		cmds = append(cmds, waitForTranscript(m.transcripts))
@@ -309,6 +309,15 @@ func (m model) logView() string {
 		content.WriteString("\n")
 	}
 	return content.String()
+}
+
+func formatTranscriptWordsForLog(words []TranscriptWord) string {
+	var content strings.Builder
+	for _, word := range words {
+		content.WriteString(word.Content)
+		content.WriteString(" ")
+	}
+	return strings.TrimSpace(content.String())
 }
 
 func getConfidenceColor(confidence float64) lipgloss.Color {
