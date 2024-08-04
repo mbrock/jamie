@@ -100,17 +100,18 @@ func streamAndTranscribe(
 
 	for stream := range streamChan {
 		go func(s <-chan snd.OpusPacketNotification) {
+			firstPacket := <-s
 			sessionID, err := queries.InsertTranscriptionSession(
 				ctx,
 				db.InsertTranscriptionSessionParams{
-					Ssrc: s.Ssrc,
+					Ssrc: firstPacket.Ssrc,
 					StartTime: pgtype.Timestamptz{
 						Time:  time.Now(),
 						Valid: true,
 					},
-					GuildID:   s.GuildID,
-					ChannelID: s.ChannelID,
-					UserID:    s.UserID,
+					GuildID:   firstPacket.GuildID,
+					ChannelID: firstPacket.ChannelID,
+					UserID:    firstPacket.UserID,
 				},
 			)
 			if err != nil {
@@ -190,13 +191,13 @@ func handleTranscriptionUpdate(
 		return
 	}
 
-	segment, err := queries.GetTranscriptionSegment(ctx, update.ID)
+	segment, err := queries.GetTranscriptionSegmentByID(ctx, update.ID)
 	if err != nil {
 		log.Error("Failed to get transcription segment", "error", err)
 		return
 	}
 
-	words, err := queries.GetTranscriptionWords(ctx, update.ID)
+	words, err := queries.GetTranscriptionWordsBySegmentID(ctx, update.ID)
 	if err != nil {
 		log.Error("Failed to get transcription words", "error", err)
 		return
@@ -212,7 +213,7 @@ func handleTranscriptionUpdate(
 }
 
 func formatTranscriptWords(
-	words []db.GetTranscriptionWordsRow,
+	words []db.TranscriptionWord,
 ) []TranscriptWord {
 	var formattedWords []TranscriptWord
 	for _, word := range words {
