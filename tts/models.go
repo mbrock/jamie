@@ -27,3 +27,39 @@ type AudioStreamUpdate struct {
 	Timestamp time.Time // Timestamp of the update
 	Data      []byte    // Raw audio data
 }
+
+// ConvertDBRowsToTranscriptSegments converts database rows to TranscriptSegment structs
+func ConvertDBRowsToTranscriptSegments(rows []db.GetTranscriptsRow) []TranscriptSegment {
+	segmentMap := make(map[int64]TranscriptSegment)
+
+	for _, row := range rows {
+		segment, ok := segmentMap[row.ID]
+		if !ok {
+			segment = TranscriptSegment{
+				SessionID: row.SessionID,
+				IsFinal:   row.IsFinal,
+				Words:     []TranscriptWord{},
+			}
+		}
+
+		word := TranscriptWord{
+			Content:           row.Content,
+			RelativeStartTime: float64(row.StartTime.Microseconds) / 1000000,
+			RelativeEndTime:   float64(row.StartTime.Microseconds+row.Duration.Microseconds) / 1000000,
+			Confidence:        row.Confidence,
+			IsEOS:             row.IsEos,
+			AttachesTo:        row.AttachesTo.String,
+			AbsoluteStartTime: row.RealStartTime.Time,
+		}
+
+		segment.Words = append(segment.Words, word)
+		segmentMap[row.ID] = segment
+	}
+
+	segments := make([]TranscriptSegment, 0, len(segmentMap))
+	for _, segment := range segmentMap {
+		segments = append(segments, segment)
+	}
+
+	return segments
+}

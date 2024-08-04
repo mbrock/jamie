@@ -158,8 +158,8 @@ ORDER BY tw.start_time,
     tw.id,
     wa.confidence DESC;
 
--- name: GetTranscriptsFromLastHour :many
-SELECT ts.id AS segment_id,
+-- name: GetTranscripts :many
+SELECT ts.id,
     ts.session_id,
     ts.is_final,
     tw.id AS word_id,

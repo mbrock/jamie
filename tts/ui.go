@@ -102,15 +102,15 @@ func initialModel(
 		dbQueries:   dbQueries,
 	}
 
-	// Load past hour's transcripts
-	pastTranscripts, err := m.loadPastHourTranscripts()
+	// Load recent transcripts
+	recentTranscripts, err := m.loadRecentTranscripts()
 	if err != nil {
 		m.logEntries = append(
 			m.logEntries,
-			fmt.Sprintf("Error loading past transcripts: %v", err),
+			fmt.Sprintf("Error loading recent transcripts: %v", err),
 		)
 	} else {
-		for _, transcript := range pastTranscripts {
+		for _, transcript := range recentTranscripts {
 			m.updateTranscript(transcript)
 		}
 	}
@@ -118,37 +118,19 @@ func initialModel(
 	return m
 }
 
-func (m *model) loadPastHourTranscripts() ([]TranscriptSegment, error) {
-	oneHourAgo := time.Now().Add(-8 * time.Hour)
+func (m *model) loadRecentTranscripts() ([]TranscriptSegment, error) {
+	// Fetch transcripts from the last 8 hours
+	eightHoursAgo := time.Now().Add(-8 * time.Hour)
 
-	// Fetch transcripts from the database
-	segments, err := m.dbQueries.GetTranscriptsFromLastHour(
+	segments, err := m.dbQueries.GetTranscripts(
 		context.Background(),
-		pgtype.Timestamptz{Time: oneHourAgo, Valid: true},
+		pgtype.Timestamptz{Time: eightHoursAgo, Valid: true},
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	var transcripts []TranscriptSegment
-	for _, word := range segments {
-		words := make([]TranscriptWord, 0)
-		words = append(words, TranscriptWord{
-			Content:           word.Content,
-			Confidence:        word.Confidence,
-			IsEOS:             word.IsEos,
-			AttachesTo:        word.AttachesTo.String,
-			AbsoluteStartTime: word.RealStartTime.Time,
-		})
-
-		transcripts = append(transcripts, TranscriptSegment{
-			SessionID: word.SessionID,
-			Words:     words,
-			IsFinal:   word.IsFinal,
-		})
-	}
-
-	return transcripts, nil
+	return ConvertDBRowsToTranscriptSegments(segments), nil
 }
 
 func (m *model) updateTranscript(msg TranscriptSegment) {
