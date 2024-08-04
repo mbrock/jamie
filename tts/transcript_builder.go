@@ -5,13 +5,21 @@ import (
 	"fmt"
 	"strings"
 	"time"
+)
 
-	"github.com/charmbracelet/lipgloss"
+type SpanStyle int
+
+const (
+	StyleNormal SpanStyle = iota
+	StylePartial
+	StyleHighConfidence
+	StyleMediumConfidence
+	StyleLowConfidence
 )
 
 type Span struct {
 	Content string
-	Style   lipgloss.Style
+	Style   SpanStyle
 }
 
 type Line struct {
@@ -37,15 +45,15 @@ func (tb *TranscriptBuilder) WriteWord(word TranscriptWord, isPartial bool) {
 	if !tb.lastWasEOS && word.AttachesTo != "previous" {
 		tb.currentLine = append(
 			tb.currentLine,
-			Span{Content: " ", Style: lipgloss.NewStyle()},
+			Span{Content: " ", Style: StyleNormal},
 		)
 	}
 
-	style := lipgloss.NewStyle()
+	style := StyleNormal
 	if isPartial {
-		style = style.Foreground(lipgloss.Color("240"))
+		style = StylePartial
 	} else {
-		style = style.Foreground(getConfidenceColor(word.Confidence))
+		style = getConfidenceStyle(word.Confidence)
 	}
 
 	tb.currentLine = append(
@@ -114,13 +122,13 @@ func (tb *TranscriptBuilder) RenderHTML() (string, error) {
 	return buf.String(), nil
 }
 
-func getConfidenceColor(confidence float64) lipgloss.Color {
+func getConfidenceStyle(confidence float64) SpanStyle {
 	switch {
 	case confidence >= 0.9:
-		return lipgloss.Color("#FFFFFF")
+		return StyleHighConfidence
 	case confidence >= 0.8:
-		return lipgloss.Color("#FFFF00")
+		return StyleMediumConfidence
 	default:
-		return lipgloss.Color("#FF0000")
+		return StyleLowConfidence
 	}
 }

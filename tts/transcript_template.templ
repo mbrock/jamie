@@ -1,23 +1,40 @@
 package tts
 
-import "github.com/charmbracelet/lipgloss"
-
 templ TranscriptTemplate(lines []Line) {
-	<div class="transcript">
-		for _, line := range lines {
-			<div class="line">
-				<span class="timestamp">{ line.StartTime.Format("15:04:05") }</span>
-				for _, x := range line.Spans {
-					<span class={ getSpanStyle(x.Style) }>
-						{ x.Content }
-					</span>
+	<html>
+		<head>
+			<script src="https://cdn.tailwindcss.com"></script>
+		</head>
+		<body class="bg-gray-100 p-8">
+			<div class="transcript max-w-3xl mx-auto bg-white shadow-lg rounded-lg p-6">
+				for _, line := range lines {
+					<div class="line mb-4">
+						<span class="timestamp text-sm text-gray-500 mr-2">{ line.StartTime.Format("15:04:05") }</span>
+						for _, x := range line.Spans {
+							<span class={ getSpanClass(x.Style) }>
+								{ x.Content }
+							</span>
+						}
+					</div>
 				}
 			</div>
-		}
-	</div>
+		</body>
+	</html>
 }
 
-css getSpanStyle(_ lipgloss.Style) {
-	color: { "red" };
-	background-color: { "blue" };
+templ getSpanClass(style SpanStyle) {
+	switch style {
+	case StyleNormal:
+		class="text-gray-900"
+	case StylePartial:
+		class="text-gray-500 italic"
+	case StyleHighConfidence:
+		class="text-green-600 font-semibold"
+	case StyleMediumConfidence:
+		class="text-yellow-600"
+	case StyleLowConfidence:
+		class="text-red-600"
+	default:
+		class="text-gray-900"
+	}
 }

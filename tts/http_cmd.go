@@ -56,7 +56,7 @@ func runHTTPServer(cmd *cobra.Command, args []string) {
 		}
 
 		w.Header().Set("Content-Type", "text/html")
-		fmt.Fprintf(w, "<html><body>%s</body></html>", html)
+		fmt.Fprint(w, html)
 	})
 
 	fmt.Printf("Starting HTTP server on port %d...\n", port)
