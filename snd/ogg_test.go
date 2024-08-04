@@ -131,11 +131,14 @@ func TestOggSilenceAndGapInsertion(t *testing.T) {
 	}
 
 	// Test gap insertion
-	secondPacketTime := firstPacketTime.Add(3 * time.Second)
+	// We add 20ms because we've sent 2s of silence plus the real 20ms packet
+	secondPacketTime := firstPacketTime.Add(
+		3*time.Second + 20*time.Millisecond,
+	)
 	err = ogg.WritePacket(OpusPacket{
 		ID:        2,
 		Sequence:  2,
-		Timestamp: 960 * 151,
+		Timestamp: 960 * 152,
 		CreatedAt: secondPacketTime,
 		OpusData:  []byte{0x04, 0x05, 0x06},
 	})
