@@ -42,9 +42,9 @@ func (m *MockOggWriter) Close() error {
 
 type MockLogger struct{}
 
-func (m *MockLogger) Info(msg string, keyvals ...interface{})  {}
-func (m *MockLogger) Error(msg string, keyvals ...interface{}) {}
-func (m *MockLogger) Debug(msg string, keyvals ...interface{}) {}
+func (m *MockLogger) Info(msg interface{}, keyvals ...interface{})  {}
+func (m *MockLogger) Error(msg interface{}, keyvals ...interface{}) {}
+func (m *MockLogger) Debug(msg interface{}, keyvals ...interface{}) {}
 
 func TestOggWritePacket(t *testing.T) {
 	mockWriter := &MockOggWriter{}
@@ -55,9 +55,9 @@ func TestOggWritePacket(t *testing.T) {
 	endTime := startTime.Add(time.Minute)
 
 	ogg, err := NewOgg(
-		12345,      // ssrc
-		startTime,  // startTime
-		endTime,    // endTime
+		12345,     // ssrc
+		startTime, // startTime
+		endTime,   // endTime
 		mockWriter,
 		mockTime,
 		mockLogger,
