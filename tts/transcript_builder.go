@@ -1,6 +1,7 @@
 package tts
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -27,14 +28,17 @@ type TranscriptBuilder struct {
 
 func NewTranscriptBuilder() *TranscriptBuilder {
 	return &TranscriptBuilder{
-		lines:      []Line{},
+		lines:       []Line{},
 		currentLine: []Span{},
 	}
 }
 
 func (tb *TranscriptBuilder) WriteWord(word TranscriptWord, isPartial bool) {
 	if !tb.lastWasEOS && word.AttachesTo != "previous" {
-		tb.currentLine = append(tb.currentLine, Span{Content: " ", Style: lipgloss.NewStyle()})
+		tb.currentLine = append(
+			tb.currentLine,
+			Span{Content: " ", Style: lipgloss.NewStyle()},
+		)
 	}
 
 	style := lipgloss.NewStyle()
@@ -44,7 +48,10 @@ func (tb *TranscriptBuilder) WriteWord(word TranscriptWord, isPartial bool) {
 		style = style.Foreground(getConfidenceColor(word.Confidence))
 	}
 
-	tb.currentLine = append(tb.currentLine, Span{Content: word.Content, Style: style})
+	tb.currentLine = append(
+		tb.currentLine,
+		Span{Content: word.Content, Style: style},
+	)
 
 	tb.lastWasEOS = word.IsEOS
 
@@ -63,7 +70,10 @@ func (tb *TranscriptBuilder) WriteWord(word TranscriptWord, isPartial bool) {
 	}
 }
 
-func (tb *TranscriptBuilder) AppendWords(words []TranscriptWord, isPartial bool) {
+func (tb *TranscriptBuilder) AppendWords(
+	words []TranscriptWord,
+	isPartial bool,
+) {
 	for _, word := range words {
 		tb.WriteWord(word, isPartial)
 	}
@@ -83,7 +93,9 @@ func (tb *TranscriptBuilder) GetLines() []Line {
 func (tb *TranscriptBuilder) RenderLines() string {
 	var result strings.Builder
 	for _, line := range tb.GetLines() {
-		result.WriteString(fmt.Sprintf("(%s) ", line.StartTime.Format("15:04:05")))
+		result.WriteString(
+			fmt.Sprintf("(%s) ", line.StartTime.Format("15:04:05")),
+		)
 		for _, span := range line.Spans {
 			result.WriteString(span.Style.Render(span.Content))
 		}
@@ -94,7 +106,12 @@ func (tb *TranscriptBuilder) RenderLines() string {
 
 func (tb *TranscriptBuilder) RenderHTML() (string, error) {
 	component := TranscriptTemplate(tb.GetLines())
-	return component.Render(context.Background())
+	var buf strings.Builder
+	err := component.Render(context.Background(), &buf)
+	if err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }
 
 func getConfidenceColor(confidence float64) lipgloss.Color {

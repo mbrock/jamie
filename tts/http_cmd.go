@@ -1,10 +1,8 @@
 package tts
 
 import (
-	"context"
 	"fmt"
 	"net/http"
-	"time"
 
 	"github.com/spf13/cobra"
 	"node.town/db"
@@ -34,7 +32,11 @@ func runHTTPServer(cmd *cobra.Command, args []string) {
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		transcripts, err := LoadRecentTranscripts(queries)
 		if err != nil {
-			http.Error(w, "Failed to load transcripts", http.StatusInternalServerError)
+			http.Error(
+				w,
+				fmt.Sprintf("Failed to load transcripts: %v", err),
+				http.StatusInternalServerError,
+			)
 			return
 		}
 
@@ -45,7 +47,11 @@ func runHTTPServer(cmd *cobra.Command, args []string) {
 
 		html, err := builder.RenderHTML()
 		if err != nil {
-			http.Error(w, "Failed to render HTML", http.StatusInternalServerError)
+			http.Error(
+				w,
+				"Failed to render HTML",
+				http.StatusInternalServerError,
+			)
 			return
 		}
 
