@@ -35,8 +35,6 @@ import (
 	"node.town/speechmatics"
 )
 
-var pgPool *pgxpool.Pool
-
 func initConfig() {
 	viper.SetConfigFile(".env")
 	viper.AutomaticEnv()
