@@ -134,10 +134,12 @@ func TestOggSilenceAndGapInsertion(t *testing.T) {
 	// Test gap insertion
 	gapDuration := 3 * time.Second
 	secondPacketTime := firstPacketTime.Add(gapDuration + 20*time.Millisecond)
+	totalDuration := initialSilenceDuration + gapDuration + 20*time.Millisecond
+	totalPackets := int(totalDuration / (20 * time.Millisecond))
 	err = ogg.WritePacket(OpusPacket{
 		ID:        2,
 		Sequence:  2,
-		Timestamp: 960 * 251, // (2s + 3s + 20ms) / 20ms = 251 packets
+		Timestamp: uint32(totalPackets) * 960, // Each packet is 960 samples at 48kHz
 		CreatedAt: secondPacketTime,
 		OpusData:  []byte{0x04, 0x05, 0x06},
 	})
@@ -146,11 +148,9 @@ func TestOggSilenceAndGapInsertion(t *testing.T) {
 	}
 
 	// Calculate expected packets
-	initialSilencePackets := int(
-		initialSilenceDuration / (20 * time.Millisecond),
-	)
+	initialSilencePackets := int(initialSilenceDuration / (20 * time.Millisecond))
 	gapSilencePackets := int(gapDuration / (20 * time.Millisecond))
-	expectedPackets := initialSilencePackets + 1 + gapSilencePackets + 1 // Initial silence + first packet + gap silence + second packet
+	expectedPackets := totalPackets + 1 // Total duration packets + 1 for the last packet
 
 	// Verify the written packets
 	if len(mockWriter.Packets) != expectedPackets {
@@ -196,9 +196,7 @@ func TestOggSilenceAndGapInsertion(t *testing.T) {
 	// Verify timestamps
 	firstRealPacketTimestamp := mockWriter.Packets[initialSilencePackets].Timestamp
 	secondRealPacketTimestamp := mockWriter.Packets[expectedPackets-1].Timestamp
-	expectedTimestampDiff := uint32(
-		960 * 251,
-	) // (2s + 3s + 20ms) / 20ms * 960 samples
+	expectedTimestampDiff := uint32(totalPackets-1) * 960 // Subtract 1 because we're measuring the difference
 	actualTimestampDiff := secondRealPacketTimestamp - firstRealPacketTimestamp
 
 	if actualTimestampDiff != expectedTimestampDiff {
@@ -206,7 +204,7 @@ func TestOggSilenceAndGapInsertion(t *testing.T) {
 			"Expected timestamp difference of %d, got %d (delta %f sec)",
 			expectedTimestampDiff,
 			actualTimestampDiff,
-			float64(actualTimestampDiff-expectedTimestampDiff)/960.0,
+			float64(int64(actualTimestampDiff)-int64(expectedTimestampDiff))/48000.0,
 		)
 	}
 }
