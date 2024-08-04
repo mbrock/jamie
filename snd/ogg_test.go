@@ -203,3 +203,76 @@ func issilentPacket(packet MockRTPPacket) bool {
 		packet.Payload[1] == 0xff &&
 		packet.Payload[2] == 0xfe
 }
+
+func TestOggWriteSilentPacketsToFile(t *testing.T) {
+	tempFile, err := os.CreateTemp("", "test_ogg_*.ogg")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	oggWriter, err := NewOggWriter(tempFile)
+	if err != nil {
+		t.Fatalf("Failed to create OggWriter: %v", err)
+	}
+
+	mockTime := &MockTimeProvider{currentTime: time.Unix(0, 0).UTC()}
+	mockLogger := &MockLogger{}
+
+	startTime := mockTime.Now()
+	endTime := startTime.Add(time.Second)
+
+	ogg, err := NewOgg(
+		12345,     // ssrc
+		startTime, // startTime
+		endTime,   // endTime
+		oggWriter,
+		mockTime,
+		mockLogger,
+	)
+	if err != nil {
+		t.Fatalf("Failed to create Ogg: %v", err)
+	}
+
+	// Write 1 second of silent packets (50 packets of 20ms each)
+	for i := 0; i < 50; i++ {
+		err = ogg.WritePacket(OpusPacket{
+			ID:        int64(i + 1),
+			Sequence:  uint16(i + 1),
+			Timestamp: uint32((i + 1) * 960),
+			CreatedAt: startTime.Add(time.Duration(i) * 20 * time.Millisecond),
+			OpusData:  []byte{0xf8, 0xff, 0xfe}, // Silent Opus packet
+		})
+		if err != nil {
+			t.Fatalf("Failed to write silent packet: %v", err)
+		}
+	}
+
+	err = ogg.Close()
+	if err != nil {
+		t.Fatalf("Failed to close Ogg: %v", err)
+	}
+
+	// Use opusinfo to verify the Ogg file
+	cmd := exec.Command("opusinfo", tempFile.Name())
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("opusinfo failed: %v\nOutput: %s", err, output)
+	}
+
+	// Check if the output contains expected information
+	expectedStrings := []string{
+		"Opus stream",
+		"Channels: 2",
+		"Preskip: 0",
+		"Input sample rate: 48000Hz",
+		"50 packets",
+	}
+
+	for _, expected := range expectedStrings {
+		if !strings.Contains(string(output), expected) {
+			t.Errorf("opusinfo output doesn't contain expected string: %s", expected)
+		}
+	}
+}
