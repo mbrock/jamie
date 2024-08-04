@@ -146,13 +146,19 @@ func TestOggSilenceAndGapInsertion(t *testing.T) {
 	}
 
 	// Calculate expected packets
-	initialSilencePackets := int(initialSilenceDuration / (20 * time.Millisecond))
+	initialSilencePackets := int(
+		initialSilenceDuration / (20 * time.Millisecond),
+	)
 	gapSilencePackets := int(gapDuration / (20 * time.Millisecond))
 	expectedPackets := initialSilencePackets + 1 + gapSilencePackets + 1 // Initial silence + first packet + gap silence + second packet
 
 	// Verify the written packets
 	if len(mockWriter.Packets) != expectedPackets {
-		t.Errorf("Expected %d packets, got %d", expectedPackets, len(mockWriter.Packets))
+		t.Errorf(
+			"Expected %d packets, got %d",
+			expectedPackets,
+			len(mockWriter.Packets),
+		)
 	}
 
 	// Check initial silence packets
@@ -163,7 +169,11 @@ func TestOggSilenceAndGapInsertion(t *testing.T) {
 	}
 
 	// Check first real packet
-	if string(mockWriter.Packets[initialSilencePackets].Payload) != string([]byte{0x01, 0x02, 0x03}) {
+	if string(
+		mockWriter.Packets[initialSilencePackets].Payload,
+	) != string(
+		[]byte{0x01, 0x02, 0x03},
+	) {
 		t.Errorf("First real packet payload mismatch")
 	}
 
@@ -175,18 +185,29 @@ func TestOggSilenceAndGapInsertion(t *testing.T) {
 	}
 
 	// Check second real packet
-	if string(mockWriter.Packets[expectedPackets-1].Payload) != string([]byte{0x04, 0x05, 0x06}) {
+	if string(
+		mockWriter.Packets[expectedPackets-1].Payload,
+	) != string(
+		[]byte{0x04, 0x05, 0x06},
+	) {
 		t.Errorf("Second real packet payload mismatch")
 	}
 
 	// Verify timestamps
 	firstRealPacketTimestamp := mockWriter.Packets[initialSilencePackets].Timestamp
 	secondRealPacketTimestamp := mockWriter.Packets[expectedPackets-1].Timestamp
-	expectedTimestampDiff := uint32(960 * 251) // (2s + 3s + 20ms) / 20ms * 960 samples
+	expectedTimestampDiff := uint32(
+		960 * 251,
+	) // (2s + 3s + 20ms) / 20ms * 960 samples
 	actualTimestampDiff := secondRealPacketTimestamp - firstRealPacketTimestamp
 
 	if actualTimestampDiff != expectedTimestampDiff {
-		t.Errorf("Expected timestamp difference of %d, got %d", expectedTimestampDiff, actualTimestampDiff)
+		t.Errorf(
+			"Expected timestamp difference of %d, got %d (delta %f sec)",
+			expectedTimestampDiff,
+			actualTimestampDiff,
+			float64(actualTimestampDiff-expectedTimestampDiff)/960.0,
+		)
 	}
 }
 
