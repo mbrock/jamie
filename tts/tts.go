@@ -16,15 +16,20 @@ import (
 )
 
 type TranscriptWord struct {
-	Word      string
-	StartTime float64
-	EndTime   float64
+	Content       string
+	StartTime     float64
+	EndTime       float64
+	Confidence    float64
+	IsEOS         bool
+	AttachesTo    string
+	RealStartTime time.Time
 }
 
 type TranscriptMessage struct {
 	SessionID int64
 	IsFinal   bool
 	Words     []TranscriptWord
+	IsPartial bool
 }
 
 type Config struct {
@@ -212,9 +217,13 @@ func formatTranscriptWords(
 	var formattedWords []TranscriptWord
 	for _, word := range words {
 		formattedWords = append(formattedWords, TranscriptWord{
-			Word:      word.Content,
-			StartTime: float64(word.StartTime),
-			EndTime:   float64(word.StartTime) + float64(word.Duration),
+			Content:       word.Content,
+			StartTime:     float64(word.StartTime),
+			EndTime:       float64(word.StartTime) + float64(word.Duration),
+			Confidence:    word.Confidence,
+			IsEOS:         word.IsEos,
+			AttachesTo:    word.AttachesTo.String,
+			RealStartTime: word.RealStartTime.Time,
 		})
 	}
 	return formattedWords
