@@ -49,6 +49,10 @@ WHERE bvj.guild_id = $1
 ORDER BY bvj.joined_at DESC
 LIMIT 1;
 
+-- name: GetKnownGuildIDs :many
+SELECT DISTINCT guild_id
+FROM ssrc_mappings;
+
 -- name: InsertVoiceStateEvent :exec
 INSERT INTO voice_state_events (
         guild_id,
