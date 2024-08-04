@@ -75,11 +75,13 @@ func ParseFile(filename string) ([]Entry, error) {
 				currentContent = strings.TrimPrefix(currentContent, "/run ")
 				entryType = EntryTypeRun
 			} else if currentContent == "/undo" {
+				currentContent = "undo"
 				entryType = EntryTypeUndo
 			} else if currentContent == "/clear" {
+				currentContent = "clear"
 				entryType = EntryTypeClear
 			}
-			
+
 			processedContent := processBackticks(currentContent)
 			entries = append(entries, Entry{
 				Timestamp:  currentTimestamp,
@@ -87,7 +89,6 @@ func ParseFile(filename string) ([]Entry, error) {
 				LineNumber: lineNumber,
 				Type:       entryType,
 			})
-
 
 		case strings.TrimSpace(line) == "":
 			// Empty line, ignore
@@ -110,7 +111,7 @@ func ParseFile(filename string) ([]Entry, error) {
 
 func processBackticks(content string) []Span {
 	var spans []Span
-	words := regexp.MustCompile(`[ =]`).Split(content, -1)
+	words := regexp.MustCompile(`[ =()]`).Split(content, -1)
 	inBackticks := false
 
 	// Regular expressions for words with underscores, camel case, and filenames
