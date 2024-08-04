@@ -5,8 +5,9 @@ import (
 	"io"
 	"time"
 
+	"github.com/charmbracelet/log"
 	"github.com/pion/rtp"
-	"github.com/pion/webrtc/v3/pkg/media/oggwriter"
+	"github.com/pion/webrtc/v4/pkg/media/oggwriter"
 )
 
 type TimeProvider interface {
@@ -19,9 +20,9 @@ type OggWriter interface {
 }
 
 type Logger interface {
-	Info(msg string, keyvals ...interface{})
-	Error(msg string, keyvals ...interface{})
-	Debug(msg string, keyvals ...interface{})
+	Info(interface{}, ...interface{})
+	Error(interface{}, ...interface{})
+	Debug(interface{}, ...interface{})
 }
 
 type RealTimeProvider struct{}
@@ -34,10 +35,14 @@ type OggWriterWrapper struct {
 	writer *oggwriter.OggWriter
 }
 
-func NewOggWriter(w io.Writer) *OggWriterWrapper {
-	return &OggWriterWrapper{
-		writer: oggwriter.NewWith(w),
+func NewOggWriter(w io.Writer) (*OggWriterWrapper, error) {
+	writer, err := oggwriter.NewWith(w, 48000, 2)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create OggWriter: %w", err)
 	}
+	return &OggWriterWrapper{
+		writer: writer,
+	}, nil
 }
 
 func (o *OggWriterWrapper) WriteRTP(packet *rtp.Packet) error {
@@ -173,6 +178,7 @@ func (o *Ogg) addInitialSilence(createdAt time.Time) {
 		log.Info("Added initial silence", "duration", silenceDuration,
 			"created_at", createdAt,
 			"start_time", o.startTime,
+			"frames", silentFrames,
 		)
 	}
 }
@@ -182,6 +188,7 @@ func (o *Ogg) handleGap(
 	createdAt time.Time,
 ) time.Duration {
 	segmentDiff := segmentNumber - o.lastSegmentNumber
+	log.Info("Segment diff", "segment_diff", segmentDiff)
 	if segmentDiff > 1 { // If there's a gap of more than one segment
 		gapDuration := time.Duration(
 			segmentDiff-1,
