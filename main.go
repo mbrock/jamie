@@ -23,6 +23,7 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/google/generative-ai-go/genai"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/olekukonko/tablewriter"
 
 	_ "github.com/lib/pq"
@@ -145,7 +146,9 @@ var listenPacketsCmd = &cobra.Command{
 		demuxer := snd.NewDefaultPacketDemuxer(cache, log.Default())
 		streamChan := snd.DemuxOpusPackets(ctx, demuxer, packetChan)
 
-		log.Info("Listening for demuxed Opus packet streams. Press CTRL-C to exit.")
+		log.Info(
+			"Listening for demuxed Opus packet streams. Press CTRL-C to exit.",
+		)
 
 		for stream := range streamChan {
 			go func(s <-chan snd.OpusPacketNotification) {
