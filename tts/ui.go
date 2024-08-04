@@ -12,66 +12,6 @@ import (
 	"node.town/db"
 )
 
-type lineInfo struct {
-	content   string
-	startTime time.Time
-}
-
-type WordBuilder struct {
-	lines            []lineInfo
-	currentLine      strings.Builder
-	currentStartTime time.Time
-	lastWasEOS       bool
-}
-
-func (wb *WordBuilder) WriteWord(word TranscriptWord, isPartial bool) {
-	if !wb.lastWasEOS && word.AttachesTo != "previous" {
-		wb.currentLine.WriteString(" ")
-	}
-
-	style := lipgloss.NewStyle()
-	if isPartial {
-		style = style.Foreground(lipgloss.Color("240"))
-	} else {
-		style = style.Foreground(getConfidenceColor(word.Confidence))
-	}
-
-	wb.currentLine.WriteString(style.Render(word.Content))
-
-	wb.lastWasEOS = word.IsEOS
-
-	if wb.currentStartTime.IsZero() {
-		wb.currentStartTime = word.AbsoluteStartTime
-	}
-
-	if word.IsEOS {
-		wb.lines = append(wb.lines, lineInfo{
-			content:   wb.currentLine.String(),
-			startTime: wb.currentStartTime,
-		})
-
-		wb.currentLine.Reset()
-		wb.currentStartTime = time.Time{}
-	}
-}
-
-func (wb *WordBuilder) AppendWords(words []TranscriptWord, isPartial bool) {
-	for _, word := range words {
-		wb.WriteWord(word, isPartial)
-	}
-}
-
-func (wb *WordBuilder) GetLines() []lineInfo {
-	lines := wb.lines
-	if wb.currentLine.Len() > 0 {
-		lines = append(lines, lineInfo{
-			content:   wb.currentLine.String(),
-			startTime: wb.currentStartTime,
-		})
-	}
-	return lines
-}
-
 type SessionTranscript struct {
 	FinalTranscript   []TranscriptWord
 	CurrentTranscript []TranscriptWord
@@ -239,30 +179,30 @@ func (m model) contentView() string {
 }
 
 func (m model) TranscriptView() string {
-	var allLines []lineInfo
+	var allBuilders []*TranscriptBuilder
 	for _, session := range m.sessions {
-		wb := &WordBuilder{lastWasEOS: true}
+		builder := NewTranscriptBuilder()
+		builder.AppendWords(session.FinalTranscript, false)
+		builder.AppendWords(session.CurrentTranscript, true)
+		allBuilders = append(allBuilders, builder)
+	}
 
-		wb.AppendWords(session.FinalTranscript, false)
-		wb.AppendWords(session.CurrentTranscript, true)
-
-		sessionLines := wb.GetLines()
-		allLines = append(allLines, sessionLines...)
+	var allLines []Line
+	for _, builder := range allBuilders {
+		allLines = append(allLines, builder.GetLines()...)
 	}
 
 	sort.Slice(allLines, func(i, j int) bool {
-		return allLines[i].startTime.Before(allLines[j].startTime)
+		return allLines[i].StartTime.Before(allLines[j].StartTime)
 	})
 
 	var result strings.Builder
 	for _, line := range allLines {
-		result.WriteString(
-			fmt.Sprintf(
-				"(%s) %s\n",
-				line.startTime.Format("15:04:05"),
-				line.content,
-			),
-		)
+		result.WriteString(fmt.Sprintf("(%s) ", line.StartTime.Format("15:04:05")))
+		for _, span := range line.Spans {
+			result.WriteString(span.Style.Render(span.Content))
+		}
+		result.WriteString("\n")
 	}
 
 	return result.String()
@@ -284,17 +224,6 @@ func formatTranscriptWordsForLog(words []TranscriptWord) string {
 		content.WriteString(" ")
 	}
 	return strings.TrimSpace(content.String())
-}
-
-func getConfidenceColor(confidence float64) lipgloss.Color {
-	switch {
-	case confidence >= 0.9:
-		return lipgloss.Color("#FFFFFF")
-	case confidence >= 0.8:
-		return lipgloss.Color("#FFFF00")
-	default:
-		return lipgloss.Color("#FF0000")
-	}
 }
 
 func max(a, b int) int {

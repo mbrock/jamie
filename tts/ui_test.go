@@ -3,6 +3,8 @@ package tts
 import (
 	"testing"
 	"time"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 type testModel model
@@ -151,6 +153,72 @@ func TestTranscriptView(t *testing.T) {
 				expected,
 				result,
 			)
+		}
+	})
+}
+
+func TestTranscriptBuilder(t *testing.T) {
+	t.Run("Basic Functionality", func(t *testing.T) {
+		builder := NewTranscriptBuilder()
+		builder.WriteWord(word("Hello", 0, false), false)
+		builder.WriteWord(word("world", 1, true), false)
+		builder.WriteWord(word("How", 2, false), true)
+
+		lines := builder.GetLines()
+		if len(lines) != 2 {
+			t.Errorf("Expected 2 lines, got %d", len(lines))
+		}
+
+		if len(lines[0].Spans) != 2 {
+			t.Errorf("Expected 2 spans in first line, got %d", len(lines[0].Spans))
+		}
+
+		if lines[0].Spans[0].Content != "Hello" {
+			t.Errorf("Expected 'Hello', got '%s'", lines[0].Spans[0].Content)
+		}
+
+		if lines[0].Spans[1].Content != " world" {
+			t.Errorf("Expected ' world', got '%s'", lines[0].Spans[1].Content)
+		}
+
+		if len(lines[1].Spans) != 1 {
+			t.Errorf("Expected 1 span in second line, got %d", len(lines[1].Spans))
+		}
+
+		if lines[1].Spans[0].Content != "How" {
+			t.Errorf("Expected 'How', got '%s'", lines[1].Spans[0].Content)
+		}
+
+		if lines[1].Spans[0].Style.GetForeground() != lipgloss.Color("240") {
+			t.Errorf("Expected partial word color, got %v", lines[1].Spans[0].Style.GetForeground())
+		}
+	})
+
+	t.Run("Att aches To", func(t *testing.T) {
+		builder := NewTranscriptBuilder()
+		builder.WriteWord(word("Hello", 0, false), false)
+		builder.WriteWord(TranscriptWord{
+			Content:    ".",
+			Confidence: 1.0,
+			IsEOS:      true,
+			AttachesTo: "previous",
+		}, false)
+
+		lines := builder.GetLines()
+		if len(lines) != 1 {
+			t.Errorf("Expected 1 line, got %d", len(lines))
+		}
+
+		if len(lines[0].Spans) != 2 {
+			t.Errorf("Expected 2 spans, got %d", len(lines[0].Spans))
+		}
+
+		if lines[0].Spans[0].Content != "Hello" {
+			t.Errorf("Expected 'Hello', got '%s'", lines[0].Spans[0].Content)
+		}
+
+		if lines[0].Spans[1].Content != "." {
+			t.Errorf("Expected '.', got '%s'", lines[0].Spans[1].Content)
 		}
 	})
 }
