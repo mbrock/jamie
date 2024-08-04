@@ -79,14 +79,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.history = append(m.history, fmt.Sprintf("Query: %s", queryStr))
 				m.textInput.SetValue("")
 				m.mode = "query"
-				return m, iterateQueryCmd
+				return m, m.iterateQuery()
 			case tea.KeyCtrlC, tea.KeyEsc:
 				return m, tea.Quit
 			}
 		case "query":
 			switch msg.String() {
 			case "n", "N":
-				return m, iterateQueryCmd
+				return m, m.iterateQuery()
 			case "a", "A":
 				m.query.Close()
 				m.query = nil
