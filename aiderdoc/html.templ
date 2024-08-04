@@ -6,34 +6,38 @@ templ EntriesTemplate(articles []Article) {
 	@http.RootTemplate("Aider Chronicle") {
 		<style>
 			.article {
-				margin-bottom: 2rem;
+				margin-bottom: 2.6rem;
+				padding-left: 1rem;
 			}
 			.section {
-				margin-bottom: 1rem;
+				margin-bottom: 1.3rem;
 			}
 			.entry {
 				display: flex;
 				align-items: baseline;
+				margin-bottom: .5rem;
 			}
 			.timestamp {
 				font-size: 0.8rem;
-				color: #666;
-				min-width: 180px;
+				opacity: 0.5;
 				text-align: right;
 				padding-right: 1rem;
+				width: 3rem;
 			}
 			.content {
 				white-space: pre-wrap;
 				flex: 1;
 			}
 			.date {
-				font-weight: bold;
-				margin-bottom: 0.5rem;
-				height: 1.5em;
+				font-size: 0.8rem;
+				line-height: calc(1.3rem * 3);
+				opacity: 0.5;
+				text-align: center;
 			}
 			.date.hidden {
 				display: none;
 			}
+
 			@media (prefers-color-scheme: dark) {
 				.timestamp {
 					color: #aaa;
@@ -65,7 +69,7 @@ templ sectionTemplate(section Section) {
 
 templ entryTemplate(entry Entry) {
 	<div class="entry">
-		<div class="timestamp">{ entry.Timestamp.Format("15:04:05") }</div>
+		<div class="timestamp">{ entry.Timestamp.Format("15:04") }</div>
 		<div class="content">{ entry.Content }</div>
 	</div>
 }
