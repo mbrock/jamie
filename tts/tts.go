@@ -21,6 +21,8 @@ import (
 	"node.town/speechmatics"
 )
 
+var pgPool *pgxpool.Pool
+
 var TranscribeCmd = &cobra.Command{
 	Use:   "transcribe",
 	Short: "Transcribe audio from Opus packets",
@@ -68,7 +70,7 @@ func runTranscribe(cmd *cobra.Command, args []string) {
 			ctx,
 			stream,
 			queries,
-			pool,
+			pgPool,
 		)
 	}
 
