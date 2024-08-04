@@ -264,6 +264,14 @@ func (d *DefaultPacketDemuxer) Demux(
 	return outputChan
 }
 
+func StreamOpusPackets(ctx context.Context, streamer PacketStreamer) (<-chan OpusPacketNotification, error) {
+	return streamer.Stream(ctx)
+}
+
+func DemuxOpusPackets(ctx context.Context, demuxer PacketDemuxer, inputChan <-chan OpusPacketNotification) <-chan (<-chan OpusPacketNotification) {
+	return demuxer.Demux(ctx, inputChan)
+}
+
 type PostgresTranscriptionChangeListener struct {
 	pool   *pgxpool.Pool
 	logger Logger
