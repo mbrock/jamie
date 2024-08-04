@@ -1,0 +1,29 @@
+package tts
+
+import "time"
+
+templ TranscriptTemplate(lines []Line) {
+    <div class="transcript">
+        for _, line := range lines {
+            <div class="line">
+                <span class="timestamp">({line.StartTime.Format("15:04:05")})</span>
+                for _, span := range line.Spans {
+                    <span style={getSpanStyle(span.Style)}>
+                        {span.Content}
+                    </span>
+                }
+            </div>
+        }
+    </div>
+}
+
+script getSpanStyle(style lipgloss.Style) templ.Attributes {
+    attrs := make(map[string]string)
+    if fg := style.GetForeground(); fg != "" {
+        attrs["color"] = string(fg)
+    }
+    if bg := style.GetBackground(); bg != "" {
+        attrs["background-color"] = string(bg)
+    }
+    return templ.Attributes(attrs)
+}

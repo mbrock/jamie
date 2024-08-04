@@ -15,6 +15,24 @@ func newTestModel() testModel {
 	}
 }
 
+func TestTranscriptBuilderHTML(t *testing.T) {
+	builder := NewTranscriptBuilder()
+	builder.WriteWord(word("Hello", 0, false), false)
+	builder.WriteWord(word("world", 1, true), false)
+	builder.WriteWord(word("How", 2, false), true)
+
+	html, err := builder.RenderHTML()
+	if err != nil {
+		t.Fatalf("Failed to render HTML: %v", err)
+	}
+
+	expectedHTML := `<div class="transcript"><div class="line"><span class="timestamp">(00:00:00)</span><span style="color:#FFFFFF">Hello</span><span> </span><span style="color:#FFFFFF">world</span></div><div class="line"><span class="timestamp">(00:00:02)</span><span style="color:#808080">How</span></div></div>`
+
+	if html != expectedHTML {
+		t.Errorf("HTML rendering doesn't match expected output.\nExpected:\n%s\nGot:\n%s", expectedHTML, html)
+	}
+}
+
 func (m *testModel) addFinalTranscript(
 	sessionID int64,
 	words ...TranscriptWord,

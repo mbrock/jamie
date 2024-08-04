@@ -92,6 +92,11 @@ func (tb *TranscriptBuilder) RenderLines() string {
 	return result.String()
 }
 
+func (tb *TranscriptBuilder) RenderHTML() (string, error) {
+	component := TranscriptTemplate(tb.GetLines())
+	return component.Render(context.Background())
+}
+
 func getConfidenceColor(confidence float64) lipgloss.Color {
 	switch {
 	case confidence >= 0.9:
