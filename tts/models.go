@@ -1,6 +1,10 @@
 package tts
 
-import "time"
+import (
+	"time"
+
+	"node.town/db"
+)
 
 // TranscriptWord represents a single word in a transcript
 type TranscriptWord struct {
@@ -15,8 +19,8 @@ type TranscriptWord struct {
 
 // TranscriptSegment represents a segment of transcription, which may be partial or final
 type TranscriptSegment struct {
-	SessionID int64           // ID of the transcription session
-	IsFinal   bool            // Indicates if this is a final transcription
+	SessionID int64            // ID of the transcription session
+	IsFinal   bool             // Indicates if this is a final transcription
 	Words     []TranscriptWord // The words in this segment
 }
 
@@ -29,7 +33,9 @@ type AudioStreamUpdate struct {
 }
 
 // ConvertDBRowsToTranscriptSegments converts database rows to TranscriptSegment structs
-func ConvertDBRowsToTranscriptSegments(rows []db.GetTranscriptsRow) []TranscriptSegment {
+func ConvertDBRowsToTranscriptSegments(
+	rows []db.GetTranscriptSegmentRow,
+) []TranscriptSegment {
 	segmentMap := make(map[int64]TranscriptSegment)
 
 	for _, row := range rows {
@@ -45,7 +51,9 @@ func ConvertDBRowsToTranscriptSegments(rows []db.GetTranscriptsRow) []Transcript
 		word := TranscriptWord{
 			Content:           row.Content,
 			RelativeStartTime: float64(row.StartTime.Microseconds) / 1000000,
-			RelativeEndTime:   float64(row.StartTime.Microseconds+row.Duration.Microseconds) / 1000000,
+			RelativeEndTime: float64(
+				row.StartTime.Microseconds+row.Duration.Microseconds,
+			) / 1000000,
 			Confidence:        row.Confidence,
 			IsEOS:             row.IsEos,
 			AttachesTo:        row.AttachesTo.String,
