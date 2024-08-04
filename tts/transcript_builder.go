@@ -29,6 +29,8 @@ type Span struct {
 type Line struct {
 	Spans     []Span
 	StartTime time.Time
+	EndTime   time.Time
+	SessionID int64
 }
 
 type TranscriptBuilder struct {
@@ -75,6 +77,8 @@ func (tb *TranscriptBuilder) WriteWord(word TranscriptWord, isPartial bool) {
 		tb.lines = append(tb.lines, Line{
 			Spans:     tb.currentLine,
 			StartTime: tb.currentStartTime,
+			EndTime:   word.AbsoluteStartTime.Add(time.Duration(word.RelativeEndTime * float64(time.Second))),
+			SessionID: word.SessionID,
 		})
 
 		tb.currentLine = []Span{}

@@ -9,7 +9,11 @@ templ TranscriptTemplate(lines []Line) {
 			<div class="transcript max-w-3xl mx-auto bg-white shadow-lg rounded-lg p-6">
 				for _, line := range lines {
 					<div class="line mb-4">
-						<span class="timestamp text-sm text-gray-500 mr-2">{ line.StartTime.Format("15:04:05") }</span>
+						<span class="timestamp text-sm text-gray-500 mr-2">
+							<a href={ templ.SafeURL(fmt.Sprintf("/audio/%d/%s/%s", line.SessionID, line.StartTime.Format(time.RFC3339), line.EndTime.Format(time.RFC3339))) } class="hover:underline">
+								{ line.StartTime.Format("15:04:05") }
+							</a>
+						</span>
 						for _, x := range line.Spans {
 							<span class={ getSpanClass(x.Style) }>
 								{ x.Content }

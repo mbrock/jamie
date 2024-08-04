@@ -164,4 +164,10 @@ WHERE (
 ORDER BY ts.created_at,
     tw.start_time,
     tw.id,
-    wa.confidence DESC;
+    wa.confidence DESC;-- name: GetSSRCForSession :one
+SELECT ssrc FROM transcription_sessions WHERE id = $1 LIMIT 1;
+
+-- name: GetOpusPacketsForTimeRange :many
+SELECT * FROM opus_packets
+WHERE ssrc = $1 AND created_at BETWEEN $2 AND $3
+ORDER BY created_at;
