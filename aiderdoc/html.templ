@@ -47,11 +47,13 @@ templ EntriesTemplate(articles []Article) {
 			for _, article := range articles {
 				<div class="timestamp">
 					<div class="date">{ article.StartTime.Format("Monday, 2 January, 2006") }</div>
+					for _, section := range article.Sections {
+						<div class="timestamp">{ section.StartTime.Format("15:04:05") }</div>
+					}
 				</div>
 				<div class="article">
 					for _, section := range article.Sections {
 						<div class="section">
-							<div class="timestamp">{ section.StartTime.Format("15:04:05") }</div>
 							for _, entry := range section.Entries {
 								<div class="entry">
 									<div class="content">{ entry.Content }</div>
