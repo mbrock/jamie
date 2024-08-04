@@ -195,15 +195,15 @@ func convertDBRowsToTranscriptWords(
 	words := make([]TranscriptWord, len(rows))
 	for i, row := range rows {
 		words[i] = TranscriptWord{
-			Content:   row.Content,
-			StartTime: float64(row.StartTime.Microseconds) / 1000000,
-			EndTime: float64(
+			Content:           row.Content,
+			RelativeStartTime: float64(row.StartTime.Microseconds) / 1000000,
+			RelativeEndTime: float64(
 				row.StartTime.Microseconds+row.Duration.Microseconds,
 			) / 1000000,
-			Confidence:    row.Confidence,
-			IsEOS:         row.IsEos,
-			AttachesTo:    row.AttachesTo.String,
-			RealStartTime: row.RealStartTime.Time,
+			Confidence:        row.Confidence,
+			IsEOS:             row.IsEos,
+			AttachesTo:        row.AttachesTo.String,
+			AbsoluteStartTime: row.RealStartTime.Time,
 		}
 	}
 	return words
