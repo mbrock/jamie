@@ -2,6 +2,7 @@ package tts
 
 import (
 	"testing"
+	"time"
 )
 
 type testModel model
@@ -21,7 +22,7 @@ func (m *testModel) addFinalTranscript(
 		session = &SessionTranscript{}
 		m.sessions[sessionID] = session
 	}
-	session.FinalTranscripts = append(session.FinalTranscripts, words)
+	session.FinalTranscript = append(session.FinalTranscript, words...)
 }
 
 func (m *testModel) setCurrentTranscript(
@@ -41,12 +42,22 @@ func word(
 	startTime, endTime float64,
 	isEOS bool,
 ) TranscriptWord {
+	now := time.Now()
+	midnight := time.Date(
+		now.Year(),
+		now.Month(),
+		now.Day(),
+		0,
+		0,
+		0,
+		0,
+		time.UTC,
+	)
 	return TranscriptWord{
-		Content:    content,
-		StartTime:  startTime,
-		EndTime:    endTime,
-		Confidence: 1.0,
-		IsEOS:      isEOS,
+		Content:       content,
+		Confidence:    1.0,
+		IsEOS:         isEOS,
+		RealStartTime: midnight.Add(time.Duration(startTime) * time.Second),
 	}
 }
 
@@ -82,8 +93,6 @@ func TestTranscriptView(t *testing.T) {
 			word("This is a sentence", 0.0, 1.0, false),
 			TranscriptWord{
 				Content:    ".",
-				StartTime:  1.0,
-				EndTime:    1.1,
 				Confidence: 1.0,
 				IsEOS:      true,
 				AttachesTo: "previous",
