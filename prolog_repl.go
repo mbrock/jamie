@@ -14,22 +14,36 @@ import (
 )
 
 var (
-	titleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FAFAFA")).
-			Background(lipgloss.Color("#874BFD")).
-			Padding(0, 1)
+	baseStyle = lipgloss.NewStyle().
+		Background(lipgloss.Color("#0A0A1F")).
+		Foreground(lipgloss.Color("#F0F0FF"))
 
-	infoStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#B58900"))
+	titleStyle = baseStyle.Copy().
+		Foreground(lipgloss.Color("#FF00FF")).
+		Background(lipgloss.Color("#000033")).
+		Bold(true).
+		Padding(0, 1).
+		BorderStyle(lipgloss.DoubleBorder()).
+		BorderForeground(lipgloss.Color("#00FFFF"))
 
-	errorStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#DC322F"))
+	infoStyle = baseStyle.Copy().
+		Foreground(lipgloss.Color("#00FFFF"))
 
-	promptStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#268BD2"))
+	errorStyle = baseStyle.Copy().
+		Foreground(lipgloss.Color("#FF0000")).
+		Bold(true)
 
-	solutionStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#859900"))
+	promptStyle = baseStyle.Copy().
+		Foreground(lipgloss.Color("#FF00FF")).
+		Bold(true)
+
+	solutionStyle = baseStyle.Copy().
+		Foreground(lipgloss.Color("#00FF00"))
+
+	viewportStyle = baseStyle.Copy().
+		Padding(1, 2).
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("#FF00FF"))
 )
 
 type model struct {
@@ -57,6 +71,7 @@ Enter your queries below.
 For Prolog queries, simply type them and press Enter.
 Use 'N' to get the next solution when in query mode.`
 	vp.SetContent(helpText)
+	vp.Style = viewportStyle
 
 	prolog, err := trealla.New()
 	if err != nil {
@@ -175,10 +190,12 @@ func (m model) View() string {
 		footer = infoStyle.Render("[ N ] Next solution  [ A ] Abort query  [ Q ] Quit")
 	}
 
-	return fmt.Sprintf(
-		"%s\n\n%s\n\n%s",
+	content := viewportStyle.Render(m.viewport.View())
+
+	return lipgloss.JoinVertical(
+		lipgloss.Left,
 		titleStyle.Render(" Prolog REPL "),
-		m.viewport.View(),
+		content,
 		footer,
 	)
 }
