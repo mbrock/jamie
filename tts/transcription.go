@@ -1,12 +1,16 @@
 package tts
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/charmbracelet/log"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"node.town/db"
 	"node.town/snd"
@@ -14,9 +18,15 @@ import (
 )
 
 type TranscriptionService interface {
-	ConnectWebSocket(ctx context.Context, config speechmatics.TranscriptionConfig, audioFormat speechmatics.AudioFormat) error
+	ConnectWebSocket(
+		ctx context.Context,
+		config speechmatics.TranscriptionConfig,
+		audioFormat speechmatics.AudioFormat,
+	) error
 	SendAudio(audio []byte) error
-	ReceiveTranscript(ctx context.Context) (<-chan speechmatics.RTTranscriptResponse, <-chan error)
+	ReceiveTranscript(
+		ctx context.Context,
+	) (<-chan speechmatics.RTTranscriptResponse, <-chan error)
 	EndStream(seqNo int) error
 	CloseWebSocket() error
 }
@@ -31,7 +41,11 @@ func NewSpeechmaticsService(apiKey string) *SpeechmaticsService {
 	}
 }
 
-func (s *SpeechmaticsService) ConnectWebSocket(ctx context.Context, config speechmatics.TranscriptionConfig, audioFormat speechmatics.AudioFormat) error {
+func (s *SpeechmaticsService) ConnectWebSocket(
+	ctx context.Context,
+	config speechmatics.TranscriptionConfig,
+	audioFormat speechmatics.AudioFormat,
+) error {
 	return s.client.ConnectWebSocket(ctx, config, audioFormat)
 }
 
@@ -39,7 +53,9 @@ func (s *SpeechmaticsService) SendAudio(audio []byte) error {
 	return s.client.SendAudio(audio)
 }
 
-func (s *SpeechmaticsService) ReceiveTranscript(ctx context.Context) (<-chan speechmatics.RTTranscriptResponse, <-chan error) {
+func (s *SpeechmaticsService) ReceiveTranscript(
+	ctx context.Context,
+) (<-chan speechmatics.RTTranscriptResponse, <-chan error) {
 	return s.client.ReceiveTranscript(ctx)
 }
 
@@ -57,7 +73,11 @@ type TranscriptionHandler struct {
 	service TranscriptionService
 }
 
-func NewTranscriptionHandler(queries *db.Queries, pool *pgxpool.Pool, service TranscriptionService) *TranscriptionHandler {
+func NewTranscriptionHandler(
+	queries *db.Queries,
+	pool *pgxpool.Pool,
+	service TranscriptionService,
+) *TranscriptionHandler {
 	return &TranscriptionHandler{
 		queries: queries,
 		pool:    pool,
@@ -65,7 +85,11 @@ func NewTranscriptionHandler(queries *db.Queries, pool *pgxpool.Pool, service Tr
 	}
 }
 
-func (h *TranscriptionHandler) HandleTranscript(ctx context.Context, transcript speechmatics.RTTranscriptResponse, sessionID int64) error {
+func (h *TranscriptionHandler) HandleTranscript(
+	ctx context.Context,
+	transcript speechmatics.RTTranscriptResponse,
+	sessionID int64,
+) error {
 	if len(transcript.Results) == 0 {
 		return nil
 	}
@@ -126,7 +150,10 @@ func (h *TranscriptionHandler) HandleTranscript(ctx context.Context, transcript 
 				},
 			)
 			if err != nil {
-				return fmt.Errorf("failed to insert word alternative: %w", err)
+				return fmt.Errorf(
+					"failed to insert word alternative: %w",
+					err,
+				)
 			}
 		}
 	}
@@ -146,7 +173,11 @@ func (h *TranscriptionHandler) HandleTranscript(ctx context.Context, transcript 
 	return nil
 }
 
-func (h *TranscriptionHandler) ProcessAudioStream(ctx context.Context, stream <-chan snd.OpusPacketNotification, sessionID int64) error {
+func (h *TranscriptionHandler) ProcessAudioStream(
+	ctx context.Context,
+	stream <-chan snd.OpusPacketNotification,
+	sessionID int64,
+) error {
 	config := speechmatics.TranscriptionConfig{
 		Language:       "en",
 		EnablePartials: true,
@@ -156,7 +187,10 @@ func (h *TranscriptionHandler) ProcessAudioStream(ctx context.Context, stream <-
 	}
 
 	if err := h.service.ConnectWebSocket(ctx, config, audioFormat); err != nil {
-		return fmt.Errorf("failed to connect to Speechmatics WebSocket: %w", err)
+		return fmt.Errorf(
+			"failed to connect to Speechmatics WebSocket: %w",
+			err,
+		)
 	}
 	defer h.service.CloseWebSocket()
 
@@ -194,7 +228,12 @@ func (h *TranscriptionHandler) ProcessAudioStream(ctx context.Context, stream <-
 	}
 }
 
-func (h *TranscriptionHandler) handleTranscripts(ctx context.Context, transcriptChan <-chan speechmatics.RTTranscriptResponse, errChan <-chan error, sessionID int64) {
+func (h *TranscriptionHandler) handleTranscripts(
+	ctx context.Context,
+	transcriptChan <-chan speechmatics.RTTranscriptResponse,
+	errChan <-chan error,
+	sessionID int64,
+) {
 	for {
 		select {
 		case transcript, ok := <-transcriptChan:
@@ -212,7 +251,13 @@ func (h *TranscriptionHandler) handleTranscripts(ctx context.Context, transcript
 	}
 }
 
-func (h *TranscriptionHandler) processPacket(packet snd.OpusPacketNotification, oggWriter *snd.Ogg, buffer *bytes.Buffer, seqNo *int, lastPacketTime *time.Time) error {
+func (h *TranscriptionHandler) processPacket(
+	packet snd.OpusPacketNotification,
+	oggWriter *snd.Ogg,
+	buffer *bytes.Buffer,
+	seqNo *int,
+	lastPacketTime *time.Time,
+) error {
 	createdAt, err := time.Parse(time.RFC3339Nano, packet.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("failed to parse createdAt: %w", err)
@@ -239,14 +284,21 @@ func (h *TranscriptionHandler) processPacket(packet snd.OpusPacketNotification, 
 	return nil
 }
 
-func (h *TranscriptionHandler) handleSilence(oggWriter *snd.Ogg, buffer *bytes.Buffer, lastPacketTime *time.Time) error {
+func (h *TranscriptionHandler) handleSilence(
+	oggWriter *snd.Ogg,
+	buffer *bytes.Buffer,
+	lastPacketTime *time.Time,
+) error {
 	if time.Since(*lastPacketTime) >= 100*time.Millisecond {
 		if err := oggWriter.WriteSilence(time.Since(*lastPacketTime)); err != nil {
 			return fmt.Errorf("failed to write silence to Ogg: %w", err)
 		}
 
 		if err := h.service.SendAudio(buffer.Bytes()); err != nil {
-			return fmt.Errorf("failed to send silence to Speechmatics: %w", err)
+			return fmt.Errorf(
+				"failed to send silence to Speechmatics: %w",
+				err,
+			)
 		}
 		buffer.Reset()
 
@@ -255,10 +307,17 @@ func (h *TranscriptionHandler) handleSilence(oggWriter *snd.Ogg, buffer *bytes.B
 	return nil
 }
 
-func (h *TranscriptionHandler) finalizeStream(buffer *bytes.Buffer, seqNo int) error {
+func (h *TranscriptionHandler) finalizeStream(
+	buffer *bytes.Buffer,
+	seqNo int,
+) error {
 	if buffer.Len() > 0 {
 		if err := h.service.SendAudio(buffer.Bytes()); err != nil {
-			log.Error("Failed to send final audio to Speechmatics", "error", err)
+			log.Error(
+				"Failed to send final audio to Speechmatics",
+				"error",
+				err,
+			)
 		}
 	}
 	if err := h.service.EndStream(seqNo); err != nil {

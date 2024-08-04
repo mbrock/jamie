@@ -54,10 +54,12 @@ func word(
 		time.UTC,
 	)
 	return TranscriptWord{
-		Content:       content,
-		Confidence:    1.0,
-		IsEOS:         isEOS,
-		RealStartTime: midnight.Add(time.Duration(startTime) * time.Second),
+		Content:    content,
+		Confidence: 1.0,
+		IsEOS:      isEOS,
+		AbsoluteStartTime: midnight.Add(
+			time.Duration(startTime) * time.Second,
+		),
 	}
 }
 

@@ -153,8 +153,14 @@ FROM transcription_segments ts
     AND ts.version = tw.version
     JOIN word_alternatives wa ON tw.id = wa.word_id
     JOIN transcription_sessions s ON ts.session_id = s.id
-WHERE ($1::bigint IS NULL OR ts.id = $1)
-    AND ($2::timestamptz IS NULL OR ts.created_at > $2)
+WHERE (
+        sqlc.arg(segment_id) IS NULL
+        OR ts.id = sqlc.arg(segment_id)
+    )
+    AND (
+        sqlc.arg(created_at) IS NULL
+        OR ts.created_at > sqlc.arg(created_at)
+    )
 ORDER BY ts.created_at,
     tw.start_time,
     tw.id,

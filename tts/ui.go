@@ -125,7 +125,7 @@ func (m *model) loadRecentTranscripts() ([]TranscriptSegment, error) {
 	segments, err := m.dbQueries.GetTranscripts(
 		context.Background(),
 		db.GetTranscriptsParams{
-			ID:        pgtype.Int8{Valid: false},
+			SegmentID: pgtype.Int8{Valid: false},
 			CreatedAt: pgtype.Timestamptz{Time: eightHoursAgo, Valid: true},
 		},
 	)

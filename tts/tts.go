@@ -175,7 +175,7 @@ func handleTranscriptionUpdate(
 	}
 
 	dbSegment, err := queries.GetTranscripts(ctx, db.GetTranscriptsParams{
-		ID:        pgtype.Int8{Int64: update.ID, Valid: true},
+		SegmentID: pgtype.Int8{Int64: update.ID, Valid: true},
 		CreatedAt: pgtype.Timestamptz{Valid: false},
 	})
 	if err != nil {
