@@ -337,3 +337,8 @@ func (l *PostgresTranscriptionChangeListener) Listen(ctx context.Context) (<-cha
 
 	return updateChan, nil
 }
+
+func ListenForTranscriptionChanges(ctx context.Context, pool *pgxpool.Pool) (<-chan TranscriptionUpdate, error) {
+	listener := NewPostgresTranscriptionChangeListener(pool, log.Default())
+	return listener.Listen(ctx)
+}

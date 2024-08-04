@@ -106,7 +106,13 @@ func runStream(cmd *cobra.Command, args []string) {
 	}()
 
 	// Listen for transcription updates from the database
-	updates, err := snd.ListenForTranscriptionChanges(ctx, sqlDB)
+	pool, err := pgxpool.New(ctx, viper.GetString("DATABASE_URL"))
+	if err != nil {
+		log.Fatal("Failed to create connection pool", "error", err)
+	}
+	defer pool.Close()
+
+	updates, err := snd.ListenForTranscriptionChanges(ctx, pool)
 	if err != nil {
 		log.Fatal(
 			"Failed to set up transcription change listener",
