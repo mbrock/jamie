@@ -12,7 +12,10 @@ func newTestModel() testModel {
 	}
 }
 
-func (m *testModel) addFinalTranscript(sessionID int64, words ...TranscriptWord) {
+func (m *testModel) addFinalTranscript(
+	sessionID int64,
+	words ...TranscriptWord,
+) {
 	session, ok := m.sessions[sessionID]
 	if !ok {
 		session = &SessionTranscript{}
@@ -21,7 +24,10 @@ func (m *testModel) addFinalTranscript(sessionID int64, words ...TranscriptWord)
 	session.FinalTranscripts = append(session.FinalTranscripts, words)
 }
 
-func (m *testModel) setCurrentTranscript(sessionID int64, words ...TranscriptWord) {
+func (m *testModel) setCurrentTranscript(
+	sessionID int64,
+	words ...TranscriptWord,
+) {
 	session, ok := m.sessions[sessionID]
 	if !ok {
 		session = &SessionTranscript{}
@@ -30,7 +36,11 @@ func (m *testModel) setCurrentTranscript(sessionID int64, words ...TranscriptWor
 	session.CurrentTranscript = words
 }
 
-func newWord(content string, startTime, endTime float64, isEOS bool) TranscriptWord {
+func word(
+	content string,
+	startTime, endTime float64,
+	isEOS bool,
+) TranscriptWord {
 	return TranscriptWord{
 		Content:    content,
 		StartTime:  startTime,
@@ -45,12 +55,12 @@ func TestTranscriptView(t *testing.T) {
 		m := newTestModel()
 		m.addFinalTranscript(
 			1,
-			newWord("A", 0.0, 0.5, false),
-			newWord("B", 0.5, 1.0, true),
+			word("A", 0.0, 0.5, false),
+			word("B", 0.5, 1.0, true),
 		)
 		m.setCurrentTranscript(
 			1,
-			newWord("C", 1.1, 1.3, false),
+			word("C", 1.1, 1.3, false),
 		)
 
 		expected := "A B\nC\n"
@@ -69,27 +79,28 @@ func TestTranscriptView(t *testing.T) {
 		m := newTestModel()
 		m.addFinalTranscript(
 			1,
-			newWord("A", 0.0, 0.5, false),
-			newWord("B", 0.5, 1.0, false),
-			newWord("1", 1.0, 1.5, true),
+			word("A", 0.0, 0.5, false),
+			word("B", 0.5, 1.0, false),
+			word("C", 1.0, 1.5, false),
+			word("D", 1.5, 2.0, true),
 		)
 		m.setCurrentTranscript(
 			1,
-			newWord("2", 2.5, 3.0, true),
+			word("E", 2.5, 3.0, true),
 		)
 
 		m.addFinalTranscript(
 			2,
-			newWord("C", 0.2, 0.7, false),
-			newWord("D", 0.7, 1.2, true),
+			word("1", 0.2, 0.7, false),
+			word("2", 0.7, 1.2, true),
 		)
 		m.setCurrentTranscript(
 			2,
-			newWord("3", 2.0, 2.5, false),
-			newWord("4", 2.5, 3.0, true),
+			word("3", 2.0, 2.5, false),
+			word("4", 2.5, 3.0, true),
 		)
 
-		expected := "A B 1\nC D\n2\n3 4\n"
+		expected := "A B C D\n1 2\n3 4\nE\n"
 		result := model(m).TranscriptView()
 
 		if result != expected {

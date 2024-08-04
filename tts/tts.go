@@ -364,6 +364,7 @@ type Alternative struct {
 }
 
 type TranscriptMessage struct {
+	SessionID int64
 	Words     []TranscriptWord
 	IsPartial bool
 }
