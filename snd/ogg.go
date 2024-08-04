@@ -104,6 +104,7 @@ type Ogg struct {
 	gapCount          int       // Number of gaps detected in the audio stream
 	segmentNumber     uint64    // Current segment number for RTP packets
 	expectedTimestamp time.Time // Expected timestamp for the next packet
+	silenceDuration   time.Duration // Total duration of inserted silence
 }
 
 // AudioStreamMetrics holds metrics about the audio stream
@@ -124,7 +125,7 @@ func (o *Ogg) GetStreamMetrics() AudioStreamMetrics {
 	return AudioStreamMetrics{
 		TotalDuration:    totalDuration,
 		AveragePeriod:    averagePeriod,
-		TotalGapDuration: time.Duration(o.gapCount) * OpusFrameDuration,
+		TotalGapDuration: o.silenceDuration,
 	}
 }
 
@@ -177,18 +178,17 @@ func (o *Ogg) WritePacket(packet OpusPacket) error {
 
 	if o.packetCount == 0 {
 		o.firstTimestamp = packet.CreatedAt
-		o.expectedTimestamp = packet.CreatedAt
-		o.addInitialSilence(packet.CreatedAt)
-	} else {
-		gapDuration := o.handleGap(packet)
-		if gapDuration > 0 {
-			o.logger.Info("Gap detected",
-				"gap_duration", gapDuration,
-				"expected_timestamp", o.expectedTimestamp,
-				"actual_timestamp", packet.CreatedAt,
-			)
-			packet.CreatedAt = o.expectedTimestamp.Add(gapDuration)
-		}
+		o.expectedTimestamp = o.startTime
+	}
+
+	silenceDuration := o.insertSilenceIfNeeded(packet.CreatedAt)
+	if silenceDuration > 0 {
+		o.logger.Info("Silence inserted",
+			"duration", silenceDuration,
+			"expected_timestamp", o.expectedTimestamp,
+			"actual_timestamp", packet.CreatedAt,
+		)
+		packet.CreatedAt = o.expectedTimestamp.Add(silenceDuration)
 	}
 
 	if err := o.writeRTPPacket(packet.OpusData); err != nil {
@@ -212,58 +212,29 @@ func (o *Ogg) WriteSilence(duration time.Duration) error {
 	return nil
 }
 
-// addInitialSilence adds silence at the beginning if needed
-func (o *Ogg) addInitialSilence(createdAt time.Time) {
-	if createdAt.After(o.startTime) {
-		silenceDuration := createdAt.Sub(o.startTime)
-		silentFrames := int(silenceDuration / OpusFrameDuration)
-		if err := o.writeSilentFrames(silentFrames); err != nil {
-			o.logger.Error("Error adding initial silence", "error", err)
-			return
-		}
-		o.logger.Info("Added initial silence",
-			"duration", silenceDuration,
-			"created_at", createdAt,
-			"start_time", o.startTime,
-			"frames", silentFrames,
-		)
-	}
-}
-
-// handleGap detects and handles gaps between packets
-func (o *Ogg) handleGap(packet OpusPacket) time.Duration {
-	if o.lastTimestamp.IsZero() {
-		return 0 // No gap for the first packet
+// insertSilenceIfNeeded adds silence if there's a gap between the expected and actual timestamp
+func (o *Ogg) insertSilenceIfNeeded(packetTimestamp time.Time) time.Duration {
+	if packetTimestamp.Before(o.expectedTimestamp) {
+		return 0
 	}
 
-	actualGap := packet.CreatedAt.Sub(o.expectedTimestamp)
-
-	o.logger.Info("Packet gap analysis",
-		"gap", actualGap,
-		"expected", o.expectedTimestamp,
-		"created_at", packet.CreatedAt,
-		"last_timestamp", o.lastTimestamp,
-	)
-
-	if actualGap > OpusFrameDuration {
-		silentFrames := int(actualGap / OpusFrameDuration)
-		gapDuration := time.Duration(silentFrames) * OpusFrameDuration
-
-		o.logger.Info("Audio gap detected",
-			"gap_duration", gapDuration,
-			"silent_frames", silentFrames,
-			"created_at", packet.CreatedAt,
-		)
-
-		if err := o.writeSilentFrames(silentFrames); err != nil {
-			o.logger.Error("Error handling gap", "error", err)
-			return 0
-		}
-		o.gapCount++
-
-		return gapDuration
+	silenceDuration := packetTimestamp.Sub(o.expectedTimestamp)
+	if silenceDuration < OpusFrameDuration {
+		return 0
 	}
-	return 0
+
+	silentFrames := int(silenceDuration / OpusFrameDuration)
+	actualSilenceDuration := time.Duration(silentFrames) * OpusFrameDuration
+
+	if err := o.writeSilentFrames(silentFrames); err != nil {
+		o.logger.Error("Error inserting silence", "error", err)
+		return 0
+	}
+
+	o.silenceDuration += actualSilenceDuration
+	o.gapCount++
+
+	return actualSilenceDuration
 }
 
 // writeSilentFrames writes a number of silent frames to the Ogg container
