@@ -87,9 +87,10 @@ func processBackticks(content string) []Span {
 	words := strings.Fields(content)
 	inBackticks := false
 
-	// Regular expressions for words with underscores and camel case
+	// Regular expressions for words with underscores, camel case, and filenames
 	underscoreRegex := regexp.MustCompile(`\b\w+_\w+\b`)
 	camelCaseRegex := regexp.MustCompile(`\b[a-z]+[A-Z]\w*\b`)
+	filenameRegex := regexp.MustCompile(`\b[\w-]+\.([\w-]+)\b|\b[\w-]+/[\w-]+\b`)
 
 	for _, word := range words {
 		if strings.Contains(word, "`") {
@@ -102,7 +103,7 @@ func processBackticks(content string) []Span {
 					inBackticks = !inBackticks
 				}
 			}
-		} else if inBackticks || underscoreRegex.MatchString(word) || camelCaseRegex.MatchString(word) {
+		} else if inBackticks || underscoreRegex.MatchString(word) || camelCaseRegex.MatchString(word) || filenameRegex.MatchString(word) {
 			spans = append(spans, Span{Text: word, IsCode: true})
 		} else {
 			spans = append(spans, Span{Text: word, IsCode: false})
