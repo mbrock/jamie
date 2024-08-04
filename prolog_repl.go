@@ -29,6 +29,7 @@ type model struct {
 	prolog    trealla.Prolog
 	history   []string
 	err       error
+	query     trealla.Query
 }
 
 func initialModel(queries *db.Queries) model {
@@ -71,16 +72,23 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.Type {
 		case tea.KeyEnter:
-			query := m.textInput.Value()
-			answer, err := m.prolog.QueryOnce(context.Background(), query)
+			queryStr := m.textInput.Value()
+			m.query, err = m.prolog.Query(context.Background(), queryStr)
 			if err != nil {
 				m.history = append(m.history, fmt.Sprintf("Error: %v", err))
 			} else {
-				m.history = append(m.history, fmt.Sprintf("Query: %s\nResult: %v", query, answer.Solution))
+				m.history = append(m.history, fmt.Sprintf("Query: %s", queryStr))
+				m.iterateQuery()
 			}
 			m.textInput.SetValue("")
 			m.viewport.SetContent(strings.Join(m.history, "\n\n"))
 			m.viewport.GotoBottom()
+		case tea.KeyComma:
+			if m.query != nil {
+				m.iterateQuery()
+				m.viewport.SetContent(strings.Join(m.history, "\n\n"))
+				m.viewport.GotoBottom()
+			}
 		case tea.KeyCtrlC, tea.KeyEsc:
 			return m, tea.Quit
 		}
@@ -101,6 +109,21 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds = append(cmds, cmd)
 
 	return m, tea.Batch(cmds...)
+}
+
+func (m *model) iterateQuery() {
+	if m.query.Next(context.Background()) {
+		solution := m.query.Current()
+		m.history = append(m.history, fmt.Sprintf("Result: %v", solution))
+	} else {
+		if err := m.query.Err(); err != nil {
+			m.history = append(m.history, fmt.Sprintf("Error: %v", err))
+		} else {
+			m.history = append(m.history, "No more solutions.")
+		}
+		m.query.Close()
+		m.query = nil
+	}
 }
 
 func (m model) View() string {
