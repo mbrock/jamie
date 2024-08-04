@@ -10,42 +10,50 @@ templ EntriesTemplate(articles []Article) {
 			<style>
 				body {
 					font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-					line-height: 1.5;
-					max-width: 800px;
+					line-height: 1.4;
+					max-width: 1000px;
 					margin: 0 auto;
-					padding: 2rem;
+					padding: 1rem;
 					color: #333;
+					display: grid;
+					grid-template-columns: 180px 1fr;
+					gap: 2rem;
 				}
 				.article {
 					margin-bottom: 2rem;
-					border-top: 1px solid #ddd;
-					padding-top: 2rem;
 				}
 				.section {
-					margin-bottom: 1.5rem;
-				}
-				.entry {
 					margin-bottom: 1rem;
 				}
+				.entry {
+					margin-bottom: 0.5rem;
+				}
 				.timestamp {
-					font-size: 0.875rem;
+					font-size: 0.8rem;
 					color: #666;
+					text-align: right;
+					padding-right: 1rem;
 				}
 				.content {
-					margin-top: 0.25rem;
 					white-space: pre-wrap;
+				}
+				.date {
+					font-weight: bold;
+					margin-bottom: 0.5rem;
 				}
 			</style>
 		</head>
 		<body>
 			for _, article := range articles {
+				<div class="timestamp">
+					<div class="date">{ article.StartTime.Format("Monday, 2 January, 2006") }</div>
+				</div>
 				<div class="article">
-					<div class="timestamp">{ article.StartTime.Format("2006-01-02 15:04:05") }</div>
 					for _, section := range article.Sections {
 						<div class="section">
+							<div class="timestamp">{ section.StartTime.Format("15:04:05") }</div>
 							for _, entry := range section.Entries {
 								<div class="entry">
-									<div class="timestamp">{ entry.Timestamp.Format("15:04:05") }</div>
 									<div class="content">{ entry.Content }</div>
 								</div>
 							}
