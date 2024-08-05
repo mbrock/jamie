@@ -10,15 +10,13 @@ templ EntriesTemplate(articles []Article) {
 				color: #333;
 				margin: 0;
 				padding: 20px;
+				box-sizing: border-box;
 			}
-			.article {
-				margin-bottom: 40px;
-			}
+
 			@media (min-width: 1024px) {
 				body {
 					height: 100vh;
-					column-width: 400px;
-                    column-gap: 40px;
+					column-width: 50ch;
                     column-fill: auto;
 				}
 			}
@@ -26,7 +24,7 @@ templ EntriesTemplate(articles []Article) {
 			.date {
 				font-size: 1.2em;
 				font-weight: bold;
-				margin-bottom: 20px;
+				margin: 2rem 0 1rem;
 				color: #666;
 				width: 100%;
 			}
