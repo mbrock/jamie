@@ -41,20 +41,20 @@ func renderJSONLine(line string) string {
 		// Remove quotes from key
 		key = strings.Trim(key, "\"")
 
-		renderedKey := keyStyle.Render(fmt.Sprintf("\"%s\"", key))
+		renderedKey := keyStyle.Render(key)
 		renderedValue := renderJSONValue(value)
 
 		return fmt.Sprintf("%s%s: %s", strings.Repeat("  ", countLeadingSpaces(line)/2), renderedKey, renderedValue)
 	}
 
-	return braceStyle.Render(strings.TrimSpace(line))
+	return renderJSONValue(strings.TrimSpace(line))
 }
 
 func renderJSONValue(value string) string {
 	if strings.HasPrefix(value, "{") || strings.HasPrefix(value, "[") {
-		return braceStyle.Render(value)
+		return value // Don't apply braceStyle to objects and arrays
 	}
-	return valueStyle.Render(value)
+	return valueStyle.Render(strings.Trim(value, ",")) // Remove trailing comma
 }
 
 func countLeadingSpaces(s string) int {
