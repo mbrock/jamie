@@ -28,8 +28,8 @@ func TestRenderJSON(t *testing.T) {
 				"age":  30,
 			},
 			expected: `
-name: "John"
 age: 30
+name: "John"
 `,
 		},
 		{
@@ -42,8 +42,8 @@ age: 30
 			},
 			expected: `
 person: 
-  name: "Alice"
   age: 25
+  name: "Alice"
 `,
 		},
 		{
@@ -54,11 +54,11 @@ person:
 			},
 			expected: `
 0: 
-  name: "Bob"
   age: 40
+  name: "Bob"
 1: 
-  name: "Charlie"
   age: 35
+  name: "Charlie"
 `,
 		},
 		{
@@ -74,15 +74,15 @@ person:
 				},
 			},
 			expected: `
-name: "David"
-age: 50
-married: true
-hobbies: 
-  0: "reading"
-  1: "cycling"
 address: 
   city: "New York"
   state: "NY"
+age: 50
+hobbies: 
+  0: "reading"
+  1: "cycling"
+married: true
+name: "David"
 `,
 		},
 	}
