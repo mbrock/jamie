@@ -22,7 +22,6 @@ var (
 type renderState struct {
 	sb            strings.Builder
 	indent        int
-	needsNewline  bool
 	isFirstInList bool
 }
 
@@ -61,6 +60,12 @@ func renderMap(m map[string]interface{}, state *renderState) {
 		return
 	}
 
+	if !state.isFirstInList {
+		state.sb.WriteString("\n")
+		writeIndent(state.indent, &state.sb)
+	}
+	state.isFirstInList = false
+
 	keys := sortedKeys(m)
 	for i, k := range keys {
 		if i > 0 {
@@ -69,7 +74,10 @@ func renderMap(m map[string]interface{}, state *renderState) {
 		writeIndent(state.indent, &state.sb)
 		state.sb.WriteString(keyStyle.Render(k))
 		state.sb.WriteString(": ")
+		state.indent++
+		state.isFirstInList = true
 		renderJSONValue(m[k], state)
+		state.indent--
 	}
 }
 
@@ -79,6 +87,12 @@ func renderSlice(s []interface{}, state *renderState) {
 		return
 	}
 
+	if !state.isFirstInList {
+		state.sb.WriteString("\n")
+		writeIndent(state.indent, &state.sb)
+	}
+	state.isFirstInList = false
+
 	for i, item := range s {
 		if i > 0 {
 			state.sb.WriteString("\n")
@@ -86,6 +100,7 @@ func renderSlice(s []interface{}, state *renderState) {
 		writeIndent(state.indent, &state.sb)
 		state.sb.WriteString(fmt.Sprintf("%d: ", i))
 		state.indent++
+		state.isFirstInList = true
 		renderJSONValue(item, state)
 		state.indent--
 	}
