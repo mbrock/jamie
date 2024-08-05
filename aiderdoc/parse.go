@@ -13,7 +13,7 @@ type EntryType int
 type InputMode int
 
 const (
-	EntryTypeNormal EntryType = iota
+	EntryTypeCode EntryType = iota
 	EntryTypeAsk
 	EntryTypeRun
 	EntryTypeUndo
@@ -79,7 +79,12 @@ func ParseFile(filename string) ([]Entry, error) {
 		case strings.HasPrefix(line, "+"):
 			// Content line
 			currentContent = strings.TrimPrefix(line, "+")
-			entryType := EntryTypeNormal
+			var entryType EntryType
+			if currentInputMode == InputModeAsk {
+				entryType = EntryTypeAsk
+			} else {
+				entryType = EntryTypeCode
+			}
 			isVoice := expectVoice
 			expectVoice = false
 
@@ -153,7 +158,7 @@ func processBackticks(content string) []Span {
 	camelCaseRegex := regexp.MustCompile(
 		`[a-z][A-Z]`,
 	)
-	filenameRegex := regexp.MustCompile(`^[\w-]+\.([a-z]{1,5})$`)
+	filenameRegex := regexp.MustCompile(`^[\w/-]+\.([a-z]{1,5})$`)
 
 	for _, word := range words {
 		if strings.Contains(word, "`") {

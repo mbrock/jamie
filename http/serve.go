@@ -8,20 +8,20 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/spf13/cobra"
-	"node.town/aiderdoc"
-	"node.town/db"
-	"node.town/tts"
 )
 
-func Serve(port int) error {
-	r := chi.NewRouter()
-	r.Use(middleware.Logger)
-	r.Use(middleware.Recoverer)
+var (
+	Router *chi.Mux
+)
 
-	_, queries, err := db.OpenDatabase()
-	if err != nil {
-		return fmt.Errorf("failed to open database: %w", err)
-	}
+func init() {
+	Router = chi.NewRouter()
+	Router.Use(middleware.Logger)
+	Router.Use(middleware.Recoverer)
+}
+
+func Serve(port int) error {
+	r := Router
 
 	r.Get("/", func(w http.ResponseWriter, req *http.Request) {
 		w.Header().Set("Content-Type", "text/html")

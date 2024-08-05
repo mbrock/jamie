@@ -16,6 +16,7 @@ jamie
 /node_modules
 # Compiled binary
 node.town
+*_templ.txt
 
 # Go specific
 *.exe

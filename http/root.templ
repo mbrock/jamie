@@ -7,12 +7,16 @@ templ RootTemplate(title string) {
 			<meta charset="UTF-8"/>
 			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 			<title>{ title }</title>
+			<link rel="preconnect" href="https://fonts.googleapis.com"/>
+			<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+			<link href="https://fonts.googleapis.com/css2?family=DM+Mono&family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap" rel="stylesheet"/>
 			<style>
 				:root {
 					--bg-color: #ffffff;
 					--text-color: #333333;
 					--link-color: #0066cc;
 					--link-hover-color: #004499;
+					--color-border: #eee;
 				}
 				@media (prefers-color-scheme: dark) {
 					:root {
@@ -20,16 +24,21 @@ templ RootTemplate(title string) {
 						--text-color: #e0e0e0;
 						--link-color: #4da6ff;
 						--link-hover-color: #80bfff;
+						--color-border: #333;
 					}
 				}
 				body {
 					font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-					line-height: 1.6;
+					line-height: 1.4;
 					color: var(--text-color);
 					background-color: var(--bg-color);
-					max-width: 800px;
 					margin: 0 auto;
 					padding: 20px;
+				}
+				pre, tt, code, kbd, samp, .mono {
+					font-family: "DM Mono", monospace;
+					font-weight: 400;
+					font-style: normal;
 				}
 				a {
 					color: var(--link-color);

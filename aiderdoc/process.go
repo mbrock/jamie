@@ -7,18 +7,12 @@ import (
 type Article struct {
 	StartTime time.Time
 	NewDay    bool
-	Sections  []Section
-}
-
-type Section struct {
-	StartTime time.Time
 	Entries   []Entry
 }
 
 func ProcessEntries(entries []Entry) []Article {
 	var articles []Article
 	var currentArticle *Article
-	var currentSection *Section
 	var lastDay time.Time
 
 	for _, entry := range entries {
@@ -31,23 +25,11 @@ func ProcessEntries(entries []Entry) []Article {
 				Article{StartTime: entry.Timestamp, NewDay: newDay},
 			)
 			currentArticle = &articles[len(articles)-1]
-			currentSection = nil
 			lastDay = entry.Timestamp.Truncate(24 * time.Hour)
 		}
 
-		if currentSection == nil ||
-			entry.Timestamp.Sub(currentSection.StartTime) > 5*time.Minute ||
-			(len(currentSection.Entries) > 0 && currentSection.Entries[len(currentSection.Entries)-1].InputMode != entry.InputMode) {
-			// Start a new section
-			currentArticle.Sections = append(
-				currentArticle.Sections,
-				Section{StartTime: entry.Timestamp},
-			)
-			currentSection = &currentArticle.Sections[len(currentArticle.Sections)-1]
-		}
-
 		if entry.Type != EntryTypeClear {
-			currentSection.Entries = append(currentSection.Entries, entry)
+			currentArticle.Entries = append(currentArticle.Entries, entry)
 		}
 	}
 

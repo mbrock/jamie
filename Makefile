@@ -26,7 +26,7 @@ clean:
 run: build
 	./$(BINARY_NAME)
 
-.PHONY: all build test clean sqlc templ init
+.PHONY: all build test clean sqlc templ init docs
 
 sqlc:
 	sqlc generate
@@ -36,19 +36,7 @@ templ:
 
 init: sqlc templ
 	go mod tidy
-.PHONY: all build test clean docs
-
-all: build test
-
-build:
-	go build ./...
-
-test:
-	go test ./...
-
-clean:
-	go clean
 
 docs:
 	mkdir -p docs/devlog
-	go run cmd/aiderdoc/main.go .aider.input.history docs/devlog/index.html
+	go run main.go aiderdoc .aider.input.history docs/devlog/index.html
