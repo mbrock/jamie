@@ -31,14 +31,14 @@ func (i eventItem) FilterValue() string {
 }
 
 type Model struct {
-	list         list.Model
-	events       <-chan snd.DiscordEventNotification
-	quitting     bool
-	showingJSON  bool
-	jsonViewport viewport.Model
-	selectedItem eventItem
+	list                list.Model
+	events              <-chan snd.DiscordEventNotification
+	quitting            bool
+	showingJSON         bool
+	jsonViewport        viewport.Model
+	selectedItem        eventItem
 	showingParsedEvents bool
-	parsedEvents []ParsedEvent
+	parsedEvents        []ParsedEvent
 }
 
 type ParsedEvent struct {
@@ -74,7 +74,7 @@ func NewEventUI(events <-chan snd.DiscordEventNotification, existingEvents []db.
 func parseEvent(event snd.DiscordEventNotification) ParsedEvent {
 	parsedEvent := ParsedEvent{
 		Type:      event.Type,
-		Timestamp: event.CreatedAt.Time,
+		Timestamp: event.CreatedAt,
 	}
 
 	switch event.Type {
@@ -198,7 +198,7 @@ func (m *Model) renderParsedEvents() string {
 
 	for _, event := range m.parsedEvents {
 		if event.Type == "MESSAGE_CREATE" || event.Type == "GUILD_CREATE" {
-			content.WriteString(fmt.Sprintf("[%s] %s\n%s\n\n", 
+			content.WriteString(fmt.Sprintf("[%s] %s\n%s\n\n",
 				event.Timestamp.Format("2006-01-02 15:04:05"),
 				event.Type,
 				event.Content))
