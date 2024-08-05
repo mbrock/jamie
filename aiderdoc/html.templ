@@ -17,17 +17,12 @@ templ EntriesTemplate(articles []Article) {
 			@media (min-width: 1024px) {
 				body {
 					height: 100vh;
-					overflow: hidden;
-				}
-				.article {
-					height: calc(100vh - 40px);
-					overflow-y: auto;
 					column-width: 400px;
-					column-gap: 40px;
-					column-fill: auto;
+                    column-gap: 40px;
+                    column-fill: auto;
 				}
 			}
-			}
+
 			.date {
 				font-size: 1.2em;
 				font-weight: bold;
@@ -79,14 +74,14 @@ templ EntriesTemplate(articles []Article) {
 }
 
 templ articleTemplate(article Article) {
-	<div class="article">
+
 		if article.NewDay {
 			<div class="date">{ article.StartTime.Format("Monday, 2 January") }</div>
 		}
 		for _, entry := range article.Entries {
 			@entryTemplate(entry)
 		}
-	</div>
+
 }
 
 templ entryTemplate(entry Entry) {
