@@ -19,81 +19,94 @@ var (
 	structureStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFD700"))
 )
 
+type renderState struct {
+	sb            strings.Builder
+	indent        int
+	needsNewline  bool
+	isFirstInList bool
+}
+
 func RenderJSON(data interface{}) string {
-	var sb strings.Builder
-	err := renderJSONValue(data, 0, &sb)
+	state := &renderState{isFirstInList: true}
+	err := renderJSONValue(data, state)
 	if err != nil {
 		return fmt.Sprintf("Error rendering JSON: %v", err)
 	}
-	return sb.String()
+	return state.sb.String()
 }
 
-func renderJSONValue(v interface{}, indent int, sb *strings.Builder) error {
+func renderJSONValue(v interface{}, state *renderState) error {
+	if state.needsNewline {
+		state.sb.WriteString("\n")
+		writeIndent(state.indent, &state.sb)
+		state.needsNewline = false
+	}
+
 	switch val := v.(type) {
 	case map[string]interface{}:
-		return renderMap(val, indent, sb)
+		return renderMap(val, state)
 	case []interface{}:
-		return renderSlice(val, indent, sb)
+		return renderSlice(val, state)
 	case string:
-		sb.WriteString(stringStyle.Render(fmt.Sprintf("%q", val)))
+		state.sb.WriteString(stringStyle.Render(fmt.Sprintf("%q", val)))
 	case float64:
-		sb.WriteString(numberStyle.Render(strconv.FormatFloat(val, 'f', -1, 64)))
+		state.sb.WriteString(numberStyle.Render(strconv.FormatFloat(val, 'f', -1, 64)))
 	case bool:
-		sb.WriteString(booleanStyle.Render(strconv.FormatBool(val)))
+		state.sb.WriteString(booleanStyle.Render(strconv.FormatBool(val)))
 	case nil:
-		sb.WriteString(nullStyle.Render("null"))
+		state.sb.WriteString(nullStyle.Render("null"))
 	case json.Number:
-		sb.WriteString(numberStyle.Render(string(val)))
+		state.sb.WriteString(numberStyle.Render(string(val)))
 	default:
 		return fmt.Errorf("unsupported type: %T", v)
 	}
 	return nil
 }
 
-func renderMap(m map[string]interface{}, indent int, sb *strings.Builder) error {
+func renderMap(m map[string]interface{}, state *renderState) error {
 	if len(m) == 0 {
-		sb.WriteString(lipgloss.NewStyle().Faint(true).Render("{}"))
+		state.sb.WriteString(lipgloss.NewStyle().Faint(true).Render("empty object"))
 		return nil
 	}
 
-	sb.WriteString("{\n")
 	keys := sortedKeys(m)
+	state.indent++
 	for i, k := range keys {
-		writeIndent(indent+1, sb)
-		sb.WriteString(keyStyle.Render(fmt.Sprintf("%q", k)))
-		sb.WriteString(": ")
-		if err := renderJSONValue(m[k], indent+1, sb); err != nil {
+		if i > 0 {
+			state.sb.WriteString("\n")
+			writeIndent(state.indent, &state.sb)
+		}
+		state.sb.WriteString(keyStyle.Render(fmt.Sprintf("%q", k)))
+		state.sb.WriteString(": ")
+		if err := renderJSONValue(m[k], state); err != nil {
 			return err
 		}
-		if i < len(keys)-1 {
-			sb.WriteString(",")
-		}
-		sb.WriteString("\n")
 	}
-	writeIndent(indent, sb)
-	sb.WriteString("}")
+	state.indent--
+	state.needsNewline = true
 	return nil
 }
 
-func renderSlice(s []interface{}, indent int, sb *strings.Builder) error {
+func renderSlice(s []interface{}, state *renderState) error {
 	if len(s) == 0 {
-		sb.WriteString(lipgloss.NewStyle().Faint(true).Render("[]"))
+		state.sb.WriteString(lipgloss.NewStyle().Faint(true).Render("empty array"))
 		return nil
 	}
 
-	sb.WriteString("[\n")
+	state.indent++
 	for i, item := range s {
-		writeIndent(indent+1, sb)
-		if err := renderJSONValue(item, indent+1, sb); err != nil {
+		if i > 0 {
+			state.sb.WriteString("\n")
+			writeIndent(state.indent, &state.sb)
+		}
+		state.isFirstInList = i == 0
+		if err := renderJSONValue(item, state); err != nil {
 			return err
 		}
-		if i < len(s)-1 {
-			sb.WriteString(",")
-		}
-		sb.WriteString("\n")
 	}
-	writeIndent(indent, sb)
-	sb.WriteString("]")
+	state.indent--
+	state.needsNewline = true
+	state.isFirstInList = false
 	return nil
 }
 
