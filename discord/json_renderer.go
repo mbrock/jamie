@@ -10,8 +10,12 @@ import (
 )
 
 var (
-	keyStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#87CEEB"))
-	valueStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#98FB98"))
+	keyStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#87CEEB"))
+	stringStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFA07A"))
+	numberStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#98FB98"))
+	booleanStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#DDA0DD"))
+	nullStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#D3D3D3"))
+	structureStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFD700"))
 )
 
 func RenderJSON(data interface{}) string {
@@ -55,15 +59,15 @@ func renderJSONValue(v interface{}, indent int, sb *strings.Builder) {
 			writeIndent(indent, sb)
 		}
 	case string:
-		sb.WriteString(valueStyle.Render(fmt.Sprintf("%q", val)))
+		sb.WriteString(stringStyle.Render(fmt.Sprintf("%q", val)))
 	case float64:
-		sb.WriteString(valueStyle.Render(strconv.FormatFloat(val, 'f', -1, 64)))
+		sb.WriteString(numberStyle.Render(strconv.FormatFloat(val, 'f', -1, 64)))
 	case bool:
-		sb.WriteString(valueStyle.Render(strconv.FormatBool(val)))
+		sb.WriteString(booleanStyle.Render(strconv.FormatBool(val)))
 	case nil:
-		sb.WriteString(valueStyle.Render("null"))
+		sb.WriteString(nullStyle.Render("null"))
 	default:
-		sb.WriteString(valueStyle.Render(fmt.Sprintf("%v", val)))
+		sb.WriteString(structureStyle.Render(fmt.Sprintf("%v", val)))
 	}
 }
 
