@@ -36,7 +36,8 @@ func ProcessEntries(entries []Entry) []Article {
 		}
 
 		if currentSection == nil ||
-			entry.Timestamp.Sub(currentSection.StartTime) > 5*time.Minute {
+			entry.Timestamp.Sub(currentSection.StartTime) > 5*time.Minute ||
+			(len(currentSection.Entries) > 0 && currentSection.Entries[len(currentSection.Entries)-1].InputMode != entry.InputMode) {
 			// Start a new section
 			currentArticle.Sections = append(
 				currentArticle.Sections,
@@ -45,7 +46,9 @@ func ProcessEntries(entries []Entry) []Article {
 			currentSection = &currentArticle.Sections[len(currentArticle.Sections)-1]
 		}
 
-		currentSection.Entries = append(currentSection.Entries, entry)
+		if entry.Type != EntryTypeClear {
+			currentSection.Entries = append(currentSection.Entries, entry)
+		}
 	}
 
 	return articles

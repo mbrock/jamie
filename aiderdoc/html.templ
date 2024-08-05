@@ -15,6 +15,9 @@ templ EntriesTemplate(articles []Article) {
 			}
 			.article {
 				margin-bottom: 40px;
+				display: flex;
+				flex-direction: column;
+				gap: 1rem;
 			}
 			.date {
 				font-size: 1.2em;
@@ -36,7 +39,9 @@ templ EntriesTemplate(articles []Article) {
 				padding: 0 15px;
 			}
 			.entry {
-				display: inline;
+				display: flex;
+				flex-direction: column;
+				gap: 0.5rem;
 				margin-right: 1rem;
 			}
 			.entry-type {
@@ -48,7 +53,7 @@ templ EntriesTemplate(articles []Article) {
 			.entry-content {
 				white-space: pre-wrap;
 			}
-			.code .entry-content {
+			.keyboard .entry-content {
 				font-family: 'DM Mono', monospace;
 			}
 			.voice .entry-content {
@@ -61,7 +66,7 @@ templ EntriesTemplate(articles []Article) {
                 content: "”";
             }
             .keyboard .entry-content::before {
-                content: "⎆ ";
+                content: "$ ";
             }
 
 			tt {
@@ -99,7 +104,7 @@ templ sectionTemplate(section Section) {
 }
 
 templ entryTemplate(entry Entry) {
-	<span class={ "entry", templ.KV("ask", entry.InputMode == InputModeAsk), templ.KV("code", entry.InputMode == InputModeCode) }>
+	<span class={ "entry", templ.KV("ask", entry.InputMode == InputModeAsk), templ.KV("code", entry.InputMode == InputModeCode), templ.KV("voice", entry.IsVoice), templ.KV("keyboard", !entry.IsVoice) }>
 		if entry.Type != EntryTypeNormal && entry.Type != EntryTypeClear {
 			<span class="entry-type">
 				switch entry.Type {
