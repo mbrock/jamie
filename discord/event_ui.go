@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"node.town/db"
-	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -237,6 +236,5 @@ func waitForEvent(events <-chan snd.DiscordEventNotification) tea.Cmd {
 		return <-events
 	}
 }
-
 
 var docStyle = lipgloss.NewStyle().Margin(1, 2)
