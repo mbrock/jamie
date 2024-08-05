@@ -293,11 +293,21 @@ func (s *DiscordEventStreamer) Stream(ctx context.Context) (<-chan DiscordEventN
 				return
 			}
 
-			var event DiscordEventNotification
+			var event db.DiscordEvent
 			err = json.Unmarshal([]byte(notification.Payload), &event)
 			if err != nil {
 				s.logger.Error("Error unmarshalling payload", "error", err)
 				continue
+			}
+
+			notification := DiscordEventNotification{
+				ID:        event.ID,
+				Operation: event.Operation,
+				Sequence:  event.Sequence,
+				Type:      event.Type,
+				RawData:   event.RawData,
+				BotToken:  event.BotToken,
+				CreatedAt: event.CreatedAt.Time,
 			}
 
 			select {
