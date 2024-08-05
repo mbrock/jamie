@@ -19,6 +19,7 @@ const (
 	EntryTypeClear
 	EntryTypeAdd
 	EntryTypeDrop
+	EntryTypeVoice
 )
 
 type Entry struct {
@@ -45,6 +46,7 @@ func ParseFile(filename string) ([]Entry, error) {
 	lineNumber := 0
 	var currentTimestamp time.Time
 	var currentContent string
+	var expectVoice bool
 
 	for scanner.Scan() {
 		lineNumber++
@@ -70,7 +72,10 @@ func ParseFile(filename string) ([]Entry, error) {
 			// Content line
 			currentContent = strings.TrimPrefix(line, "+")
 			entryType := EntryTypeNormal
-			if strings.HasPrefix(currentContent, "/ask ") {
+			if expectVoice {
+				entryType = EntryTypeVoice
+				expectVoice = false
+			} else if strings.HasPrefix(currentContent, "/ask ") {
 				currentContent = strings.TrimPrefix(currentContent, "/ask ")
 				entryType = EntryTypeAsk
 			} else if strings.HasPrefix(currentContent, "/run ") {
@@ -88,6 +93,9 @@ func ParseFile(filename string) ([]Entry, error) {
 			} else if strings.HasPrefix(currentContent, "/drop ") {
 				currentContent = strings.TrimPrefix(currentContent, "/drop ")
 				entryType = EntryTypeDrop
+			} else if currentContent == "/voice" {
+				expectVoice = true
+				continue // Skip this line and wait for the next one
 			}
 
 			processedContent := processBackticks(currentContent)
