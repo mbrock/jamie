@@ -59,16 +59,24 @@ type ParsedEvent struct {
 	Timestamp time.Time
 }
 
+var (
+	parsedEventTitleStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true)
+	parsedEventTypeStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+	parsedEventContentStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("248"))
+)
+
 type parsedEventItem struct {
 	event ParsedEvent
 }
 
 func (i parsedEventItem) Title() string {
-	return fmt.Sprintf("[%s] %s", i.event.Timestamp.Format("2006-01-02 15:04:05"), i.event.Type)
+	timestamp := parsedEventTitleStyle.Render(i.event.Timestamp.Format("2006-01-02 15:04:05"))
+	eventType := parsedEventTypeStyle.Render(i.event.Type)
+	return fmt.Sprintf("[%s] %s", timestamp, eventType)
 }
 
 func (i parsedEventItem) Description() string {
-	return i.event.Content
+	return parsedEventContentStyle.Render(i.event.Content)
 }
 
 func (i parsedEventItem) FilterValue() string {
