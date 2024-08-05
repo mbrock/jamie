@@ -47,12 +47,17 @@ templ EntriesTemplate(articles []Article) {
 				color: darkseagreen;
 				letter-spacing: -0.6px;
 			}
-			.ask .content {
-				font-style: italic;
-				opacity: 0.8;
-				font-family: 'Big Caslon', serif;
+			.content {
+				font-family: sans-serif;
 			}
-			.run {
+			.code .content {
+				font-family: 'DM Mono', monospace;
+			}
+			.voice .content {
+				font-family: sans-serif;
+				font-style: italic;
+			}
+			.run .content {
 				font-family: 'DM Mono', monospace;
 			}
 			.undo .content, .clear .content {
@@ -61,27 +66,6 @@ templ EntriesTemplate(articles []Article) {
 				font-size: 0.7rem;
 				font-weight: bold;
 				text-align: center;
-			}
-			.voice {
-				font-style: italic;
-			}
-			.ask {
-				color: #4a86e8;
-			}
-			.code {
-				color: #34a853;
-			}
-
-			@media (prefers-color-scheme: dark) {
-				.timestamp {
-					color: #aaa;
-				}
-				.ask {
-					color: #7baaf7;
-				}
-				.code {
-					color: #5cbb7a;
-				}
 			}
 		</style>
 		<table>
@@ -117,22 +101,30 @@ templ entryTemplate(entry Entry) {
 		<td class="entry-type">
 			switch entry.Type {
 				case EntryTypeAsk:
-					{ "ASK" }
+					{ "❓" }
 				case EntryTypeRun:
-					{ "RUN" }
+					{ "▶️" }
 				case EntryTypeUndo:
-					{ "UNDO" }
+					{ "↩️" }
 				case EntryTypeClear:
-					{ "CLEAR" }
+					{ "🧹" }
 				case EntryTypeAdd:
-					{ "ADD" }
+					{ "➕" }
 				case EntryTypeDrop:
-					{ "DROP" }
+					{ "➖" }
 				default:
 					if entry.InputMode == InputModeAsk {
-						{ "ASK" }
+						if entry.IsVoice {
+							{ "🎙️" }
+						} else {
+							{ "💬" }
+						}
 					} else {
-						{ "CODE" }
+						if entry.IsVoice {
+							{ "🎙️" }
+						} else {
+							{ "⌨️" }
+						}
 					}
 			}
 		</td>
