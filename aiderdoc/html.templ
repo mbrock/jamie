@@ -7,7 +7,8 @@ templ EntriesTemplate(articles []Article) {
 		<style>
 			body {
 				line-height: 1.6;
-				color: #333;
+				color: var(--text-color);
+				background-color: var(--bg-color);
 				margin: 0;
 				padding: 20px;
 				box-sizing: border-box;
@@ -17,7 +18,7 @@ templ EntriesTemplate(articles []Article) {
 				body {
 					height: 100vh;
 					column-width: 50ch;
-                    column-fill: auto;
+					column-fill: auto;
 				}
 			}
 
@@ -25,23 +26,23 @@ templ EntriesTemplate(articles []Article) {
 				font-size: 1.2em;
 				font-weight: bold;
 				margin: 2rem 0 1rem;
-				color: #666;
+				color: var(--text-color);
+				opacity: 0.8;
 				width: 100%;
 			}
 			.entry {
-			    display: flex;
-			    align-items: baseline;
-			    padding: 0 .5rem;
-
-			    max-width: 62ch;
+				display: flex;
+				align-items: baseline;
+				padding: 0 .5rem;
+				max-width: 62ch;
 			}
 			.entry-timestamp {
-                font-size: 0.8em;
-				opacity: 0.4;
+				font-size: 0.8em;
+				opacity: 0.6;
 				margin-right: 10px;
 			}
 			.entry-type {
-                font-weight: bold;
+				font-weight: bold;
 				font-size: 0.9em;
 				margin-right: 5px;
 				font-family: 'DM Mono', monospace;
@@ -55,15 +56,12 @@ templ EntriesTemplate(articles []Article) {
 			.voice .entry-content {
 				font-style: italic;
 			}
-
-            .voice .entry-content {
-                font-style: italic;
-            }
-
 			tt {
 				padding: 0px 4px;
 				letter-spacing: -.5px;
-    			}
+				background-color: var(--color-border);
+				border-radius: 3px;
+			}
 		</style>
 		for _, article := range articles {
 			@articleTemplate(article)
