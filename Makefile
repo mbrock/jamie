@@ -10,11 +10,14 @@ export CGO_LDFLAGS=$(shell pkg-config --libs-only-L libonnxruntime)
 
 all: test build
 
-build:
+build: sqlc templ
 	$(GOBUILD) -o $(BINARY_NAME) -v
 
-test:
+test: sqlc templ
 	$(GOTEST) -v -count=1 ./...
+
+serve:
+	templ generate --watch --cmd="go run main.go serve -p 4445"
 
 clean:
 	$(GOCLEAN)
