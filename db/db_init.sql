@@ -168,6 +168,24 @@ CREATE TABLE IF NOT EXISTS discord_events (
     created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Create a function to notify about new discord events
+CREATE OR REPLACE FUNCTION notify_new_discord_event() RETURNS TRIGGER AS $$
+BEGIN
+    PERFORM pg_notify('new_discord_event', row_to_json(NEW)::text);
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Create a trigger for discord_events table
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'discord_event_inserted') THEN
+        CREATE TRIGGER discord_event_inserted
+        AFTER INSERT ON discord_events
+        FOR EACH ROW EXECUTE FUNCTION notify_new_discord_event();
+    END IF;
+END $$;
+
 -- Function to upsert transcription segment
 DO $$
 BEGIN
