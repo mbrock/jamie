@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/jackc/pgx/v5/pgtype"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -148,39 +149,14 @@ func (s *PostgresPacketStreamer) Stream(
 				return
 			}
 
-			var packet OpusPacketNotification
-			err = json.Unmarshal([]byte(notification.Payload), &packet)
+			packet, err := s.parseNotificationPayload(notification.Payload)
 			if err != nil {
-				s.logger.Error("Error unmarshalling payload", "error", err)
+				s.logger.Error("Error parsing notification payload", "error", err)
 				continue
 			}
-
-			// Decode the hex-encoded opus data
-			decodedData, err := hex.DecodeString(
-				strings.TrimPrefix(packet.OpusData, "\\x"),
-			)
-			if err != nil {
-				s.logger.Error("Error decoding hex string", "error", err)
-				continue
-			}
-			packet.OpusData = string(decodedData)
-
-			// Log the first few bytes of the decoded opus data
-			if len(packet.OpusData) > 0 {
-				s.logger.Debug(
-					"Decoded opus packet data",
-					"first_bytes",
-					fmt.Sprintf(
-						"%x",
-						packet.OpusData[:min(4, len(packet.OpusData))],
-					),
-				)
-			}
-
-			packet.UserID = s.getUserIDFromCache(packet.Ssrc)
 
 			select {
-			case packetChan <- packet:
+			case packetChan <- *packet:
 			case <-ctx.Done():
 				return
 			}
@@ -197,6 +173,72 @@ func (s *PostgresPacketStreamer) getUserIDFromCache(ssrc int64) string {
 		return ""
 	}
 	return userID
+}
+
+func (s *PostgresPacketStreamer) parseNotificationPayload(payload string) (*OpusPacketNotification, error) {
+	var packet OpusPacketNotification
+	fields := strings.Split(payload, ",")
+	for _, field := range fields {
+		keyValue := strings.SplitN(field, ":", 2)
+		if len(keyValue) != 2 {
+			continue
+		}
+		key := strings.TrimSpace(keyValue[0])
+		value := strings.TrimSpace(keyValue[1])
+		switch key {
+		case "id":
+			id, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				return nil, fmt.Errorf("error parsing id: %w", err)
+			}
+			packet.ID = id
+		case "guild_id":
+			packet.GuildID = value
+		case "channel_id":
+			packet.ChannelID = value
+		case "ssrc":
+			ssrc, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				return nil, fmt.Errorf("error parsing ssrc: %w", err)
+			}
+			packet.Ssrc = ssrc
+		case "sequence":
+			seq, err := strconv.ParseInt(value, 10, 32)
+			if err != nil {
+				return nil, fmt.Errorf("error parsing sequence: %w", err)
+			}
+			packet.Sequence = int32(seq)
+		case "timestamp":
+			ts, err := strconv.ParseInt(value, 10, 64)
+			if err != nil {
+				return nil, fmt.Errorf("error parsing timestamp: %w", err)
+			}
+			packet.Timestamp = ts
+		case "opus_data":
+			decodedData, err := hex.DecodeString(strings.TrimPrefix(value, "\\x"))
+			if err != nil {
+				return nil, fmt.Errorf("error decoding opus data: %w", err)
+			}
+			packet.OpusData = string(decodedData)
+		case "created_at":
+			packet.CreatedAt = value
+		}
+	}
+
+	packet.UserID = s.getUserIDFromCache(packet.Ssrc)
+
+	if len(packet.OpusData) > 0 {
+		s.logger.Debug(
+			"Decoded opus packet data",
+			"first_bytes",
+			fmt.Sprintf(
+				"%x",
+				packet.OpusData[:min(4, len(packet.OpusData))],
+			),
+		)
+	}
+
+	return &packet, nil
 }
 
 type DiscordEventNotification struct {
