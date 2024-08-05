@@ -62,17 +62,25 @@ templ EntriesTemplate(articles []Article) {
 				font-weight: bold;
 				text-align: center;
 			}
-			.voice .content {
+			.voice {
 				font-style: italic;
+			}
+			.ask {
 				color: #4a86e8;
+			}
+			.code {
+				color: #34a853;
 			}
 
 			@media (prefers-color-scheme: dark) {
 				.timestamp {
 					color: #aaa;
 				}
-				.voice .content {
+				.ask {
 					color: #7baaf7;
+				}
+				.code {
+					color: #5cbb7a;
 				}
 			}
 		</style>
@@ -104,7 +112,7 @@ templ sectionTemplate(section Section) {
 }
 
 templ entryTemplate(entry Entry) {
-	<tr class={ templ.KV("ask", entry.Type == EntryTypeAsk), templ.KV("run", entry.Type == EntryTypeRun), templ.KV("undo", entry.Type == EntryTypeUndo), templ.KV("clear", entry.Type == EntryTypeClear), templ.KV("add", entry.Type == EntryTypeAdd), templ.KV("drop", entry.Type == EntryTypeDrop), templ.KV("voice", entry.Type == EntryTypeVoice), templ.KV("code", entry.Type == EntryTypeNormal) }>
+	<tr class={ templ.KV("ask", entry.InputMode == InputModeAsk), templ.KV("code", entry.InputMode == InputModeCode), templ.KV("voice", entry.IsVoice) }>
 		<td class="timestamp">{ entry.Timestamp.Format("15:04") }</td>
 		<td class="entry-type">
 			switch entry.Type {
@@ -120,10 +128,12 @@ templ entryTemplate(entry Entry) {
 					{ "ADD" }
 				case EntryTypeDrop:
 					{ "DROP" }
-				case EntryTypeVoice:
-					{ "VOICE" }
 				default:
-					{ "CODE" }
+					if entry.InputMode == InputModeAsk {
+						{ "ASK" }
+					} else {
+						{ "CODE" }
+					}
 			}
 		</td>
 		<td class="content">

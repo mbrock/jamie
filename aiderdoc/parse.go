@@ -10,6 +10,7 @@ import (
 )
 
 type EntryType int
+type InputMode int
 
 const (
 	EntryTypeNormal EntryType = iota
@@ -19,7 +20,11 @@ const (
 	EntryTypeClear
 	EntryTypeAdd
 	EntryTypeDrop
-	EntryTypeVoice
+)
+
+const (
+	InputModeCode InputMode = iota
+	InputModeAsk
 )
 
 type Entry struct {
@@ -27,6 +32,8 @@ type Entry struct {
 	Content    []Span
 	LineNumber int
 	Type       EntryType
+	InputMode  InputMode
+	IsVoice    bool
 }
 
 type Span struct {
@@ -47,6 +54,7 @@ func ParseFile(filename string) ([]Entry, error) {
 	var currentTimestamp time.Time
 	var currentContent string
 	var expectVoice bool
+	currentInputMode := InputModeCode
 
 	for scanner.Scan() {
 		lineNumber++
@@ -72,9 +80,17 @@ func ParseFile(filename string) ([]Entry, error) {
 			// Content line
 			currentContent = strings.TrimPrefix(line, "+")
 			entryType := EntryTypeNormal
-			if expectVoice {
-				entryType = EntryTypeVoice
-				expectVoice = false
+			isVoice := expectVoice
+			expectVoice = false
+
+			if strings.HasPrefix(currentContent, "/chat-mode ") {
+				mode := strings.TrimPrefix(currentContent, "/chat-mode ")
+				if mode == "ask" {
+					currentInputMode = InputModeAsk
+				} else if mode == "code" {
+					currentInputMode = InputModeCode
+				}
+				continue // Skip this line as it's just changing the mode
 			} else if strings.HasPrefix(currentContent, "/ask ") {
 				currentContent = strings.TrimPrefix(currentContent, "/ask ")
 				entryType = EntryTypeAsk
@@ -104,6 +120,8 @@ func ParseFile(filename string) ([]Entry, error) {
 				Content:    processedContent,
 				LineNumber: lineNumber,
 				Type:       entryType,
+				InputMode:  currentInputMode,
+				IsVoice:    isVoice,
 			})
 
 		case strings.TrimSpace(line) == "":
