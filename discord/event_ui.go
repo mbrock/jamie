@@ -53,16 +53,9 @@ func NewEventUI(events <-chan snd.DiscordEventNotification, existingEvents []db.
 	delegate := list.NewDefaultDelegate()
 	items := make([]list.Item, len(existingEvents))
 	for i, event := range existingEvents {
-		items[i] = eventItem{event: snd.DiscordEventNotification{
-			ID:        event.ID,
-			Operation: event.Operation,
-			Sequence:  event.Sequence,
-			Type:      event.Type,
-			RawData:   event.RawData,
-			BotToken:  event.BotToken,
-			CreatedAt: event.CreatedAt.Time,
-		}}
-		m.parsedEvents = append(m.parsedEvents, parseEvent(event))
+		convertedEvent := snd.ConvertDiscordEvent(event).(snd.DiscordEventNotification)
+		items[i] = eventItem{event: convertedEvent}
+		m.parsedEvents = append(m.parsedEvents, parseEvent(convertedEvent))
 	}
 	m.list = list.New(items, delegate, 0, 0)
 	m.list.Title = "Discord Events"

@@ -274,6 +274,33 @@ func (s *DiscordEventStreamer) Stream(ctx context.Context) (<-chan DiscordEventN
 	return eventChan, nil
 }
 
+func ConvertDiscordEvent(event interface{}) interface{} {
+	switch e := event.(type) {
+	case db.DiscordEvent:
+		return snd.DiscordEventNotification{
+			ID:        e.ID,
+			Operation: e.Operation,
+			Sequence:  e.Sequence,
+			Type:      e.Type,
+			RawData:   e.RawData,
+			BotToken:  e.BotToken,
+			CreatedAt: e.CreatedAt.Time,
+		}
+	case snd.DiscordEventNotification:
+		return db.DiscordEvent{
+			ID:        e.ID,
+			Operation: e.Operation,
+			Sequence:  e.Sequence,
+			Type:      e.Type,
+			RawData:   e.RawData,
+			BotToken:  e.BotToken,
+			CreatedAt: pgtype.Timestamptz{Time: e.CreatedAt, Valid: true},
+		}
+	default:
+		return nil
+	}
+}
+
 type DefaultPacketDemuxer struct {
 	cache  UserIDCache
 	logger Logger
