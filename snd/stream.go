@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/jackc/pgx/v5/pgtype"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -257,25 +256,15 @@ func (s *DiscordEventStreamer) Stream(ctx context.Context) (<-chan DiscordEventN
 				return
 			}
 
-			var event db.DiscordEvent
-			err = json.Unmarshal([]byte(notification.Payload), &event)
+			var discordEvent DiscordEventNotification
+			err = json.Unmarshal([]byte(notification.Payload), &discordEvent)
 			if err != nil {
 				s.logger.Error("Error unmarshalling payload", "error", err)
 				continue
 			}
 
-			notification := DiscordEventNotification{
-				ID:        event.ID,
-				Operation: event.Operation,
-				Sequence:  event.Sequence,
-				Type:      event.Type,
-				RawData:   event.RawData,
-				BotToken:  event.BotToken,
-				CreatedAt: event.CreatedAt.Time,
-			}
-
 			select {
-			case eventChan <- event:
+			case eventChan <- discordEvent:
 			case <-ctx.Done():
 				return
 			}
