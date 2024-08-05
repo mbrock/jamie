@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/charmbracelet/log"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -240,7 +241,7 @@ func (s *DiscordEventStreamer) Stream(ctx context.Context) (<-chan DiscordEventN
 		for {
 			notification, err := conn.Conn().WaitForNotification(ctx)
 			if err != nil {
-				if err == context.Canceled {
+				if errors.Is(err, context.Canceled) {
 					return
 				}
 				s.logger.Error("Error waiting for notification", "error", err)
@@ -415,7 +416,7 @@ func (l *PostgresTranscriptionChangeListener) Listen(
 		for {
 			notification, err := conn.Conn().WaitForNotification(ctx)
 			if err != nil {
-				if err == context.Canceled {
+				if errors.Is(err, context.Canceled) {
 					return
 				}
 				l.logger.Error("Error waiting for notification", "error", err)

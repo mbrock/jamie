@@ -2,7 +2,6 @@ package discord
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -26,14 +25,14 @@ func (i eventItem) FilterValue() string {
 	return i.event.Type
 }
 
-type model struct {
+type Model struct {
 	list     list.Model
-	events   chan snd.DiscordEventNotification
+	events   <-chan snd.DiscordEventNotification
 	quitting bool
 }
 
-func NewEventUI(events chan snd.DiscordEventNotification) *model {
-	m := &model{events: events}
+func NewEventUI(events <-chan snd.DiscordEventNotification) *Model {
+	m := &Model{events: events}
 
 	delegate := list.NewDefaultDelegate()
 	m.list = list.New([]list.Item{}, delegate, 0, 0)
@@ -47,14 +46,14 @@ func NewEventUI(events chan snd.DiscordEventNotification) *model {
 	return m
 }
 
-func (m model) Init() tea.Cmd {
+func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		waitForEvent(m.events),
 		tea.EnterAltScreen,
 	)
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		if msg.String() == "ctrl+c" || msg.String() == "q" {
@@ -68,8 +67,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case snd.DiscordEventNotification:
 		m.list.InsertItem(0, eventItem{event: msg})
-		if m.list.Length() > 1000 {
-			m.list.RemoveItem(m.list.Length() - 1)
+		if len(m.list.Items()) > 1000 {
+			m.list.RemoveItem(len(m.list.Items()) - 1)
 		}
 		return m, waitForEvent(m.events)
 	}
@@ -79,14 +78,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m model) View() string {
+func (m Model) View() string {
 	if m.quitting {
 		return "Goodbye!\n"
 	}
 	return docStyle.Render(m.list.View())
 }
 
-func waitForEvent(events chan snd.DiscordEventNotification) tea.Cmd {
+func waitForEvent(events <-chan snd.DiscordEventNotification) tea.Cmd {
 	return func() tea.Msg {
 		return <-events
 	}

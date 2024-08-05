@@ -6,6 +6,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	tea "github.com/charmbracelet/bubbletea"
+	"node.town/discord"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -330,7 +332,7 @@ func init() {
 		Short: "Show incoming Discord events",
 		Long:  `This command displays a live stream of incoming Discord events using a bubble tea UI.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			sqlDB, queries, err := db.OpenDatabase()
+			sqlDB, _, err := db.OpenDatabase()
 			handleError(err, "Failed to open database")
 			defer sqlDB.Close()
 
