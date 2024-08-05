@@ -15,9 +15,6 @@ templ EntriesTemplate(articles []Article) {
 			}
 			.article {
 				margin-bottom: 40px;
-				display: flex;
-				flex-direction: column;
-				gap: 1rem;
 			}
 			.date {
 				font-size: 1.2em;
@@ -25,24 +22,17 @@ templ EntriesTemplate(articles []Article) {
 				margin-bottom: 20px;
 				color: #666;
 			}
-			.section {
+			.entry {
 				display: flex;
 				align-items: baseline;
+				margin-bottom: 10px;
 			}
-			.section-timestamp {
+			.entry-timestamp {
 				font-family: 'DM Mono', monospace;
 				font-size: 0.8em;
 				color: #888;
-				margin-bottom: 10px;
-			}
-			.section-content {
-				padding: 0 15px;
-			}
-			.entry {
-				display: flex;
-				flex-direction: column;
-				gap: 0.5rem;
-				margin-right: 1rem;
+				margin-right: 10px;
+				min-width: 60px;
 			}
 			.entry-type {
 				font-family: 'DM Mono', monospace;
@@ -104,7 +94,8 @@ templ sectionTemplate(section Section) {
 }
 
 templ entryTemplate(entry Entry) {
-	<span class={ "entry", templ.KV("ask", entry.InputMode == InputModeAsk), templ.KV("code", entry.InputMode == InputModeCode), templ.KV("voice", entry.IsVoice), templ.KV("keyboard", !entry.IsVoice) }>
+	<div class={ "entry", templ.KV("ask", entry.InputMode == InputModeAsk), templ.KV("code", entry.InputMode == InputModeCode) }>
+		<span class="entry-timestamp">{ entry.Timestamp.Format("15:04") }</span>
 		if entry.Type != EntryTypeNormal && entry.Type != EntryTypeClear {
 			<span class="entry-type">
 				switch entry.Type {
