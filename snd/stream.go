@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/jackc/pgx/v5/pgtype"
 	"strings"
 	"sync"
 	"time"
@@ -201,7 +202,7 @@ func (s *PostgresPacketStreamer) getUserIDFromCache(ssrc int64) string {
 type DiscordEventNotification struct {
 	ID        int32           `json:"id"`
 	Operation int32           `json:"operation"`
-	Sequence  sql.NullInt32   `json:"sequence"`
+	Sequence  pgtype.Int4     `json:"sequence"`
 	Type      string          `json:"type"`
 	RawData   json.RawMessage `json:"raw_data"`
 	BotToken  string          `json:"bot_token"`
@@ -209,9 +210,9 @@ type DiscordEventNotification struct {
 }
 
 type DiscordEventStreamer struct {
-	pool     *pgxpool.Pool
-	queries  *db.Queries
-	logger   Logger
+	pool    *pgxpool.Pool
+	queries *db.Queries
+	logger  Logger
 }
 
 func NewDiscordEventStreamer(pool *pgxpool.Pool, queries *db.Queries, logger Logger) *DiscordEventStreamer {
