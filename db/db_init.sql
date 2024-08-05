@@ -158,6 +158,16 @@ CREATE INDEX IF NOT EXISTS idx_word_alternatives_word_id ON word_alternatives(wo
 CREATE INDEX IF NOT EXISTS idx_transcription_words_version ON transcription_words(version);
 CREATE INDEX IF NOT EXISTS idx_transcription_segments_version ON transcription_segments(version);
 
+CREATE TABLE IF NOT EXISTS discord_events (
+    id SERIAL PRIMARY KEY,
+    operation INTEGER NOT NULL,
+    sequence INTEGER,
+    type TEXT NOT NULL,
+    raw_data JSONB NOT NULL,
+    bot_token TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Function to upsert transcription segment
 DO $$
 BEGIN

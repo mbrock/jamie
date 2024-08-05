@@ -148,6 +148,19 @@ VALUES (
     )
 RETURNING id;
 
+-- name: InsertDiscordEvent :one
+INSERT INTO discord_events (
+    operation,
+    sequence,
+    type,
+    raw_data,
+    bot_token
+)
+VALUES (
+    $1, $2, $3, $4, $5
+)
+RETURNING id;
+
 -- name: InsertWordAlternative :exec
 INSERT INTO word_alternatives (word_id, content, confidence)
 VALUES ($1, $2, $3);

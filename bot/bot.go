@@ -18,8 +18,21 @@ type Bot struct {
 	SessionID int32
 }
 
-func (b *Bot) HandleEvent(_ *discordgo.Session, m *discordgo.Event) {
+func (b *Bot) HandleEvent(s *discordgo.Session, m *discordgo.Event) {
 	log.Info("message", "op", m.Operation, "type", m.Type)
+
+	// Insert the event into the database
+	_, err := b.Queries.InsertDiscordEvent(context.Background(), db.InsertDiscordEventParams{
+		Operation: int32(m.Operation),
+		Sequence:  pgtype.Int4{Int32: int32(m.Sequence), Valid: m.Sequence != 0},
+		Type:      m.Type,
+		RawData:   m.RawData,
+		BotToken:  s.Identify.Token,
+	})
+
+	if err != nil {
+		log.Error("Failed to insert Discord event", "error", err)
+	}
 }
 
 func (b *Bot) HandleGuildCreate(
