@@ -31,11 +31,23 @@ type Model struct {
 	quitting bool
 }
 
-func NewEventUI(events <-chan snd.DiscordEventNotification) *Model {
+func NewEventUI(events <-chan snd.DiscordEventNotification, existingEvents []db.DiscordEvent) *Model {
 	m := &Model{events: events}
 
 	delegate := list.NewDefaultDelegate()
-	m.list = list.New([]list.Item{}, delegate, 0, 0)
+	items := make([]list.Item, len(existingEvents))
+	for i, event := range existingEvents {
+		items[i] = eventItem{event: snd.DiscordEventNotification{
+			ID:        event.ID,
+			Operation: event.Operation,
+			Sequence:  event.Sequence,
+			Type:      event.Type,
+			RawData:   event.RawData,
+			BotToken:  event.BotToken,
+			CreatedAt: event.CreatedAt,
+		}}
+	}
+	m.list = list.New(items, delegate, 0, 0)
 	m.list.Title = "Discord Events"
 	m.list.SetShowStatusBar(false)
 	m.list.SetFilteringEnabled(false)

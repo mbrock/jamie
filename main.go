@@ -340,11 +340,14 @@ func init() {
 			handleError(err, "Failed to create connection pool")
 			defer pool.Close()
 
-			streamer := snd.NewDiscordEventStreamer(pool, log.Default())
+			streamer := snd.NewDiscordEventStreamer(pool, queries, log.Default())
 			eventChan, err := snd.StreamDiscordEvents(context.Background(), streamer)
 			handleError(err, "Failed to start Discord event stream")
 
-			ui := discord.NewEventUI(eventChan)
+			existingEvents, err := queries.GetRecentDiscordEvents(context.Background(), 100)
+			handleError(err, "Failed to fetch recent Discord events")
+
+			ui := discord.NewEventUI(eventChan, existingEvents)
 			p := tea.NewProgram(ui)
 			if err := p.Start(); err != nil {
 				log.Fatal("Error running program", "error", err)

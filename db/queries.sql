@@ -194,3 +194,8 @@ WHERE (
 ORDER BY real_start_time,
     tw.id,
     wa.confidence DESC;
+-- name: GetRecentDiscordEvents :many
+SELECT id, operation, sequence, type, raw_data, bot_token, created_at
+FROM discord_events
+ORDER BY created_at DESC
+LIMIT $1;

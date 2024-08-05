@@ -209,14 +209,16 @@ type DiscordEventNotification struct {
 }
 
 type DiscordEventStreamer struct {
-	pool   *pgxpool.Pool
-	logger Logger
+	pool     *pgxpool.Pool
+	queries  *db.Queries
+	logger   Logger
 }
 
-func NewDiscordEventStreamer(pool *pgxpool.Pool, logger Logger) *DiscordEventStreamer {
+func NewDiscordEventStreamer(pool *pgxpool.Pool, queries *db.Queries, logger Logger) *DiscordEventStreamer {
 	return &DiscordEventStreamer{
-		pool:   pool,
-		logger: logger,
+		pool:    pool,
+		queries: queries,
+		logger:  logger,
 	}
 }
 
