@@ -23,29 +23,37 @@ func RenderJSON(data interface{}) string {
 func renderJSONValue(v interface{}, indent int, sb *strings.Builder) {
 	switch val := v.(type) {
 	case map[string]interface{}:
-		sb.WriteString("\n")
-		keys := make([]string, 0, len(val))
-		for k := range val {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		for _, k := range keys {
-			writeIndent(indent+1, sb)
-			sb.WriteString(keyStyle.Render(k))
-			sb.WriteString(": ")
-			renderJSONValue(val[k], indent+1, sb)
+		if len(val) == 0 {
+			sb.WriteString(lipgloss.NewStyle().Faint(true).Render("{}"))
+		} else {
 			sb.WriteString("\n")
+			keys := make([]string, 0, len(val))
+			for k := range val {
+				keys = append(keys, k)
+			}
+			sort.Strings(keys)
+			for _, k := range keys {
+				writeIndent(indent+1, sb)
+				sb.WriteString(keyStyle.Render(k))
+				sb.WriteString(": ")
+				renderJSONValue(val[k], indent+1, sb)
+				sb.WriteString("\n")
+			}
+			writeIndent(indent, sb)
 		}
-		writeIndent(indent, sb)
 	case []interface{}:
-		sb.WriteString("\n")
-		for i, item := range val {
-			writeIndent(indent+1, sb)
-			sb.WriteString(fmt.Sprintf("%d: ", i))
-			renderJSONValue(item, indent+1, sb)
+		if len(val) == 0 {
+			sb.WriteString(lipgloss.NewStyle().Faint(true).Render("[]"))
+		} else {
 			sb.WriteString("\n")
+			for i, item := range val {
+				writeIndent(indent+1, sb)
+				sb.WriteString(fmt.Sprintf("%d: ", i))
+				renderJSONValue(item, indent+1, sb)
+				sb.WriteString("\n")
+			}
+			writeIndent(indent, sb)
 		}
-		writeIndent(indent, sb)
 	case string:
 		sb.WriteString(valueStyle.Render(fmt.Sprintf("%q", val)))
 	case float64:
