@@ -325,6 +325,32 @@ func init() {
 	}
 	rootCmd.AddCommand(prologCmd)
 
+	discordEventsCmd := &cobra.Command{
+		Use:   "discord-events",
+		Short: "Show incoming Discord events",
+		Long:  `This command displays a live stream of incoming Discord events using a bubble tea UI.`,
+		Run: func(cmd *cobra.Command, args []string) {
+			sqlDB, queries, err := db.OpenDatabase()
+			handleError(err, "Failed to open database")
+			defer sqlDB.Close()
+
+			pool, err := pgxpool.New(context.Background(), viper.GetString("DATABASE_URL"))
+			handleError(err, "Failed to create connection pool")
+			defer pool.Close()
+
+			streamer := snd.NewDiscordEventStreamer(pool, log.Default())
+			eventChan, err := snd.StreamDiscordEvents(context.Background(), streamer)
+			handleError(err, "Failed to start Discord event stream")
+
+			ui := discord.NewEventUI(eventChan)
+			p := tea.NewProgram(ui)
+			if err := p.Start(); err != nil {
+				log.Fatal("Error running program", "error", err)
+			}
+		},
+	}
+	rootCmd.AddCommand(discordEventsCmd)
+
 	packetInfoCmd.Flags().Int64P("ssrc", "s", 0, "SSRC to filter packets")
 	packetInfoCmd.Flags().
 		StringP("start", "f", time.Now().Add(-2*time.Minute).Format(time.RFC3339), "Start time (RFC3339 format)")
