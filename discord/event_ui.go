@@ -86,8 +86,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.showingJSON {
 				m.showingJSON = true
 				m.selectedItem = m.list.SelectedItem().(eventItem)
-				renderedJSON := RenderJSON(m.selectedItem.event.RawData)
-				m.jsonViewport.SetContent(renderedJSON)
+				var rawData interface{}
+				err := json.Unmarshal(m.selectedItem.event.RawData, &rawData)
+				if err != nil {
+					m.jsonViewport.SetContent(fmt.Sprintf("Error unmarshalling JSON: %v", err))
+				} else {
+					renderedJSON := RenderJSON(rawData)
+					m.jsonViewport.SetContent(renderedJSON)
+				}
 			} else {
 				m.showingJSON = false
 			}
