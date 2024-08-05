@@ -197,6 +197,74 @@ func (s *PostgresPacketStreamer) getUserIDFromCache(ssrc int64) string {
 	return userID
 }
 
+type DiscordEventNotification struct {
+	ID        int32           `json:"id"`
+	Operation int32           `json:"operation"`
+	Sequence  sql.NullInt32   `json:"sequence"`
+	Type      string          `json:"type"`
+	RawData   json.RawMessage `json:"raw_data"`
+	BotToken  string          `json:"bot_token"`
+	CreatedAt time.Time       `json:"created_at"`
+}
+
+type DiscordEventStreamer struct {
+	pool   *pgxpool.Pool
+	logger Logger
+}
+
+func NewDiscordEventStreamer(pool *pgxpool.Pool, logger Logger) *DiscordEventStreamer {
+	return &DiscordEventStreamer{
+		pool:   pool,
+		logger: logger,
+	}
+}
+
+func (s *DiscordEventStreamer) Stream(ctx context.Context) (<-chan DiscordEventNotification, error) {
+	conn, err := s.pool.Acquire(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to acquire database connection: %w", err)
+	}
+
+	_, err = conn.Exec(ctx, "LISTEN new_discord_event")
+	if err != nil {
+		conn.Release()
+		return nil, fmt.Errorf("failed to listen for new_discord_event: %w", err)
+	}
+
+	eventChan := make(chan DiscordEventNotification)
+
+	go func() {
+		defer close(eventChan)
+		defer conn.Release()
+
+		for {
+			notification, err := conn.Conn().WaitForNotification(ctx)
+			if err != nil {
+				if err == context.Canceled {
+					return
+				}
+				s.logger.Error("Error waiting for notification", "error", err)
+				return
+			}
+
+			var event DiscordEventNotification
+			err = json.Unmarshal([]byte(notification.Payload), &event)
+			if err != nil {
+				s.logger.Error("Error unmarshalling payload", "error", err)
+				continue
+			}
+
+			select {
+			case eventChan <- event:
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return eventChan, nil
+}
+
 type DefaultPacketDemuxer struct {
 	cache  UserIDCache
 	logger Logger
@@ -282,6 +350,13 @@ func StreamOpusPackets(
 	ctx context.Context,
 	streamer PacketStreamer,
 ) (<-chan OpusPacketNotification, error) {
+	return streamer.Stream(ctx)
+}
+
+func StreamDiscordEvents(
+	ctx context.Context,
+	streamer *DiscordEventStreamer,
+) (<-chan DiscordEventNotification, error) {
 	return streamer.Stream(ctx)
 }
 
