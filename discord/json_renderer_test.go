@@ -94,7 +94,7 @@ name: "David"
 			result = strings.TrimSpace(result)
 			expected := strings.TrimSpace(tt.expected)
 			if result != expected {
-				t.Errorf("RenderJSON() = %v, want %v", result, expected)
+				t.Errorf("RenderJSON() = \n%v, want \n%v", result, expected)
 			}
 		})
 	}

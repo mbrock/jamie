@@ -55,35 +55,6 @@ func renderJSONValue(v interface{}, state *renderState) {
 	}
 }
 
-func renderJSONValue(v interface{}, state *renderState) {
-	if state.needsNewline {
-		state.sb.WriteString("\n")
-		writeIndent(state.indent, &state.sb)
-		state.needsNewline = false
-	}
-
-	switch val := v.(type) {
-	case map[string]interface{}:
-		renderMap(val, state)
-	case []interface{}:
-		renderSlice(val, state)
-	case string:
-		state.sb.WriteString(stringStyle.Render(fmt.Sprintf("%q", val)))
-	case float64:
-		state.sb.WriteString(numberStyle.Render(strconv.FormatFloat(val, 'f', -1, 64)))
-	case int:
-		state.sb.WriteString(numberStyle.Render(strconv.Itoa(val)))
-	case bool:
-		state.sb.WriteString(booleanStyle.Render(strconv.FormatBool(val)))
-	case nil:
-		state.sb.WriteString(nullStyle.Render("null"))
-	case json.Number:
-		state.sb.WriteString(numberStyle.Render(string(val)))
-	default:
-		state.sb.WriteString(fmt.Sprintf("unsupported type: %T", v))
-	}
-}
-
 func renderMap(m map[string]interface{}, state *renderState) {
 	if len(m) == 0 {
 		state.sb.WriteString("{}")
