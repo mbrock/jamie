@@ -5,100 +5,93 @@ import "node.town/http"
 templ EntriesTemplate(articles []Article) {
 	@http.RootTemplate("Aider Chronicle") {
 		<style>
-			table {
-				width: 100%;
-				border-collapse: collapse;
+			body {
+				font-family: sans-serif;
+				line-height: 1.6;
+				color: #333;
+				max-width: 800px;
+				margin: 0 auto;
+				padding: 20px;
 			}
-			td {
-				padding: 2px 5px;
+			.article {
+				margin-bottom: 40px;
 			}
-			tr {
-				vertical-align: baseline;
+			.date {
+				font-size: 1.2em;
+				font-weight: bold;
+				margin-bottom: 20px;
+				color: #666;
 			}
-			tbody tr:last-child td {
-				padding-bottom: 1.4rem;
+			.section {
+				margin-bottom: 30px;
 			}
-			.timestamp {
+			.section-timestamp {
 				font-family: 'DM Mono', monospace;
-				font-size: 0.8rem;
-				opacity: 0.5;
-				text-align: right;
-				white-space: nowrap;
+				font-size: 0.8em;
+				color: #888;
+				margin-bottom: 10px;
+			}
+			.section-content {
+				background-color: #f9f9f9;
+				border-radius: 5px;
+				padding: 15px;
+			}
+			.entry {
+				display: inline;
+				margin-right: 5px;
 			}
 			.entry-type {
 				font-family: 'DM Mono', monospace;
 				font-weight: 600;
-				font-size: 0.8rem;
-				text-align: right;
-				padding-right: 0.7rem;
-				opacity: 0.7;
+				font-size: 0.9em;
+				margin-right: 5px;
 			}
-			.content {
+			.entry-content {
 				white-space: pre-wrap;
 			}
-			.date {
-				opacity: 0.6;
-				text-align: center;
-				padding: 1.4rem 0;
-			}
-			tt {
-				font-weight: 400;
-				margin: 0 5px;
-				color: darkseagreen;
-				letter-spacing: -0.6px;
-			}
-			.content {
-				font-family: sans-serif;
-			}
-			.code .content {
+			.code .entry-content {
 				font-family: 'DM Mono', monospace;
 			}
-			.voice .content {
-				font-family: sans-serif;
+			.voice .entry-content {
 				font-style: italic;
 			}
-			.run .content {
-				font-family: 'DM Mono', monospace;
-			}
-			.undo .content, .clear .content {
-				font-family: 'DM Mono', monospace;
-				text-transform: uppercase;
-				font-size: 0.7rem;
-				font-weight: bold;
-				text-align: center;
+			tt {
+				background-color: #e6e6e6;
+				padding: 2px 4px;
+				border-radius: 3px;
 			}
 		</style>
-		<table>
-			for _, article := range articles {
-				<tbody>
-					@articleTemplate(article)
-				</tbody>
-			}
-		</table>
+		for _, article := range articles {
+			@articleTemplate(article)
+		}
 	}
 }
 
 templ articleTemplate(article Article) {
-	if article.NewDay {
-		<tr>
-			<td colspan="3" class="date">{ article.StartTime.Format("Monday, 2 January") }</td>
-		</tr>
-	}
-	for _, section := range article.Sections {
-		@sectionTemplate(section)
-	}
+	<div class="article">
+		if article.NewDay {
+			<div class="date">{ article.StartTime.Format("Monday, 2 January") }</div>
+		}
+		for _, section := range article.Sections {
+			@sectionTemplate(section)
+		}
+	</div>
 }
 
 templ sectionTemplate(section Section) {
-	for _, entry := range section.Entries {
-		@entryTemplate(entry)
-	}
+	<div class="section">
+		<div class="section-timestamp">{ section.StartTime.Format("15:04") }</div>
+		<div class="section-content">
+			for _, entry := range section.Entries {
+				@entryTemplate(entry)
+			}
+		</div>
+	</div>
 }
 
 templ entryTemplate(entry Entry) {
-	<tr class={ templ.KV("ask", entry.InputMode == InputModeAsk), templ.KV("code", entry.InputMode == InputModeCode), templ.KV("voice", entry.IsVoice) }>
-		<td class="timestamp">{ entry.Timestamp.Format("15:04") }</td>
-		<td class="entry-type">
+	<span class={ "entry", templ.KV("ask", entry.InputMode == InputModeAsk), templ.KV("code", entry.InputMode == InputModeCode), templ.KV("voice", entry.IsVoice) }>
+		<span class="entry-type">
 			switch entry.Type {
 				case EntryTypeAsk:
 					{ "❓" }
@@ -127,8 +120,8 @@ templ entryTemplate(entry Entry) {
 						}
 					}
 			}
-		</td>
-		<td class="content">
+		</span>
+		<span class="entry-content">
 			for _, span := range entry.Content {
 				if span.IsCode {
 					<tt>{ span.Text }</tt>
@@ -136,6 +129,6 @@ templ entryTemplate(entry Entry) {
 					{ span.Text }
 				}
 			}
-		</td>
-	</tr>
+		</span>
+	</span>
 }
