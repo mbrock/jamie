@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
+	"unicode"
 
 	"github.com/charmbracelet/lipgloss"
 )
@@ -58,7 +59,12 @@ func renderMap(v reflect.Value, indent int) string {
 	keys := v.MapKeys()
 	for i, key := range keys {
 		sb.WriteString(strings.Repeat("  ", indent+1))
-		sb.WriteString(keyStyle.Render(fmt.Sprintf("%q", key.Interface())))
+		keyStr := fmt.Sprintf("%v", key.Interface())
+		if needsQuotes(keyStr) {
+			sb.WriteString(keyStyle.Render(fmt.Sprintf("%q", keyStr)))
+		} else {
+			sb.WriteString(keyStyle.Render(keyStr))
+		}
 		sb.WriteString(": ")
 		sb.WriteString(renderValue(v.MapIndex(key), indent+1))
 		if i < len(keys)-1 {
@@ -70,6 +76,21 @@ func renderMap(v reflect.Value, indent int) string {
 	sb.WriteString(strings.Repeat("  ", indent))
 	sb.WriteString("}")
 	return sb.String()
+}
+
+func needsQuotes(s string) bool {
+	if s == "" {
+		return true
+	}
+	if !unicode.IsLetter(rune(s[0])) && s[0] != '_' {
+		return true
+	}
+	for _, r := range s {
+		if !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '_' {
+			return true
+		}
+	}
+	return false
 }
 
 func renderSlice(v reflect.Value, indent int) string {
