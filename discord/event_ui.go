@@ -87,7 +87,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.showingJSON {
 				m.showingJSON = true
 				m.selectedItem = m.list.SelectedItem().(eventItem)
-				jsonBytes, _ := json.MarshalIndent(m.selectedItem.event, "", "  ")
+				jsonBytes, _ := json.MarshalIndent(m.selectedItem.event.RawData, "", "  ")
 				m.jsonViewport.SetContent(string(jsonBytes))
 			} else {
 				m.showingJSON = false
@@ -100,12 +100,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.WindowSizeMsg:
 		h, v := docStyle.GetFrameSize()
-		if m.showingJSON {
-			m.jsonViewport.Width = msg.Width - h
-			m.jsonViewport.Height = msg.Height - v
-		} else {
-			m.list.SetSize(msg.Width-h, msg.Height-v)
-		}
+
+		m.jsonViewport.Width = msg.Width - h
+		m.jsonViewport.Height = msg.Height - v
+
+		m.list.SetSize(msg.Width-h, msg.Height-v)
 
 	case snd.DiscordEventNotification:
 		m.list.InsertItem(0, eventItem{event: msg})
