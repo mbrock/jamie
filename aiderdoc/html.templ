@@ -6,39 +6,43 @@ templ EntriesTemplate(articles []Article) {
 	@http.RootTemplate("Aider Chronicle") {
 		<style>
 			body {
-				font-family: sans-serif;
 				line-height: 1.6;
 				color: #333;
-				max-width: 800px;
 				margin: 0 auto;
 				padding: 20px;
 			}
 			.article {
 				margin-bottom: 40px;
+				display: flex;
+				flex-direction: column;
+				column-gap: 2rem;
+				row-gap: .5rem;
+				align-items: baseline;
 			}
 			.date {
 				font-size: 1.2em;
 				font-weight: bold;
 				margin-bottom: 20px;
 				color: #666;
+				width: 100%;
 			}
 			.entry {
-				display: flex;
-				align-items: baseline;
-				margin-bottom: 10px;
+			    display: flex;
+			    align-items: baseline;
+			    padding: 0 .5rem;
+
+			    max-width: 62ch;
 			}
 			.entry-timestamp {
-				font-family: 'DM Mono', monospace;
-				font-size: 0.8em;
-				color: #888;
+                font-size: 0.8em;
+				opacity: 0.4;
 				margin-right: 10px;
-				min-width: 60px;
 			}
 			.entry-type {
-				font-family: 'DM Mono', monospace;
-				font-weight: 600;
+                font-weight: bold;
 				font-size: 0.9em;
 				margin-right: 5px;
+				font-family: 'DM Mono', monospace;
 			}
 			.entry-content {
 				white-space: pre-wrap;
@@ -49,21 +53,15 @@ templ EntriesTemplate(articles []Article) {
 			.voice .entry-content {
 				font-style: italic;
 			}
-			.voice .entry-content::before {
-                content: "“";
-            }
-            .voice .entry-content::after {
-                content: "”";
-            }
-            .keyboard .entry-content::before {
-                content: "$ ";
+
+            .voice .entry-content {
+                font-style: italic;
             }
 
 			tt {
-				background-color: #e6e6e6;
-				padding: 2px 4px;
-				border-radius: 3px;
-			}
+				padding: 0px 4px;
+				letter-spacing: -.5px;
+    			}
 		</style>
 		for _, article := range articles {
 			@articleTemplate(article)
@@ -76,51 +74,42 @@ templ articleTemplate(article Article) {
 		if article.NewDay {
 			<div class="date">{ article.StartTime.Format("Monday, 2 January") }</div>
 		}
-		for _, section := range article.Sections {
-			@sectionTemplate(section)
+		for _, entry := range article.Entries {
+			@entryTemplate(entry)
 		}
-	</div>
-}
-
-templ sectionTemplate(section Section) {
-	<div class="section">
-		<div class="section-timestamp">{ section.StartTime.Format("15:04") }</div>
-		<div class="section-content">
-			for _, entry := range section.Entries {
-				@entryTemplate(entry)
-			}
-		</div>
 	</div>
 }
 
 templ entryTemplate(entry Entry) {
-	<div class={ "entry", templ.KV("ask", entry.InputMode == InputModeAsk), templ.KV("code", entry.InputMode == InputModeCode) }>
+	<span class={ "entry", templ.KV("ask", entry.Type == EntryTypeAsk), templ.KV("code", entry.Type == EntryTypeCode), templ.KV("voice", entry.IsVoice) }>
 		<span class="entry-timestamp">{ entry.Timestamp.Format("15:04") }</span>
-		if entry.Type != EntryTypeNormal && entry.Type != EntryTypeClear {
+		if entry.Type != EntryTypeClear {
 			<span class="entry-type">
 				switch entry.Type {
 					case EntryTypeAsk:
-						{ "ask" }
+						{ "?" }
 					case EntryTypeRun:
-						{ "run" }
+						{ "$" }
 					case EntryTypeUndo:
-						{ "️undo" }
+						{ "undo" }
 					case EntryTypeAdd:
-						{ "add" }
+						{ "+" }
 					case EntryTypeDrop:
-						{ "drop" }
+						{ "-" }
+					case EntryTypeCode:
+					    { ">" }
 				}
 			</span>
 		}
-		if entry.Type != EntryTypeClear {
+		if entry.Type != EntryTypeClear && entry.Type != EntryTypeUndo {
 			<span class="entry-content">
 				for _, span := range entry.Content {
-					if span.IsCode {
-						<tt>{ span.Text }</tt>
-					} else {
-						{ span.Text }
-					}
-				}
+                    if span.IsCode {
+                        <tt>{ span.Text }</tt>
+                    } else {
+                        { span.Text }
+                    }
+                }
 			</span>
 		}
 	</span>
