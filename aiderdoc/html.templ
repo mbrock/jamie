@@ -8,16 +8,25 @@ templ EntriesTemplate(articles []Article) {
 			body {
 				line-height: 1.6;
 				color: #333;
-				margin: 0 auto;
+				margin: 0;
 				padding: 20px;
 			}
 			.article {
 				margin-bottom: 40px;
-				display: flex;
-				flex-direction: column;
-				column-gap: 2rem;
-				row-gap: .5rem;
-				align-items: baseline;
+			}
+			@media (min-width: 1024px) {
+				body {
+					height: 100vh;
+					overflow: hidden;
+				}
+				.article {
+					height: calc(100vh - 40px);
+					overflow-y: auto;
+					column-width: 400px;
+					column-gap: 40px;
+					column-fill: auto;
+				}
+			}
 			}
 			.date {
 				font-size: 1.2em;
