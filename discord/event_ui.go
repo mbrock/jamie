@@ -51,13 +51,29 @@ type Model struct {
 	jsonViewport        viewport.Model
 	selectedItem        eventItem
 	showingParsedEvents bool
-	parsedEvents        []ParsedEvent
+	parsedEventsList    list.Model
 }
 
 type ParsedEvent struct {
 	Type      string
 	Content   string
 	Timestamp time.Time
+}
+
+type parsedEventItem struct {
+	event ParsedEvent
+}
+
+func (i parsedEventItem) Title() string {
+	return fmt.Sprintf("[%s] %s", i.event.Timestamp.Format("2006-01-02 15:04:05"), i.event.Type)
+}
+
+func (i parsedEventItem) Description() string {
+	return i.event.Content
+}
+
+func (i parsedEventItem) FilterValue() string {
+	return i.event.Type
 }
 
 func NewEventUI(events <-chan snd.DiscordEventNotification, existingEvents []db.DiscordEvent) *Model {
@@ -70,10 +86,12 @@ func NewEventUI(events <-chan snd.DiscordEventNotification, existingEvents []db.
 	delegate.Styles.NormalDesc = itemStyle.Copy().Foreground(lipgloss.Color("240"))
 
 	items := make([]list.Item, len(existingEvents))
+	parsedItems := make([]list.Item, 0)
 	for i, event := range existingEvents {
 		convertedEvent := snd.ConvertDiscordEvent(event).(snd.DiscordEventNotification)
 		items[i] = eventItem{event: convertedEvent}
-		m.parsedEvents = append(m.parsedEvents, parseEvent(convertedEvent))
+		parsedEvent := parseEvent(convertedEvent)
+		parsedItems = append(parsedItems, parsedEventItem{event: parsedEvent})
 	}
 	m.list = list.New(items, delegate, 0, 0)
 	m.list.Title = "Discord Events"
@@ -82,6 +100,14 @@ func NewEventUI(events <-chan snd.DiscordEventNotification, existingEvents []db.
 	m.list.Styles.Title = titleStyle
 	m.list.Styles.PaginationStyle = paginationStyle
 	m.list.Styles.HelpStyle = helpStyle
+
+	m.parsedEventsList = list.New(parsedItems, delegate, 0, 0)
+	m.parsedEventsList.Title = "Parsed Events"
+	m.parsedEventsList.SetShowStatusBar(false)
+	m.parsedEventsList.SetFilteringEnabled(false)
+	m.parsedEventsList.Styles.Title = titleStyle
+	m.parsedEventsList.Styles.PaginationStyle = paginationStyle
+	m.parsedEventsList.Styles.HelpStyle = helpStyle
 
 	m.jsonViewport = viewport.New(0, 0)
 	m.jsonViewport.Style = lipgloss.NewStyle().Padding(1, 2)
@@ -168,15 +194,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.jsonViewport.Height = msg.Height - v
 
 		m.list.SetSize(msg.Width-h, msg.Height-v)
+		m.parsedEventsList.SetSize(msg.Width-h, msg.Height-v)
 
 	case snd.DiscordEventNotification:
 		m.list.InsertItem(0, eventItem{event: msg})
 		if len(m.list.Items()) > 1000 {
 			m.list.RemoveItem(len(m.list.Items()) - 1)
 		}
-		m.parsedEvents = append([]ParsedEvent{parseEvent(msg)}, m.parsedEvents...)
-		if len(m.parsedEvents) > 1000 {
-			m.parsedEvents = m.parsedEvents[:1000]
+		parsedEvent := parseEvent(msg)
+		m.parsedEventsList.InsertItem(0, parsedEventItem{event: parsedEvent})
+		if len(m.parsedEventsList.Items()) > 1000 {
+			m.parsedEventsList.RemoveItem(len(m.parsedEventsList.Items()) - 1)
 		}
 		return m, waitForEvent(m.events)
 	}
@@ -184,7 +212,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.showingJSON {
 		m.jsonViewport, cmd = m.jsonViewport.Update(msg)
 	} else if m.showingParsedEvents {
-		m.jsonViewport, cmd = m.jsonViewport.Update(msg)
+		m.parsedEventsList, cmd = m.parsedEventsList.Update(msg)
 	} else {
 		m.list, cmd = m.list.Update(msg)
 	}
@@ -199,7 +227,7 @@ func (m Model) View() string {
 		return docStyle.Render(m.jsonViewport.View())
 	}
 	if m.showingParsedEvents {
-		return docStyle.Render(m.renderParsedEvents())
+		return m.parsedEventsList.View()
 	}
 	return m.list.View()
 }
@@ -210,21 +238,5 @@ func waitForEvent(events <-chan snd.DiscordEventNotification) tea.Cmd {
 	}
 }
 
-func (m *Model) renderParsedEvents() string {
-	var content strings.Builder
-	content.WriteString("Parsed Events (focusing on MESSAGE_CREATE and GUILD_CREATE):\n\n")
-
-	for _, event := range m.parsedEvents {
-		if event.Type == "MESSAGE_CREATE" || event.Type == "GUILD_CREATE" {
-			content.WriteString(fmt.Sprintf("[%s] %s\n%s\n\n",
-				event.Timestamp.Format("2006-01-02 15:04:05"),
-				event.Type,
-				event.Content))
-		}
-	}
-
-	m.jsonViewport.SetContent(content.String())
-	return m.jsonViewport.View()
-}
 
 var docStyle = lipgloss.NewStyle().Margin(1, 2)
