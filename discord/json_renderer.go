@@ -15,48 +15,57 @@ var (
 )
 
 func RenderJSON(data interface{}) string {
-	jsonBytes, err := json.MarshalIndent(data, "", "  ")
-	if err != nil {
-		return fmt.Sprintf("Error marshaling JSON: %v", err)
-	}
-
-	lines := strings.Split(string(jsonBytes), "\n")
-	var renderedLines []string
-
-	for _, line := range lines {
-		renderedLine := renderJSONLine(line)
-		renderedLines = append(renderedLines, renderedLine)
-	}
-
-	return strings.Join(renderedLines, "\n")
+	var sb strings.Builder
+	renderJSONValue(data, 0, &sb)
+	return sb.String()
 }
 
-func renderJSONLine(line string) string {
-	parts := strings.SplitN(line, ":", 2)
-
-	if len(parts) == 2 {
-		key := strings.TrimSpace(parts[0])
-		value := strings.TrimSpace(parts[1])
-
-		// Remove quotes from key
-		key = strings.Trim(key, "\"")
-
-		renderedKey := keyStyle.Render(key)
-		renderedValue := renderJSONValue(value)
-
-		return fmt.Sprintf("%s%s: %s", strings.Repeat("  ", countLeadingSpaces(line)/2), renderedKey, renderedValue)
+func renderJSONValue(v interface{}, indent int, sb *strings.Builder) {
+	switch val := v.(type) {
+	case map[string]interface{}:
+		sb.WriteString("{\n")
+		keys := make([]string, 0, len(val))
+		for k := range val {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for i, k := range keys {
+			writeIndent(indent+1, sb)
+			sb.WriteString(keyStyle.Render(k))
+			sb.WriteString(": ")
+			renderJSONValue(val[k], indent+1, sb)
+			if i < len(keys)-1 {
+				sb.WriteString(",")
+			}
+			sb.WriteString("\n")
+		}
+		writeIndent(indent, sb)
+		sb.WriteString("}")
+	case []interface{}:
+		sb.WriteString("[\n")
+		for i, item := range val {
+			writeIndent(indent+1, sb)
+			renderJSONValue(item, indent+1, sb)
+			if i < len(val)-1 {
+				sb.WriteString(",")
+			}
+			sb.WriteString("\n")
+		}
+		writeIndent(indent, sb)
+		sb.WriteString("]")
+	case string:
+		sb.WriteString(valueStyle.Render(fmt.Sprintf("%q", val)))
+	case float64:
+		sb.WriteString(valueStyle.Render(strconv.FormatFloat(val, 'f', -1, 64)))
+	case bool:
+		sb.WriteString(valueStyle.Render(strconv.FormatBool(val)))
+	case nil:
+		sb.WriteString(valueStyle.Render("null"))
+	default:
+		sb.WriteString(valueStyle.Render(fmt.Sprintf("%v", val)))
 	}
-
-	return renderJSONValue(strings.TrimSpace(line))
 }
 
-func renderJSONValue(value string) string {
-	if strings.HasPrefix(value, "{") || strings.HasPrefix(value, "[") {
-		return value // Don't apply braceStyle to objects and arrays
-	}
-	return valueStyle.Render(strings.Trim(value, ",")) // Remove trailing comma
-}
-
-func countLeadingSpaces(s string) int {
-	return len(s) - len(strings.TrimLeft(s, " "))
+func writeIndent(n int, sb *strings.Builder) {
+	sb.WriteString(strings.Repeat("  ", n))
 }
