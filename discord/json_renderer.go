@@ -64,7 +64,6 @@ func renderMap(m map[string]interface{}, state *renderState) {
 		state.sb.WriteString("\n")
 		writeIndent(state.indent, &state.sb)
 	}
-	state.isFirstInList = false
 
 	keys := sortedKeys(m)
 	for i, k := range keys {
@@ -75,8 +74,8 @@ func renderMap(m map[string]interface{}, state *renderState) {
 		state.sb.WriteString(keyStyle.Render(k))
 		state.sb.WriteString(": ")
 		state.indent++
-		state.isFirstInList = true
 		renderJSONValue(m[k], state)
+		state.isFirstInList = false
 		state.indent--
 	}
 }
@@ -91,7 +90,7 @@ func renderSlice(s []interface{}, state *renderState) {
 		state.sb.WriteString("\n")
 		writeIndent(state.indent, &state.sb)
 	}
-	state.isFirstInList = false
+	state.isFirstInList = true
 
 	for i, item := range s {
 		if i > 0 {
@@ -100,8 +99,8 @@ func renderSlice(s []interface{}, state *renderState) {
 		writeIndent(state.indent, &state.sb)
 		state.sb.WriteString(fmt.Sprintf("%d: ", i))
 		state.indent++
-		state.isFirstInList = true
 		renderJSONValue(item, state)
+		state.isFirstInList = false
 		state.indent--
 	}
 }
