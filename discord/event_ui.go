@@ -41,7 +41,7 @@ func NewEventUI(events <-chan snd.DiscordEventNotification, existingEvents []db.
 		items[i] = eventItem{event: snd.DiscordEventNotification{
 			ID:        event.ID,
 			Operation: event.Operation,
-			Sequence:  sql.NullInt32{Int32: event.Sequence.Int32, Valid: event.Sequence.Valid},
+			Sequence:  event.Sequence,
 			Type:      event.Type,
 			RawData:   event.RawData,
 			BotToken:  event.BotToken,
