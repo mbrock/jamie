@@ -3,6 +3,7 @@ package aiderdoc
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -13,16 +14,27 @@ import (
 )
 
 var AiderdocCmd = &cobra.Command{
-	Use:   "aiderdoc [input file]",
+	Use:   "aiderdoc [input file] [output file]",
 	Short: "Render the history of an aider code agent input session",
 	Long:  `This command parses the specified input file (or the default .aider.input.history file) and renders the entries of an aider code agent input session using the EntriesTemplate. It provides a formatted view of the interaction history between the user and the AI assistant.`,
-	Args:  cobra.MaximumNArgs(1),
+	Args:  cobra.MaximumNArgs(2),
 	Run: func(cmd *cobra.Command, args []string) {
 		var inputFile string
+		var outputWriter io.Writer = os.Stdout
+
 		if len(args) > 0 {
 			inputFile = args[0]
 		} else {
 			inputFile = filepath.Join(".", ".aider.input.history")
+		}
+
+		if len(args) > 1 {
+			outputFile, err := os.Create(args[1])
+			if err != nil {
+				log.Fatalf("Error creating output file: %v", err)
+			}
+			defer outputFile.Close()
+			outputWriter = outputFile
 		}
 
 		entries, err := ParseFile(inputFile)
@@ -32,7 +44,7 @@ var AiderdocCmd = &cobra.Command{
 
 		articles := ProcessEntries(entries)
 		component := EntriesTemplate(articles)
-		err = component.Render(context.Background(), os.Stdout)
+		err = component.Render(context.Background(), outputWriter)
 		if err != nil {
 			log.Fatalf(
 				"Error rendering aider input history template: %v",

@@ -36,3 +36,19 @@ templ:
 
 init: sqlc templ
 	go mod tidy
+.PHONY: all build test clean docs
+
+all: build test
+
+build:
+	go build ./...
+
+test:
+	go test ./...
+
+clean:
+	go clean
+
+docs:
+	mkdir -p docs/devlog
+	go run cmd/aiderdoc/main.go .aider.input.history docs/devlog/index.html
