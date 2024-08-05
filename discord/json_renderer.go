@@ -28,14 +28,11 @@ type renderState struct {
 
 func RenderJSON(data interface{}) string {
 	state := &renderState{isFirstInList: true}
-	err := renderJSONValue(data, state)
-	if err != nil {
-		return fmt.Sprintf("Error rendering JSON: %v", err)
-	}
-	return state.sb.String()
+	renderJSONValue(data, state)
+	return strings.TrimSpace(state.sb.String())
 }
 
-func renderJSONValue(v interface{}, state *renderState) error {
+func renderJSONValue(v interface{}, state *renderState) {
 	if state.needsNewline {
 		state.sb.WriteString("\n")
 		writeIndent(state.indent, &state.sb)
@@ -44,13 +41,15 @@ func renderJSONValue(v interface{}, state *renderState) error {
 
 	switch val := v.(type) {
 	case map[string]interface{}:
-		return renderMap(val, state)
+		renderMap(val, state)
 	case []interface{}:
-		return renderSlice(val, state)
+		renderSlice(val, state)
 	case string:
 		state.sb.WriteString(stringStyle.Render(fmt.Sprintf("%q", val)))
 	case float64:
 		state.sb.WriteString(numberStyle.Render(strconv.FormatFloat(val, 'f', -1, 64)))
+	case int:
+		state.sb.WriteString(numberStyle.Render(strconv.Itoa(val)))
 	case bool:
 		state.sb.WriteString(booleanStyle.Render(strconv.FormatBool(val)))
 	case nil:
@@ -58,56 +57,51 @@ func renderJSONValue(v interface{}, state *renderState) error {
 	case json.Number:
 		state.sb.WriteString(numberStyle.Render(string(val)))
 	default:
-		return fmt.Errorf("unsupported type: %T", v)
+		state.sb.WriteString(fmt.Sprintf("unsupported type: %T", v))
 	}
-	return nil
 }
 
-func renderMap(m map[string]interface{}, state *renderState) error {
+func renderMap(m map[string]interface{}, state *renderState) {
 	if len(m) == 0 {
-		state.sb.WriteString(lipgloss.NewStyle().Faint(true).Render("empty object"))
-		return nil
+		state.sb.WriteString("{}")
+		return
 	}
 
+	state.sb.WriteString("\n")
 	keys := sortedKeys(m)
 	state.indent++
 	for i, k := range keys {
 		if i > 0 {
 			state.sb.WriteString("\n")
-			writeIndent(state.indent, &state.sb)
 		}
-		state.sb.WriteString(keyStyle.Render(fmt.Sprintf("%q", k)))
+		writeIndent(state.indent, &state.sb)
+		state.sb.WriteString(keyStyle.Render(k))
 		state.sb.WriteString(": ")
-		if err := renderJSONValue(m[k], state); err != nil {
-			return err
-		}
+		renderJSONValue(m[k], state)
 	}
 	state.indent--
 	state.needsNewline = true
-	return nil
 }
 
-func renderSlice(s []interface{}, state *renderState) error {
+func renderSlice(s []interface{}, state *renderState) {
 	if len(s) == 0 {
-		state.sb.WriteString(lipgloss.NewStyle().Faint(true).Render("empty array"))
-		return nil
+		state.sb.WriteString("[]")
+		return
 	}
 
+	state.sb.WriteString("\n")
 	state.indent++
 	for i, item := range s {
 		if i > 0 {
 			state.sb.WriteString("\n")
-			writeIndent(state.indent, &state.sb)
 		}
+		writeIndent(state.indent, &state.sb)
 		state.isFirstInList = i == 0
-		if err := renderJSONValue(item, state); err != nil {
-			return err
-		}
+		renderJSONValue(item, state)
 	}
 	state.indent--
 	state.needsNewline = true
 	state.isFirstInList = false
-	return nil
 }
 
 func sortedKeys(m map[string]interface{}) []string {
