@@ -49,13 +49,6 @@ func NewTranscriptBuilder() *TranscriptBuilder {
 }
 
 func (tb *TranscriptBuilder) WriteWord(word TranscriptWord, isPartial bool) {
-	if !tb.lastWasEOS && word.AttachesTo != "previous" {
-		tb.currentLine = append(
-			tb.currentLine,
-			Span{Content: " ", Style: StyleNormal},
-		)
-	}
-
 	style := StyleNormal
 	if isPartial {
 		style = StylePartial
@@ -63,9 +56,14 @@ func (tb *TranscriptBuilder) WriteWord(word TranscriptWord, isPartial bool) {
 		style = getConfidenceStyle(word.Confidence)
 	}
 
+	content := word.Content
+	if !tb.lastWasEOS && word.AttachesTo != "previous" && len(tb.currentLine) > 0 {
+		content = " " + content
+	}
+
 	tb.currentLine = append(
 		tb.currentLine,
-		Span{Content: word.Content, Style: style},
+		Span{Content: content, Style: style},
 	)
 
 	tb.lastWasEOS = word.IsEOS

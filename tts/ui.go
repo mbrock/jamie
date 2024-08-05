@@ -198,9 +198,12 @@ func (m model) TranscriptView() string {
 	var result strings.Builder
 	for _, line := range allLines {
 		result.WriteString(
-			fmt.Sprintf("(%s) ", line.StartTime.Format("15:04:05")),
+			fmt.Sprintf("(%s)", line.StartTime.Format("15:04:05")),
 		)
-		for _, span := range line.Spans {
+		for i, span := range line.Spans {
+			if i == 0 {
+				result.WriteString(" ")
+			}
 			result.WriteString(span.Style.Render(span.Content))
 		}
 		result.WriteString("\n")
