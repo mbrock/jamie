@@ -3,6 +3,7 @@ package discord
 import (
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"unicode"
 
@@ -57,6 +58,10 @@ func renderMap(v reflect.Value, indent int) string {
 	sb.WriteString("{\n")
 
 	keys := v.MapKeys()
+	sort.Slice(keys, func(i, j int) bool {
+		return fmt.Sprintf("%v", keys[i].Interface()) < fmt.Sprintf("%v", keys[j].Interface())
+	})
+
 	for i, key := range keys {
 		sb.WriteString(strings.Repeat("  ", indent+1))
 		keyStr := fmt.Sprintf("%v", key.Interface())
