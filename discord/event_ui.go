@@ -90,7 +90,9 @@ func NewEventUI(events <-chan snd.DiscordEventNotification, existingEvents []db.
 		convertedEvent := snd.ConvertDiscordEvent(event).(snd.DiscordEventNotification)
 		items[i] = eventItem{event: convertedEvent}
 		parsedEvent := parseEvent(convertedEvent)
-		parsedItems = append(parsedItems, parsedEventItem{event: parsedEvent})
+		if parsedEvent != nil {
+			parsedItems = append(parsedItems, parsedEventItem{event: *parsedEvent})
+		}
 	}
 	m.list = list.New(items, delegate, 0, 0)
 	m.list.Title = "Discord Events"
@@ -114,8 +116,8 @@ func NewEventUI(events <-chan snd.DiscordEventNotification, existingEvents []db.
 	return m
 }
 
-func parseEvent(event snd.DiscordEventNotification) ParsedEvent {
-	parsedEvent := ParsedEvent{
+func parseEvent(event snd.DiscordEventNotification) *ParsedEvent {
+	parsedEvent := &ParsedEvent{
 		Type:      event.Type,
 		Timestamp: event.CreatedAt,
 	}
@@ -138,7 +140,7 @@ func parseEvent(event snd.DiscordEventNotification) ParsedEvent {
 		json.Unmarshal(event.RawData, &guildData)
 		parsedEvent.Content = fmt.Sprintf("Joined guild: %s (ID: %s)", guildData.Name, guildData.ID)
 	default:
-		parsedEvent.Content = "Unhandled event type"
+		return nil
 	}
 
 	return parsedEvent
@@ -201,9 +203,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.list.RemoveItem(len(m.list.Items()) - 1)
 		}
 		parsedEvent := parseEvent(msg)
-		m.parsedEventsList.InsertItem(0, parsedEventItem{event: parsedEvent})
-		if len(m.parsedEventsList.Items()) > 1000 {
-			m.parsedEventsList.RemoveItem(len(m.parsedEventsList.Items()) - 1)
+		if parsedEvent != nil {
+			m.parsedEventsList.InsertItem(0, parsedEventItem{event: *parsedEvent})
+			if len(m.parsedEventsList.Items()) > 1000 {
+				m.parsedEventsList.RemoveItem(len(m.parsedEventsList.Items()) - 1)
+			}
 		}
 		return m, waitForEvent(m.events)
 	}
