@@ -1,10 +1,12 @@
 package discord
 
 import (
+	"encoding/json"
 	"fmt"
 	"node.town/db"
 
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"node.town/snd"
@@ -27,9 +29,12 @@ func (i eventItem) FilterValue() string {
 }
 
 type Model struct {
-	list     list.Model
-	events   <-chan snd.DiscordEventNotification
-	quitting bool
+	list         list.Model
+	events       <-chan snd.DiscordEventNotification
+	quitting     bool
+	showingJSON  bool
+	jsonViewport viewport.Model
+	selectedItem eventItem
 }
 
 func NewEventUI(events <-chan snd.DiscordEventNotification, existingEvents []db.DiscordEvent) *Model {
@@ -56,6 +61,9 @@ func NewEventUI(events <-chan snd.DiscordEventNotification, existingEvents []db.
 	m.list.Styles.PaginationStyle = list.DefaultStyles().PaginationStyle.PaddingLeft(4)
 	m.list.Styles.HelpStyle = list.DefaultStyles().HelpStyle.PaddingLeft(4).PaddingBottom(1)
 
+	m.jsonViewport = viewport.New(0, 0)
+	m.jsonViewport.Style = lipgloss.NewStyle().Padding(1, 2)
+
 	return m
 }
 
@@ -67,16 +75,37 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmd tea.Cmd
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" || msg.String() == "q" {
+		switch msg.String() {
+		case "ctrl+c", "q":
 			m.quitting = true
 			return m, tea.Quit
+		case "enter":
+			if !m.showingJSON {
+				m.showingJSON = true
+				m.selectedItem = m.list.SelectedItem().(eventItem)
+				jsonBytes, _ := json.MarshalIndent(m.selectedItem.event, "", "  ")
+				m.jsonViewport.SetContent(string(jsonBytes))
+			} else {
+				m.showingJSON = false
+			}
+		case "esc":
+			if m.showingJSON {
+				m.showingJSON = false
+			}
 		}
 
 	case tea.WindowSizeMsg:
 		h, v := docStyle.GetFrameSize()
-		m.list.SetSize(msg.Width-h, msg.Height-v)
+		if m.showingJSON {
+			m.jsonViewport.Width = msg.Width - h
+			m.jsonViewport.Height = msg.Height - v
+		} else {
+			m.list.SetSize(msg.Width-h, msg.Height-v)
+		}
 
 	case snd.DiscordEventNotification:
 		m.list.InsertItem(0, eventItem{event: msg})
@@ -86,14 +115,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitForEvent(m.events)
 	}
 
-	var cmd tea.Cmd
-	m.list, cmd = m.list.Update(msg)
+	if m.showingJSON {
+		m.jsonViewport, cmd = m.jsonViewport.Update(msg)
+	} else {
+		m.list, cmd = m.list.Update(msg)
+	}
 	return m, cmd
 }
 
 func (m Model) View() string {
 	if m.quitting {
 		return "Goodbye!\n"
+	}
+	if m.showingJSON {
+		return docStyle.Render(m.jsonViewport.View())
 	}
 	return docStyle.Render(m.list.View())
 }
