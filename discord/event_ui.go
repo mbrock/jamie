@@ -1,7 +1,6 @@
 package discord
 
 import (
-	"encoding/json"
 	"fmt"
 	"node.town/db"
 
@@ -87,8 +86,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if !m.showingJSON {
 				m.showingJSON = true
 				m.selectedItem = m.list.SelectedItem().(eventItem)
-				jsonBytes, _ := json.MarshalIndent(m.selectedItem.event.RawData, "", "  ")
-				m.jsonViewport.SetContent(string(jsonBytes))
+				renderedJSON := RenderJSON(m.selectedItem.event.RawData)
+				m.jsonViewport.SetContent(renderedJSON)
 			} else {
 				m.showingJSON = false
 			}
