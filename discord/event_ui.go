@@ -97,7 +97,8 @@ func NewEventUI(events <-chan snd.DiscordEventNotification, existingEvents []db.
 	m.list = list.New(items, delegate, 0, 0)
 	m.list.Title = "Discord Events"
 	m.list.SetShowStatusBar(false)
-	m.list.SetFilteringEnabled(false)
+	m.list.SetFilteringEnabled(true)
+	m.list.SetShowFilter(true)
 	m.list.Styles.Title = titleStyle
 	m.list.Styles.PaginationStyle = paginationStyle
 	m.list.Styles.HelpStyle = helpStyle
@@ -105,7 +106,9 @@ func NewEventUI(events <-chan snd.DiscordEventNotification, existingEvents []db.
 	m.parsedEventsList = list.New(parsedItems, delegate, 0, 0)
 	m.parsedEventsList.Title = "Parsed Events"
 	m.parsedEventsList.SetShowStatusBar(false)
-	m.parsedEventsList.SetFilteringEnabled(false)
+	m.list.SetFilteringEnabled(true)
+	m.list.SetShowFilter(true)
+
 	m.parsedEventsList.Styles.Title = titleStyle
 	m.parsedEventsList.Styles.PaginationStyle = paginationStyle
 	m.parsedEventsList.Styles.HelpStyle = helpStyle
