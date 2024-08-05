@@ -14,16 +14,29 @@ import (
 	"node.town/snd"
 )
 
+var (
+	titleStyle        = lipgloss.NewStyle().MarginLeft(2)
+	itemStyle         = lipgloss.NewStyle().PaddingLeft(4)
+	selectedItemStyle = lipgloss.NewStyle().PaddingLeft(2).Foreground(lipgloss.Color("170"))
+	paginationStyle   = list.DefaultStyles().PaginationStyle.PaddingLeft(4)
+	helpStyle         = list.DefaultStyles().HelpStyle.PaddingLeft(4).PaddingBottom(1)
+	quitTextStyle     = lipgloss.NewStyle().Margin(1, 0, 2, 4)
+)
+
 type eventItem struct {
 	event snd.DiscordEventNotification
 }
 
 func (i eventItem) Title() string {
-	return fmt.Sprintf("%s (Op: %d)", i.event.Type, i.event.Operation)
+	return fmt.Sprintf("%s", i.event.Type)
 }
 
 func (i eventItem) Description() string {
-	return fmt.Sprintf("ID: %d, Sequence: %v, Created: %s", i.event.ID, i.event.Sequence.Int32, i.event.CreatedAt.Format("15:04:05"))
+	return fmt.Sprintf("Op: %d | ID: %d | Sequence: %v | Created: %s",
+		i.event.Operation,
+		i.event.ID,
+		i.event.Sequence.Int32,
+		i.event.CreatedAt.Format("15:04:05"))
 }
 
 func (i eventItem) FilterValue() string {
@@ -51,6 +64,11 @@ func NewEventUI(events <-chan snd.DiscordEventNotification, existingEvents []db.
 	m := &Model{events: events}
 
 	delegate := list.NewDefaultDelegate()
+	delegate.Styles.SelectedTitle = selectedItemStyle
+	delegate.Styles.SelectedDesc = selectedItemStyle
+	delegate.Styles.NormalTitle = itemStyle
+	delegate.Styles.NormalDesc = itemStyle.Copy().Foreground(lipgloss.Color("240"))
+
 	items := make([]list.Item, len(existingEvents))
 	for i, event := range existingEvents {
 		convertedEvent := snd.ConvertDiscordEvent(event).(snd.DiscordEventNotification)
@@ -61,9 +79,9 @@ func NewEventUI(events <-chan snd.DiscordEventNotification, existingEvents []db.
 	m.list.Title = "Discord Events"
 	m.list.SetShowStatusBar(false)
 	m.list.SetFilteringEnabled(false)
-	m.list.Styles.Title = lipgloss.NewStyle().MarginLeft(2)
-	m.list.Styles.PaginationStyle = list.DefaultStyles().PaginationStyle.PaddingLeft(4)
-	m.list.Styles.HelpStyle = list.DefaultStyles().HelpStyle.PaddingLeft(4).PaddingBottom(1)
+	m.list.Styles.Title = titleStyle
+	m.list.Styles.PaginationStyle = paginationStyle
+	m.list.Styles.HelpStyle = helpStyle
 
 	m.jsonViewport = viewport.New(0, 0)
 	m.jsonViewport.Style = lipgloss.NewStyle().Padding(1, 2)
@@ -175,7 +193,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) View() string {
 	if m.quitting {
-		return "Goodbye!\n"
+		return quitTextStyle.Render("Goodbye!")
 	}
 	if m.showingJSON {
 		return docStyle.Render(m.jsonViewport.View())
@@ -183,7 +201,7 @@ func (m Model) View() string {
 	if m.showingParsedEvents {
 		return docStyle.Render(m.renderParsedEvents())
 	}
-	return docStyle.Render(m.list.View())
+	return m.list.View()
 }
 
 func waitForEvent(events <-chan snd.DiscordEventNotification) tea.Cmd {
