@@ -177,53 +177,17 @@ func (s *PostgresPacketStreamer) getUserIDFromCache(ssrc int64) string {
 
 func (s *PostgresPacketStreamer) parseNotificationPayload(payload string) (*OpusPacketNotification, error) {
 	var packet OpusPacketNotification
-	fields := strings.Split(payload, ",")
-	for _, field := range fields {
-		keyValue := strings.SplitN(field, ":", 2)
-		if len(keyValue) != 2 {
-			continue
-		}
-		key := strings.TrimSpace(keyValue[0])
-		value := strings.TrimSpace(keyValue[1])
-		switch key {
-		case "id":
-			id, err := strconv.ParseInt(value, 10, 64)
-			if err != nil {
-				return nil, fmt.Errorf("error parsing id: %w", err)
-			}
-			packet.ID = id
-		case "guild_id":
-			packet.GuildID = value
-		case "channel_id":
-			packet.ChannelID = value
-		case "ssrc":
-			ssrc, err := strconv.ParseInt(value, 10, 64)
-			if err != nil {
-				return nil, fmt.Errorf("error parsing ssrc: %w", err)
-			}
-			packet.Ssrc = ssrc
-		case "sequence":
-			seq, err := strconv.ParseInt(value, 10, 32)
-			if err != nil {
-				return nil, fmt.Errorf("error parsing sequence: %w", err)
-			}
-			packet.Sequence = int32(seq)
-		case "timestamp":
-			ts, err := strconv.ParseInt(value, 10, 64)
-			if err != nil {
-				return nil, fmt.Errorf("error parsing timestamp: %w", err)
-			}
-			packet.Timestamp = ts
-		case "opus_data":
-			decodedData, err := hex.DecodeString(strings.TrimPrefix(value, "\\x"))
-			if err != nil {
-				return nil, fmt.Errorf("error decoding opus data: %w", err)
-			}
-			packet.OpusData = string(decodedData)
-		case "created_at":
-			packet.CreatedAt = value
-		}
+	err := json.Unmarshal([]byte(payload), &packet)
+	if err != nil {
+		return nil, fmt.Errorf("error unmarshalling payload: %w", err)
 	}
+
+	// Decode opus_data from hex string
+	decodedData, err := hex.DecodeString(strings.TrimPrefix(packet.OpusData, "\\x"))
+	if err != nil {
+		return nil, fmt.Errorf("error decoding opus data: %w", err)
+	}
+	packet.OpusData = string(decodedData)
 
 	packet.UserID = s.getUserIDFromCache(packet.Ssrc)
 
