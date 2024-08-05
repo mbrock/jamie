@@ -332,7 +332,7 @@ func init() {
 		Short: "Show incoming Discord events",
 		Long:  `This command displays a live stream of incoming Discord events using a bubble tea UI.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			sqlDB, _, err := db.OpenDatabase()
+			sqlDB, queries, err := db.OpenDatabase()
 			handleError(err, "Failed to open database")
 			defer sqlDB.Close()
 
