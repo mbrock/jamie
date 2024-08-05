@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"node.town/db"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -77,7 +78,7 @@ func NewEventUI(events <-chan snd.DiscordEventNotification, existingEvents []db.
 	return m
 }
 
-func parseEvent(event db.DiscordEvent) ParsedEvent {
+func parseEvent(event snd.DiscordEventNotification) ParsedEvent {
 	parsedEvent := ParsedEvent{
 		Type:      event.Type,
 		Timestamp: event.CreatedAt.Time,
@@ -162,7 +163,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(m.list.Items()) > 1000 {
 			m.list.RemoveItem(len(m.list.Items()) - 1)
 		}
-		m.parsedEvents = append([]ParsedEvent{parseEvent(db.DiscordEvent(msg))}, m.parsedEvents...)
+		m.parsedEvents = append([]ParsedEvent{parseEvent(msg)}, m.parsedEvents...)
 		if len(m.parsedEvents) > 1000 {
 			m.parsedEvents = m.parsedEvents[:1000]
 		}
