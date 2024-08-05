@@ -23,7 +23,8 @@ templ EntriesTemplate(articles []Article) {
 				color: #666;
 			}
 			.section {
-				margin-bottom: 30px;
+				display: flex;
+				align-items: baseline;
 			}
 			.section-timestamp {
 				font-family: 'DM Mono', monospace;
@@ -32,13 +33,11 @@ templ EntriesTemplate(articles []Article) {
 				margin-bottom: 10px;
 			}
 			.section-content {
-				background-color: #f9f9f9;
-				border-radius: 5px;
-				padding: 15px;
+				padding: 0 15px;
 			}
 			.entry {
 				display: inline;
-				margin-right: 5px;
+				margin-right: 1rem;
 			}
 			.entry-type {
 				font-family: 'DM Mono', monospace;
@@ -55,6 +54,16 @@ templ EntriesTemplate(articles []Article) {
 			.voice .entry-content {
 				font-style: italic;
 			}
+			.voice .entry-content::before {
+                content: "“";
+            }
+            .voice .entry-content::after {
+                content: "”";
+            }
+            .keyboard .entry-content::before {
+                content: "⎆ ";
+            }
+
 			tt {
 				background-color: #e6e6e6;
 				padding: 2px 4px;
@@ -90,35 +99,23 @@ templ sectionTemplate(section Section) {
 }
 
 templ entryTemplate(entry Entry) {
-	<span class={ "entry", templ.KV("ask", entry.InputMode == InputModeAsk), templ.KV("code", entry.InputMode == InputModeCode), templ.KV("voice", entry.IsVoice) }>
+	<span class={ "entry", templ.KV("ask", entry.InputMode == InputModeAsk), templ.KV("code", entry.InputMode == InputModeCode), templ.KV("voice", entry.IsVoice), templ.KV("keyboard", !entry.IsVoice) }>
 		<span class="entry-type">
 			switch entry.Type {
 				case EntryTypeAsk:
-					{ "❓" }
+					{ "ask" }
 				case EntryTypeRun:
-					{ "▶️" }
+					{ "run" }
 				case EntryTypeUndo:
-					{ "↩️" }
+					{ "️undo" }
 				case EntryTypeClear:
-					{ "🧹" }
+					{ "clear" }
 				case EntryTypeAdd:
-					{ "➕" }
+					{ "add" }
 				case EntryTypeDrop:
-					{ "➖" }
-				default:
-					if entry.InputMode == InputModeAsk {
-						if entry.IsVoice {
-							{ "🎙️" }
-						} else {
-							{ "💬" }
-						}
-					} else {
-						if entry.IsVoice {
-							{ "🎙️" }
-						} else {
-							{ "⌨️" }
-						}
-					}
+					{ "drop" }
+				case EntryTypeNormal:
+					{ "code" }
 			}
 		</span>
 		<span class="entry-content">
