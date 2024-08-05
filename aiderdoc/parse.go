@@ -18,6 +18,7 @@ const (
 	EntryTypeUndo
 	EntryTypeClear
 	EntryTypeAdd
+	EntryTypeDrop
 )
 
 type Entry struct {
@@ -84,6 +85,9 @@ func ParseFile(filename string) ([]Entry, error) {
 			} else if strings.HasPrefix(currentContent, "/add ") {
 				currentContent = strings.TrimPrefix(currentContent, "/add ")
 				entryType = EntryTypeAdd
+			} else if strings.HasPrefix(currentContent, "/drop ") {
+				currentContent = strings.TrimPrefix(currentContent, "/drop ")
+				entryType = EntryTypeDrop
 			}
 
 			processedContent := processBackticks(currentContent)

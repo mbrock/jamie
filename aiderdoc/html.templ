@@ -10,31 +10,36 @@ templ EntriesTemplate(articles []Article) {
 				border-collapse: collapse;
 			}
 			td {
-				padding: 5px;
-				vertical-align: top;
+				padding: 2px 5px;
+			}
+			tr {
+				vertical-align: baseline;
+			}
+			tbody tr:last-child td {
+				padding-bottom: 1.4rem;
 			}
 			.timestamp {
+				font-family: 'DM Mono', monospace;
 				font-size: 0.8rem;
 				opacity: 0.5;
 				text-align: right;
-				width: 3rem;
 				white-space: nowrap;
 			}
 			.entry-type {
 				font-family: 'DM Mono', monospace;
 				font-weight: 600;
-				font-size: 0.7rem;
-				width: 3rem;
+				font-size: 0.8rem;
 				text-align: right;
+				padding-right: 0.7rem;
+				opacity: 0.7;
 			}
 			.content {
 				white-space: pre-wrap;
 			}
 			.date {
-				font-size: 0.8rem;
-				opacity: 0.5;
+				opacity: 0.6;
 				text-align: center;
-				padding: 10px 0;
+				padding: 1.4rem 0;
 			}
 			tt {
 				font-weight: 400;
@@ -66,7 +71,9 @@ templ EntriesTemplate(articles []Article) {
 		</style>
 		<table>
 			for _, article := range articles {
-				@articleTemplate(article)
+				<tbody>
+					@articleTemplate(article)
+				</tbody>
 			}
 		</table>
 	}
