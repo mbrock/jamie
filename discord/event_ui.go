@@ -2,6 +2,7 @@ package discord
 
 import (
 	"fmt"
+	"node.town/db"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
