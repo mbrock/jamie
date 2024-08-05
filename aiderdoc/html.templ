@@ -99,33 +99,33 @@ templ sectionTemplate(section Section) {
 }
 
 templ entryTemplate(entry Entry) {
-	<span class={ "entry", templ.KV("ask", entry.InputMode == InputModeAsk), templ.KV("code", entry.InputMode == InputModeCode), templ.KV("voice", entry.IsVoice), templ.KV("keyboard", !entry.IsVoice) }>
-		<span class="entry-type">
-			switch entry.Type {
-				case EntryTypeAsk:
-					{ "ask" }
-				case EntryTypeRun:
-					{ "run" }
-				case EntryTypeUndo:
-					{ "️undo" }
-				case EntryTypeClear:
-					{ "clear" }
-				case EntryTypeAdd:
-					{ "add" }
-				case EntryTypeDrop:
-					{ "drop" }
-				case EntryTypeNormal:
-					{ "code" }
-			}
-		</span>
-		<span class="entry-content">
-			for _, span := range entry.Content {
-				if span.IsCode {
-					<tt>{ span.Text }</tt>
-				} else {
-					{ span.Text }
+	<span class={ "entry", templ.KV("ask", entry.InputMode == InputModeAsk), templ.KV("code", entry.InputMode == InputModeCode) }>
+		if entry.Type != EntryTypeNormal && entry.Type != EntryTypeClear {
+			<span class="entry-type">
+				switch entry.Type {
+					case EntryTypeAsk:
+						{ "ask" }
+					case EntryTypeRun:
+						{ "run" }
+					case EntryTypeUndo:
+						{ "️undo" }
+					case EntryTypeAdd:
+						{ "add" }
+					case EntryTypeDrop:
+						{ "drop" }
 				}
-			}
-		</span>
+			</span>
+		}
+		if entry.Type != EntryTypeClear {
+			<span class="entry-content">
+				for _, span := range entry.Content {
+					if span.IsCode {
+						<tt>{ span.Text }</tt>
+					} else {
+						{ span.Text }
+					}
+				}
+			</span>
+		}
 	</span>
 }
