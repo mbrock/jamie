@@ -12,11 +12,21 @@ log() {
 
 # Run command with optional sudo
 run_command() {
-    echo "Would run command: $@"
+    local cmd=("$@")
+    echo "Would run command: ${cmd[*]}"
     read -p "Succeed or fail? (s/f): " response
     if [[ $response == "s" ]]; then
         return 0
+    elif [[ $response == "f" ]]; then
+        if confirm "Use sudo?"; then
+            echo "Would run command with sudo: sudo ${cmd[*]}"
+            read -p "Succeed or fail? (s/f): " sudo_response
+            [[ $sudo_response == "s" ]] && return 0 || return 1
+        else
+            return 1
+        fi
     else
+        log "error" "Invalid response"
         return 1
     fi
 }
@@ -24,11 +34,7 @@ run_command() {
 # Confirm function
 confirm() {
     read -p "$1 (y/n): " response
-    if [[ $response == "y" ]]; then
-        return 0
-    else
-        return 1
-    fi
+    [[ $response == "y" ]]
 }
 
 # Ensure system user exists
@@ -40,17 +46,8 @@ ensure_system_user() {
         if run_command useradd -r -s /bin/false "$JAMIE_USERNAME"; then
             log "info" "System user created successfully"
         else
-            if confirm "Use sudo?"; then
-                if run_command sudo useradd -r -s /bin/false "$JAMIE_USERNAME"; then
-                    log "info" "System user created successfully with sudo"
-                else
-                    log "error" "Failed to create system user"
-                    exit 1
-                fi
-            else
-                log "error" "Failed to create system user"
-                exit 1
-            fi
+            log "error" "Failed to create system user"
+            exit 1
         fi
     fi
 }
@@ -61,30 +58,12 @@ ensure_database_user() {
         log "info" "Database user already exists"
     else
         log "info" "Creating database user"
-        if run_command createuser -s "$JAMIE_USERNAME"; then
-            if run_command psql -c "ALTER USER $JAMIE_USERNAME WITH PASSWORD '$JAMIE_PASSWORD';"; then
-                log "info" "Database user created successfully"
-            else
-                log "error" "Failed to set database user password"
-                exit 1
-            fi
+        if run_command createuser -s "$JAMIE_USERNAME" && \
+           run_command psql -c "ALTER USER $JAMIE_USERNAME WITH PASSWORD '$JAMIE_PASSWORD';"; then
+            log "info" "Database user created successfully"
         else
-            if confirm "Use sudo?"; then
-                if run_command sudo -u postgres createuser -s "$JAMIE_USERNAME"; then
-                    if run_command sudo -u postgres psql -c "ALTER USER $JAMIE_USERNAME WITH PASSWORD '$JAMIE_PASSWORD';"; then
-                        log "info" "Database user created successfully with sudo"
-                    else
-                        log "error" "Failed to set database user password"
-                        exit 1
-                    fi
-                else
-                    log "error" "Failed to create database user"
-                    exit 1
-                fi
-            else
-                log "error" "Failed to create database user"
-                exit 1
-            fi
+            log "error" "Failed to create database user or set password"
+            exit 1
         fi
     fi
 }
@@ -105,24 +84,8 @@ ensure_database() {
                 exit 1
             fi
         else
-            if confirm "Use sudo?"; then
-                if run_command sudo -u postgres createdb -O "$JAMIE_USERNAME" "$DB_NAME"; then
-                    log "info" "Database created successfully with sudo"
-                    log "info" "Initializing database schema..."
-                    if run_command sudo -u "$JAMIE_USERNAME" psql -d "$DB_NAME" -f db/db_init.sql; then
-                        log "info" "Database schema initialized successfully"
-                    else
-                        log "error" "Failed to initialize database schema"
-                        exit 1
-                    fi
-                else
-                    log "error" "Failed to create database"
-                    exit 1
-                fi
-            else
-                log "error" "Failed to create database"
-                exit 1
-            fi
+            log "error" "Failed to create database"
+            exit 1
         fi
     fi
 }
