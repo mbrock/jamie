@@ -212,9 +212,10 @@ func TestOggWriteSilentPacketsToFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	t.Logf("Created temp file: %s", tempFile.Name())
-	//	defer os.Remove(tempFile.Name())
-	//	defer tempFile.Close()
+	//  t.Logf("Created temp file: %s", tempFile.Name())
+
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
 
 	oggWriter, err := NewOggFile(tempFile.Name())
 	if err != nil {
@@ -268,5 +269,5 @@ func TestOggWriteSilentPacketsToFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("opusinfo failed: %v\nOutput: %s", err, output)
 	}
-	t.Logf("opusinfo output: %s", output)
+	//	t.Logf("opusinfo output: %s", output)
 }

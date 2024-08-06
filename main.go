@@ -6,8 +6,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	tea "github.com/charmbracelet/bubbletea"
-	"node.town/discord"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -15,11 +13,14 @@ import (
 	"strings"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"node.town/discord"
+
 	"node.town/aiderdoc"
-	nt "node.town/http"
 	"node.town/prolog"
 	"node.town/snd"
 	"node.town/tts"
+	nt "node.town/www"
 
 	"encoding/hex"
 
@@ -73,42 +74,42 @@ var listenCmd = &cobra.Command{
 		handleError(err, "Failed to open database")
 		defer sqlDB.Close()
 
-		discord, err := discordgo.New(
+		discordSession, err := discordgo.New(
 			fmt.Sprintf("Bot %s", viper.GetString("DISCORD_TOKEN")),
 		)
 		handleError(err, "Error creating Discord session")
 
-		discord.LogLevel = discordgo.LogInformational
+		discordSession.LogLevel = discordgo.LogInformational
 
 		bot := &discord.Bot{
-			Discord: discord,
+			Discord: discordSession,
 			Queries: queries,
 		}
 
-		discord.AddHandler(bot.HandleEvent)
-		discord.AddHandler(bot.HandleGuildCreate)
-		discord.AddHandler(bot.HandleVoiceStateUpdate)
-		discord.AddHandler(bot.HandleVoiceServerUpdate)
-		discord.AddHandler(bot.HandleInteractionCreate)
+		discordSession.AddHandler(bot.HandleEvent)
+		discordSession.AddHandler(bot.HandleGuildCreate)
+		discordSession.AddHandler(bot.HandleVoiceStateUpdate)
+		discordSession.AddHandler(bot.HandleVoiceServerUpdate)
+		discordSession.AddHandler(bot.HandleInteractionCreate)
 
-		err = discord.Open()
+		err = discordSession.Open()
 		handleError(err, "Error opening Discord session")
 
 		defer func() {
-			err := discord.Close()
+			err := discordSession.Close()
 			if err != nil {
 				log.Error("discord", "close", err)
 			}
 		}()
 
-		log.Info("discord", "status", discord.State.User.Username)
+		log.Info("discord", "status", discordSession.State.User.Username)
 
 		// Insert a record into the discord_sessions table
 		sessionID, err := bot.Queries.InsertDiscordSession(
 			context.Background(),
 			db.InsertDiscordSessionParams{
 				BotToken: viper.GetString("DISCORD_TOKEN"),
-				UserID:   discord.State.User.ID,
+				UserID:   discordSession.State.User.ID,
 			},
 		)
 
@@ -335,15 +336,28 @@ func init() {
 			handleError(err, "Failed to open database")
 			defer sqlDB.Close()
 
-			pool, err := pgxpool.New(context.Background(), viper.GetString("DATABASE_URL"))
+			pool, err := pgxpool.New(
+				context.Background(),
+				viper.GetString("DATABASE_URL"),
+			)
 			handleError(err, "Failed to create connection pool")
 			defer pool.Close()
 
-			streamer := snd.NewDiscordEventStreamer(pool, queries, log.Default())
-			eventChan, err := snd.StreamDiscordEvents(context.Background(), streamer)
+			streamer := snd.NewDiscordEventStreamer(
+				pool,
+				queries,
+				log.Default(),
+			)
+			eventChan, err := snd.StreamDiscordEvents(
+				context.Background(),
+				streamer,
+			)
 			handleError(err, "Failed to start Discord event stream")
 
-			existingEvents, err := queries.GetRecentDiscordEvents(context.Background(), 100)
+			existingEvents, err := queries.GetRecentDiscordEvents(
+				context.Background(),
+				100,
+			)
 			handleError(err, "Failed to fetch recent Discord events")
 
 			ui := discord.NewEventUI(eventChan, existingEvents)
@@ -514,7 +528,7 @@ func main() {
 
 	handleError(err, "Failed to open database")
 
-	nt.Routes(nt.Router, queries)
+	Routes(nt.Router, queries)
 	aiderdoc.Routes(nt.Router)
 
 	if err := rootCmd.Execute(); err != nil {

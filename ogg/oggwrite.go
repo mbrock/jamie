@@ -309,10 +309,6 @@ func (i *OggWriter) Close() error {
 		return err
 	}
 
-	fmt.Printf(
-		"Reading payload from offset: %d\n",
-		pageOffset+pageHeaderSize+1,
-	)
 	payload := make([]byte, i.lastPayloadSize)
 	if _, err := i.fd.ReadAt(payload, pageOffset+pageHeaderSize+1); err != nil {
 		return err

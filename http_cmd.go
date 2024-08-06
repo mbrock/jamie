@@ -1,13 +1,14 @@
-package http
+package main
 
 import (
 	"bytes"
 	"fmt"
 	"net/http"
-	"node.town/tts"
 	"strconv"
 	"strings"
 	"time"
+
+	"node.town/tts"
 
 	"github.com/charmbracelet/log"
 	"github.com/go-chi/chi/v5"
@@ -18,7 +19,10 @@ import (
 
 func Routes(r chi.Router, queries *db.Queries) {
 	r.Get("/tts/", handleTranscriptPage(queries))
-	r.Get("/tts/audio/{sessionID}/{startTime}/{endTime}", handleAudioRequest(queries))
+	r.Get(
+		"/tts/audio/{sessionID}/{startTime}/{endTime}",
+		handleAudioRequest(queries),
+	)
 }
 
 func handleTranscriptPage(queries *db.Queries) http.HandlerFunc {

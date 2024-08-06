@@ -1,9 +1,9 @@
 package aiderdoc
 
-import "node.town/http"
+import "node.town/www"
 
 templ EntriesTemplate(articles []Article) {
-	@http.RootTemplate("Aider Chronicle") {
+	@www.RootTemplate("Aider Chronicle") {
 		<style>
 			body {
 				line-height: 1.6;
@@ -71,14 +71,12 @@ templ EntriesTemplate(articles []Article) {
 }
 
 templ articleTemplate(article Article) {
-
-		if article.NewDay {
-			<div class="date">{ article.StartTime.Format("Monday, 2 January") }</div>
-		}
-		for _, entry := range article.Entries {
-			@entryTemplate(entry)
-		}
-
+	if article.NewDay {
+		<div class="date">{ article.StartTime.Format("Monday, 2 January") }</div>
+	}
+	for _, entry := range article.Entries {
+		@entryTemplate(entry)
+	}
 }
 
 templ entryTemplate(entry Entry) {
@@ -98,19 +96,19 @@ templ entryTemplate(entry Entry) {
 					case EntryTypeDrop:
 						{ "-" }
 					case EntryTypeCode:
-					    { ">" }
+						{ ">" }
 				}
 			</span>
 		}
 		if entry.Type != EntryTypeClear && entry.Type != EntryTypeUndo {
 			<span class="entry-content">
 				for _, span := range entry.Content {
-                    if span.IsCode {
-                        <tt>{ span.Text }</tt>
-                    } else {
-                        { span.Text }
-                    }
-                }
+					if span.IsCode {
+						<tt>{ span.Text }</tt>
+					} else {
+						{ span.Text }
+					}
+				}
 			</span>
 		}
 	</span>
