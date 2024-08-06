@@ -40,3 +40,10 @@ init: sqlc templ
 docs:
 	mkdir -p docs/devlog
 	go run main.go aiderdoc .aider.input.history docs/devlog/index.html
+
+install-systemd:
+	sudo cp systemd/*.service /etc/systemd/system/
+	sudo systemctl daemon-reload
+	@echo "Systemd service files installed. You can now enable and start the services with:"
+	@echo "sudo systemctl enable jamie-listen jamie-transcribe jamie-serve"
+	@echo "sudo systemctl start jamie-listen jamie-transcribe jamie-serve"

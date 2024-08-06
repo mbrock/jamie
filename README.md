@@ -225,6 +225,67 @@ For an easy and manageable deployment, we've provided a Docker Compose configura
 
 With this Docker Compose setup, you can easily manage and deploy Jamie on your server. Each service is isolated in its own container, making it simple to start, stop, and monitor individual components of the system.
 
+### Systemd Setup (or "Jamie's System Integration")
+
+For a more integrated setup on Linux systems using systemd, follow these steps:
+
+1. Build the Jamie binary and place it in `/usr/local/bin/`:
+
+   ```
+   make
+   sudo cp jamie /usr/local/bin/
+   ```
+
+2. Create a jamie user and group:
+
+   ```
+   sudo useradd -r -s /bin/false jamie
+   ```
+
+3. Create a directory for Jamie's configuration:
+
+   ```
+   sudo mkdir /etc/jamie
+   sudo cp .env /etc/jamie/jamie.env
+   sudo chown -R jamie:jamie /etc/jamie
+   sudo chmod 600 /etc/jamie/jamie.env
+   ```
+
+4. Install the systemd service files:
+
+   ```
+   make install-systemd
+   ```
+
+5. Reload systemd to recognize the new service files:
+
+   ```
+   sudo systemctl daemon-reload
+   ```
+
+6. Enable and start the Jamie services:
+
+   ```
+   sudo systemctl enable jamie-listen jamie-transcribe jamie-serve
+   sudo systemctl start jamie-listen jamie-transcribe jamie-serve
+   ```
+
+7. Check the status of the services:
+
+   ```
+   sudo systemctl status jamie-listen jamie-transcribe jamie-serve
+   ```
+
+To view logs for a specific service:
+
+```
+sudo journalctl -u jamie-listen
+```
+
+Replace `jamie-listen` with `jamie-transcribe` or `jamie-serve` to view logs for other services.
+
+This systemd setup allows Jamie to run as a system service, automatically starting on boot and managed through the systemd interface.
+
 ## Usage (or "Taking Jamie for a Walk")
 
 To start the bot and listen in Discord voice channels:
