@@ -1,46 +1,57 @@
-package setup
+package main
 
 import (
-	"database/sql"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/log"
-	_ "github.com/lib/pq"
-	"github.com/spf13/viper"
+	"node.town/config"
+	"node.town/db"
 )
 
 func RunSetup() {
 	log.Info("Starting Jamie setup...")
 
-	// Check database connection
-	dbURL := viper.GetString("DATABASE_URL")
-	if dbURL == "" {
-		dbURL = "postgres://jamie:jamie@localhost:5432/jamie"
-	}
-
-	db, err := sql.Open("postgres", dbURL)
+	// Initialize database connection
+	dbPool, dbQueries, err := db.OpenDatabase(false)
 	if err != nil {
 		log.Error("Failed to connect to database", "error", err)
 		createDB := false
-		huh.NewConfirm().
+		err := huh.NewConfirm().
 			Title("Do you want to create the database?").
 			Value(&createDB).
 			Run()
+		if err != nil {
+			log.Fatal("Error during setup", "error", err)
+			return
+		}
 
 		if createDB {
 			if err := createDatabase(); err != nil {
 				log.Fatal("Failed to create database", "error", err)
 			}
+			// Try to open the database again after creation
+			dbPool, dbQueries, err = db.OpenDatabase(true)
+			if err != nil {
+				log.Fatal(
+					"Failed to connect to the newly created database",
+					"error",
+					err,
+				)
+			}
 		} else {
 			log.Fatal("Database connection is required to continue")
 		}
-	} else {
-		defer db.Close()
-		log.Info("Successfully connected to the database")
 	}
+	defer dbPool.Close()
+
+	log.Info("Successfully connected to the database")
+
+	// Initialize config
+	cfg := config.New(dbQueries)
 
 	// Prompt for API keys and tokens
 	var discordToken, geminiAPIKey, speechmaticsAPIKey string
@@ -65,13 +76,18 @@ func RunSetup() {
 	}
 
 	// Save the configuration
-	viper.Set("DISCORD_TOKEN", discordToken)
-	viper.Set("GEMINI_API_KEY", geminiAPIKey)
-	viper.Set("SPEECHMATICS_API_KEY", speechmaticsAPIKey)
-
-	err = viper.WriteConfig()
+	ctx := context.Background()
+	err = cfg.Set(ctx, "DISCORD_TOKEN", discordToken)
 	if err != nil {
-		log.Fatal("Error saving configuration", "error", err)
+		log.Fatal("Error saving Discord token", "error", err)
+	}
+	err = cfg.Set(ctx, "GEMINI_API_KEY", geminiAPIKey)
+	if err != nil {
+		log.Fatal("Error saving Gemini API key", "error", err)
+	}
+	err = cfg.Set(ctx, "SPEECHMATICS_API_KEY", speechmaticsAPIKey)
+	if err != nil {
+		log.Fatal("Error saving Speechmatics API key", "error", err)
 	}
 
 	log.Info("Setup completed successfully!")
@@ -106,4 +122,8 @@ func createDatabase() error {
 	log.Info("Database schema initialized successfully")
 
 	return nil
+}
+
+func main() {
+	RunSetup()
 }
