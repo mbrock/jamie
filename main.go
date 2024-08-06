@@ -305,6 +305,7 @@ var packetInfoCmd = &cobra.Command{
 }
 
 func init() {
+	rootCmd.PersistentFlags().Bool("init-db", false, "Initialize the database with db_init.sql")
 	rootCmd.AddCommand(listenCmd)
 	rootCmd.AddCommand(listenPacketsCmd)
 	rootCmd.AddCommand(packetInfoCmd)
@@ -519,7 +520,8 @@ func main() {
 	var err error
 	pgPool, queries, err := func() (*pgxpool.Pool, *db.Queries, error) {
 		var _ context.Context = ctx
-		return initPgPool()
+		initDB, _ := rootCmd.PersistentFlags().GetBool("init-db")
+		return db.OpenDatabase(initDB)
 	}()
 	if err != nil {
 		log.Fatal("Failed to initialize connection pool", "error", err)

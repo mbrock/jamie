@@ -19,7 +19,7 @@ var (
 	dbOnce    sync.Once
 )
 
-func OpenDatabase() (*pgxpool.Pool, *Queries, error) {
+func OpenDatabase(initDB bool) (*pgxpool.Pool, *Queries, error) {
 	var err error
 	dbOnce.Do(func() {
 		dbPool, err = pgxpool.New(
@@ -33,22 +33,24 @@ func OpenDatabase() (*pgxpool.Pool, *Queries, error) {
 
 		dbQueries = New(dbPool)
 
-		sqlFile, readErr := sqlFS.ReadFile("db_init.sql")
-		if readErr != nil {
-			err = fmt.Errorf(
-				"failed to read embedded db_init.sql: %w",
-				readErr,
-			)
-			return
-		}
+		if initDB {
+			sqlFile, readErr := sqlFS.ReadFile("db_init.sql")
+			if readErr != nil {
+				err = fmt.Errorf(
+					"failed to read embedded db_init.sql: %w",
+					readErr,
+				)
+				return
+			}
 
-		_, execErr := dbPool.Exec(context.Background(), string(sqlFile))
-		if execErr != nil {
-			err = fmt.Errorf(
-				"failed to execute embedded db_init.sql: %w",
-				execErr,
-			)
-			return
+			_, execErr := dbPool.Exec(context.Background(), string(sqlFile))
+			if execErr != nil {
+				err = fmt.Errorf(
+					"failed to execute embedded db_init.sql: %w",
+					execErr,
+				)
+				return
+			}
 		}
 	})
 
