@@ -13,6 +13,12 @@ import (
 	"node.town/db"
 )
 
+const (
+	jamieUsername = "jamie"
+	jamiePassword = "jamie"
+	dbName        = "jamie"
+)
+
 func RunSetup() {
 	log.Info("Starting Jamie setup...")
 
@@ -23,70 +29,25 @@ func RunSetup() {
 	}
 	isRoot := currentUser.Uid == "0"
 
-	// Prompt for database setup options
-	var createJamieUser, useSudo bool
-	var dbOwner string
-
-	form := huh.NewForm(
-		huh.NewGroup(
-			huh.NewConfirm().
-				Title("Do you want to create a 'jamie' system user?").
-				Value(&createJamieUser),
-			huh.NewConfirm().
-				Title("Do you want to use sudo for database operations?").
-				Value(&useSudo),
-			huh.NewInput().
-				Title("Enter the desired database owner (default: current user)").
-				Value(&dbOwner),
-		),
-	)
-
-	err = form.Run()
-	if err != nil {
-		log.Fatal("Error during setup", "error", err)
+	// Check and create system user if needed
+	if err := ensureSystemUser(jamieUsername); err != nil {
+		log.Fatal("Failed to ensure system user", "error", err)
 	}
 
-	if dbOwner == "" {
-		dbOwner = currentUser.Username
+	// Check and create database user if needed
+	if err := ensureDatabaseUser(jamieUsername, jamiePassword); err != nil {
+		log.Fatal("Failed to ensure database user", "error", err)
 	}
 
-	// Create 'jamie' user if requested
-	if createJamieUser {
-		if err := createSystemUser("jamie", useSudo); err != nil {
-			log.Fatal("Failed to create 'jamie' user", "error", err)
-		}
+	// Check and create database if needed
+	if err := ensureDatabase(dbName, jamieUsername); err != nil {
+		log.Fatal("Failed to ensure database", "error", err)
 	}
 
 	// Initialize database connection
-	dbPool, dbQueries, err := db.OpenDatabase(false)
+	dbPool, dbQueries, err := db.OpenDatabase(true)
 	if err != nil {
-		log.Error("Failed to connect to database", "error", err)
-		createDB := false
-		err := huh.NewConfirm().
-			Title("Do you want to create the database?").
-			Value(&createDB).
-			Run()
-		if err != nil {
-			log.Fatal("Error during setup", "error", err)
-			return
-		}
-
-		if createDB {
-			if err := createDatabase(dbOwner, useSudo); err != nil {
-				log.Fatal("Failed to create database", "error", err)
-			}
-			// Try to open the database again after creation
-			dbPool, dbQueries, err = db.OpenDatabase(true)
-			if err != nil {
-				log.Fatal(
-					"Failed to connect to the newly created database",
-					"error",
-					err,
-				)
-			}
-		} else {
-			log.Fatal("Database connection is required to continue")
-		}
+		log.Fatal("Failed to connect to the database", "error", err)
 	}
 	defer dbPool.Close()
 
@@ -96,9 +57,199 @@ func RunSetup() {
 	cfg := config.New(dbQueries)
 
 	// Prompt for API keys and tokens
+	apiKeys, err := promptForAPIKeys()
+	if err != nil {
+		log.Fatal("Error during API key setup", "error", err)
+	}
+
+	// Save the configuration
+	if err := saveConfiguration(cfg, apiKeys); err != nil {
+		log.Fatal("Error saving configuration", "error", err)
+	}
+
+	log.Info("Setup completed successfully!")
+}
+
+func ensureSystemUser(username string) error {
+	exists, err := systemUserExists(username)
+	if err != nil {
+		return fmt.Errorf("failed to check system user: %w", err)
+	}
+
+	if !exists {
+		log.Info("Creating system user", "username", username)
+		cmd := exec.Command("useradd", "-r", "-s", "/bin/false", username)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		if err := cmd.Run(); err != nil {
+			if exitError, ok := err.(*exec.ExitError); ok && exitError.ExitCode() != 0 {
+				// Retry with sudo if the command failed
+				log.Warn("Failed to create user, retrying with sudo")
+				cmd = exec.Command("sudo", "useradd", "-r", "-s", "/bin/false", username)
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				if err := cmd.Run(); err != nil {
+					return fmt.Errorf("failed to create system user with sudo: %w", err)
+				}
+			} else {
+				return fmt.Errorf("failed to create system user: %w", err)
+			}
+		}
+		log.Info("System user created successfully", "username", username)
+	} else {
+		log.Info("System user already exists", "username", username)
+	}
+
+	return nil
+}
+
+func ensureDatabaseUser(username, password string) error {
+	exists, err := databaseUserExists(username)
+	if err != nil {
+		return fmt.Errorf("failed to check database user: %w", err)
+	}
+
+	if !exists {
+		log.Info("Creating database user", "username", username)
+		cmd := exec.Command("createuser", "-s", username)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		if err := cmd.Run(); err != nil {
+			if exitError, ok := err.(*exec.ExitError); ok && exitError.ExitCode() != 0 {
+				// Retry with sudo if the command failed
+				log.Warn("Failed to create database user, retrying with sudo")
+				cmd = exec.Command("sudo", "-u", "postgres", "createuser", "-s", username)
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				if err := cmd.Run(); err != nil {
+					return fmt.Errorf("failed to create database user with sudo: %w", err)
+				}
+			} else {
+				return fmt.Errorf("failed to create database user: %w", err)
+			}
+		}
+
+		// Set password for the user
+		alterCmd := exec.Command("psql", "-c", fmt.Sprintf("ALTER USER %s WITH PASSWORD '%s';", username, password))
+		alterCmd.Stdout = os.Stdout
+		alterCmd.Stderr = os.Stderr
+
+		if err := alterCmd.Run(); err != nil {
+			if exitError, ok := err.(*exec.ExitError); ok && exitError.ExitCode() != 0 {
+				// Retry with sudo if the command failed
+				log.Warn("Failed to set database user password, retrying with sudo")
+				alterCmd = exec.Command("sudo", "-u", "postgres", "psql", "-c", fmt.Sprintf("ALTER USER %s WITH PASSWORD '%s';", username, password))
+				alterCmd.Stdout = os.Stdout
+				alterCmd.Stderr = os.Stderr
+				if err := alterCmd.Run(); err != nil {
+					return fmt.Errorf("failed to set database user password with sudo: %w", err)
+				}
+			} else {
+				return fmt.Errorf("failed to set database user password: %w", err)
+			}
+		}
+
+		log.Info("Database user created successfully", "username", username)
+	} else {
+		log.Info("Database user already exists", "username", username)
+	}
+
+	return nil
+}
+
+func ensureDatabase(dbName, owner string) error {
+	exists, err := databaseExists(dbName)
+	if err != nil {
+		return fmt.Errorf("failed to check database: %w", err)
+	}
+
+	if !exists {
+		log.Info("Creating database", "name", dbName)
+		cmd := exec.Command("createdb", "-O", owner, dbName)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		if err := cmd.Run(); err != nil {
+			if exitError, ok := err.(*exec.ExitError); ok && exitError.ExitCode() != 0 {
+				// Retry with sudo if the command failed
+				log.Warn("Failed to create database, retrying with sudo")
+				cmd = exec.Command("sudo", "-u", "postgres", "createdb", "-O", owner, dbName)
+				cmd.Stdout = os.Stdout
+				cmd.Stderr = os.Stderr
+				if err := cmd.Run(); err != nil {
+					return fmt.Errorf("failed to create database with sudo: %w", err)
+				}
+			} else {
+				return fmt.Errorf("failed to create database: %w", err)
+			}
+		}
+
+		log.Info("Database created successfully", "name", dbName)
+
+		// Initialize the database schema
+		log.Info("Initializing database schema...")
+		schemaCmd := exec.Command("psql", "-d", dbName, "-f", "db/db_init.sql")
+		schemaCmd.Stdout = os.Stdout
+		schemaCmd.Stderr = os.Stderr
+
+		if err := schemaCmd.Run(); err != nil {
+			if exitError, ok := err.(*exec.ExitError); ok && exitError.ExitCode() != 0 {
+				// Retry with sudo if the command failed
+				log.Warn("Failed to initialize database schema, retrying with sudo")
+				schemaCmd = exec.Command("sudo", "-u", owner, "psql", "-d", dbName, "-f", "db/db_init.sql")
+				schemaCmd.Stdout = os.Stdout
+				schemaCmd.Stderr = os.Stderr
+				if err := schemaCmd.Run(); err != nil {
+					return fmt.Errorf("failed to initialize database schema with sudo: %w", err)
+				}
+			} else {
+				return fmt.Errorf("failed to initialize database schema: %w", err)
+			}
+		}
+
+		log.Info("Database schema initialized successfully")
+	} else {
+		log.Info("Database already exists", "name", dbName)
+	}
+
+	return nil
+}
+
+func systemUserExists(username string) (bool, error) {
+	_, err := user.Lookup(username)
+	if err != nil {
+		if _, ok := err.(user.UnknownUserError); ok {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+func databaseUserExists(username string) (bool, error) {
+	cmd := exec.Command("psql", "-tAc", fmt.Sprintf("SELECT 1 FROM pg_roles WHERE rolname='%s'", username))
+	output, err := cmd.Output()
+	if err != nil {
+		return false, fmt.Errorf("failed to check database user: %w", err)
+	}
+	return string(output) == "1\n", nil
+}
+
+func databaseExists(dbName string) (bool, error) {
+	cmd := exec.Command("psql", "-lqt", "|", "cut", "-d", "|", "-f", "1", "|", "grep", "-cw", dbName)
+	output, err := cmd.Output()
+	if err != nil {
+		return false, fmt.Errorf("failed to check database: %w", err)
+	}
+	return string(output) == "1\n", nil
+}
+
+func promptForAPIKeys() (map[string]string, error) {
 	var discordToken, geminiAPIKey, speechmaticsAPIKey string
 
-	form = huh.NewForm(
+	form := huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
 				Title("Enter your Discord Bot Token").
@@ -112,88 +263,25 @@ func RunSetup() {
 		),
 	)
 
-	err = form.Run()
+	err := form.Run()
 	if err != nil {
-		log.Fatal("Error during setup", "error", err)
+		return nil, fmt.Errorf("error during API key setup: %w", err)
 	}
 
-	// Save the configuration
+	return map[string]string{
+		"DISCORD_TOKEN":      discordToken,
+		"GEMINI_API_KEY":     geminiAPIKey,
+		"SPEECHMATICS_API_KEY": speechmaticsAPIKey,
+	}, nil
+}
+
+func saveConfiguration(cfg *config.Config, apiKeys map[string]string) error {
 	ctx := context.Background()
-	err = cfg.Set(ctx, "DISCORD_TOKEN", discordToken)
-	if err != nil {
-		log.Fatal("Error saving Discord token", "error", err)
+	for key, value := range apiKeys {
+		if err := cfg.Set(ctx, key, value); err != nil {
+			return fmt.Errorf("error saving %s: %w", key, err)
+		}
 	}
-	err = cfg.Set(ctx, "GEMINI_API_KEY", geminiAPIKey)
-	if err != nil {
-		log.Fatal("Error saving Gemini API key", "error", err)
-	}
-	err = cfg.Set(ctx, "SPEECHMATICS_API_KEY", speechmaticsAPIKey)
-	if err != nil {
-		log.Fatal("Error saving Speechmatics API key", "error", err)
-	}
-
-	log.Info("Setup completed successfully!")
-}
-
-func createSystemUser(username string, useSudo bool) error {
-	log.Info("Creating system user", "username", username)
-
-	var cmd *exec.Cmd
-	if useSudo {
-		cmd = exec.Command("sudo", "useradd", "-r", "-s", "/bin/false", username)
-	} else {
-		cmd = exec.Command("useradd", "-r", "-s", "/bin/false", username)
-	}
-
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	err := cmd.Run()
-	if err != nil {
-		return fmt.Errorf("failed to create system user: %w", err)
-	}
-
-	log.Info("System user created successfully", "username", username)
-	return nil
-}
-
-func createDatabase(owner string, useSudo bool) error {
-	log.Info("Creating database...")
-
-	var cmd *exec.Cmd
-	if useSudo {
-		cmd = exec.Command("sudo", "-u", "postgres", "createdb", "-O", owner, "jamie")
-	} else {
-		cmd = exec.Command("createdb", "-O", owner, "jamie")
-	}
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	err := cmd.Run()
-	if err != nil {
-		return fmt.Errorf("failed to create database: %w", err)
-	}
-
-	log.Info("Database created successfully")
-
-	// Initialize the database schema
-	log.Info("Initializing database schema...")
-
-	if useSudo {
-		cmd = exec.Command("sudo", "-u", owner, "psql", "-d", "jamie", "-f", "db/db_init.sql")
-	} else {
-		cmd = exec.Command("psql", "-d", "jamie", "-f", "db/db_init.sql")
-	}
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-
-	err = cmd.Run()
-	if err != nil {
-		return fmt.Errorf("failed to initialize database schema: %w", err)
-	}
-
-	log.Info("Database schema initialized successfully")
-
 	return nil
 }
 
