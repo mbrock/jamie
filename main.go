@@ -49,10 +49,6 @@ func initConfig() {
 	}
 }
 
-func initPgPool() (*pgxpool.Pool, *db.Queries, error) {
-	return db.OpenDatabase()
-}
-
 func handleError(err error, message string) {
 	if err != nil {
 		log.Fatal(message, "error", err)
@@ -305,7 +301,8 @@ var packetInfoCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.PersistentFlags().Bool("init-db", false, "Initialize the database with db_init.sql")
+	rootCmd.PersistentFlags().
+		Bool("init-db", false, "Initialize the database with db_init.sql")
 	rootCmd.AddCommand(listenCmd)
 	rootCmd.AddCommand(listenPacketsCmd)
 	rootCmd.AddCommand(packetInfoCmd)
