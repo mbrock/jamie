@@ -275,7 +275,12 @@ var packetInfoCmd = &cobra.Command{
 		startTime, endTime, err := parseTimeRange(startTimeStr, endTimeStr)
 		handleError(err, "Error parsing time range")
 
-		packets, err := fetchOpusPackets(db.DbQueries, ssrc, startTime, endTime)
+		packets, err := fetchOpusPackets(
+			db.DbQueries,
+			ssrc,
+			startTime,
+			endTime,
+		)
 		handleError(err, "Error querying database")
 
 		file, err := os.Create(outputFile)
@@ -522,8 +527,6 @@ func convertOggToMp3(inputFile, outputFile string) error {
 }
 
 func main() {
-	initConfig()
-
 	var err error
 	initDB, _ := rootCmd.PersistentFlags().GetBool("init-db")
 	db.DbPool, db.DbQueries, err = db.OpenDatabase(initDB)
@@ -531,6 +534,8 @@ func main() {
 		log.Fatal("Failed to initialize connection pool", "error", err)
 	}
 	defer db.DbPool.Close()
+
+	initConfig()
 
 	Routes(nt.Router, db.DbQueries)
 	aiderdoc.Routes(nt.Router)
