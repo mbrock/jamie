@@ -15,15 +15,24 @@ import (
 	"node.town/db"
 )
 
+package main
+
+import (
+	"context"
+	"fmt"
+	"os"
+	"os/exec"
+
+	"github.com/charmbracelet/huh"
+	"github.com/charmbracelet/log"
+	"node.town/config"
+	"node.town/db"
+)
+
 func RunSetup() {
 	log.Info("Starting Jamie setup...")
 
-	// Check database connection
-	dbURL := viper.GetString("DATABASE_URL")
-	if dbURL == "" {
-		dbURL = "postgres://jamie:jamie@localhost:5432/jamie"
-	}
-
+	// Initialize database connection
 	dbPool, dbQueries, err := db.OpenDatabase(false)
 	if err != nil {
 		log.Error("Failed to connect to database", "error", err)
@@ -122,4 +131,8 @@ func createDatabase() error {
 	log.Info("Database schema initialized successfully")
 
 	return nil
+}
+
+func main() {
+	RunSetup()
 }

@@ -346,15 +346,6 @@ func init() {
 	configCmd.AddCommand(configSetCmd)
 	rootCmd.AddCommand(configCmd)
 
-	setupCmd := &cobra.Command{
-		Use:   "setup",
-		Short: "Set up Jamie configuration and database",
-		Long:  `This command guides you through setting up Jamie's configuration and database.`,
-		Run: func(cmd *cobra.Command, args []string) {
-			RunSetup()
-		},
-	}
-	rootCmd.AddCommand(setupCmd)
 
 	prologCmd := &cobra.Command{
 		Use:   "prolog",
