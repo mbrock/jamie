@@ -199,3 +199,15 @@ SELECT id, operation, sequence, type, raw_data, bot_token, created_at
 FROM discord_events
 ORDER BY created_at DESC
 LIMIT $1;
+
+-- name: GetConfigValue :one
+SELECT value FROM config WHERE key = $1;
+
+-- name: SetConfigValue :exec
+INSERT INTO config (key, value, updated_at)
+VALUES ($1, $2, CURRENT_TIMESTAMP)
+ON CONFLICT (key) DO UPDATE
+SET value = EXCLUDED.value, updated_at = CURRENT_TIMESTAMP;
+
+-- name: GetAllConfig :many
+SELECT key, value FROM config;

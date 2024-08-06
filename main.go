@@ -17,6 +17,7 @@ import (
 	"node.town/discord"
 
 	"node.town/aiderdoc"
+	"node.town/config"
 	"node.town/prolog"
 	"node.town/snd"
 	"node.town/tts"
@@ -39,12 +40,19 @@ import (
 	"node.town/speechmatics"
 )
 
+var cfg *config.Config
+
 func initConfig() {
 	viper.SetConfigFile(".env")
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {
 		log.Warn("Error reading config file", "error", err)
+	}
+
+	cfg = config.New(db.DbQueries)
+	if err := cfg.Load(context.Background()); err != nil {
+		log.Fatal("Error loading config from database", "error", err)
 	}
 }
 
@@ -58,6 +66,41 @@ var rootCmd = &cobra.Command{
 	Use:   "jamie",
 	Short: "Jamie is a Discord bot for voice channel interactions",
 	Long:  `Jamie is a Discord bot that can join voice channels and perform various operations.`,
+}
+
+var configCmd = &cobra.Command{
+	Use:   "config",
+	Short: "Manage Jamie configuration",
+	Long:  `This command allows you to get and set configuration values for Jamie.`,
+}
+
+var configGetCmd = &cobra.Command{
+	Use:   "get [key]",
+	Short: "Get a configuration value",
+	Args:  cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		key := args[0]
+		value, err := cfg.Get(context.Background(), key)
+		if err != nil {
+			log.Fatal("Error getting config value", "error", err)
+		}
+		fmt.Printf("%s: %s\n", key, value)
+	},
+}
+
+var configSetCmd = &cobra.Command{
+	Use:   "set [key] [value]",
+	Short: "Set a configuration value",
+	Args:  cobra.ExactArgs(2),
+	Run: func(cmd *cobra.Command, args []string) {
+		key := args[0]
+		value := args[1]
+		err := cfg.Set(context.Background(), key, value)
+		if err != nil {
+			log.Fatal("Error setting config value", "error", err)
+		}
+		fmt.Printf("Set %s to %s\n", key, value)
+	},
 }
 
 var listenCmd = &cobra.Command{
@@ -293,6 +336,10 @@ func init() {
 	rootCmd.AddCommand(tts.StreamCmd)
 	rootCmd.AddCommand(nt.ServeCmd)
 	rootCmd.AddCommand(aiderdoc.AiderdocCmd)
+
+	configCmd.AddCommand(configGetCmd)
+	configCmd.AddCommand(configSetCmd)
+	rootCmd.AddCommand(configCmd)
 
 	prologCmd := &cobra.Command{
 		Use:   "prolog",

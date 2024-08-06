@@ -158,6 +158,13 @@ CREATE INDEX IF NOT EXISTS idx_word_alternatives_word_id ON word_alternatives(wo
 CREATE INDEX IF NOT EXISTS idx_transcription_words_version ON transcription_words(version);
 CREATE INDEX IF NOT EXISTS idx_transcription_segments_version ON transcription_segments(version);
 
+CREATE TABLE IF NOT EXISTS config (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS discord_events (
     id SERIAL PRIMARY KEY,
     operation INTEGER NOT NULL,
