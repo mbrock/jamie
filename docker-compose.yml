@@ -13,7 +13,7 @@ services:
     ports:
       - "5432:5432"
 
-  jamie-listen:
+  rec:
     build: .
     command: ["./jamie", "listen"]
     depends_on:
@@ -24,7 +24,7 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       SPEECHMATICS_API_KEY: ${SPEECHMATICS_API_KEY}
 
-  jamie-transcribe:
+  stt:
     build: .
     command: ["./jamie", "transcribe"]
     depends_on:
@@ -35,7 +35,7 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY}
       SPEECHMATICS_API_KEY: ${SPEECHMATICS_API_KEY}
 
-  jamie-serve:
+  web:
     build: .
     command: ["./jamie", "serve"]
     depends_on:

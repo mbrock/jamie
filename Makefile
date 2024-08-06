@@ -5,8 +5,8 @@ GOTEST=$(GOCMD) test
 GOGET=$(GOCMD) get
 BINARY_NAME=jamie
 
-export CGO_CFLAGS=$(shell pkg-config --cflags-only-I libonnxruntime)
-export CGO_LDFLAGS=$(shell pkg-config --libs-only-L libonnxruntime)
+#export CGO_CFLAGS=$(shell pkg-config --cflags-only-I libonnxruntime)
+#export CGO_LDFLAGS=$(shell pkg-config --libs-only-L libonnxruntime)
 
 all: test build
 

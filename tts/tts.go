@@ -42,19 +42,13 @@ func init() {
 func runTranscribe(cmd *cobra.Command, args []string) {
 	cfg := loadConfig()
 
-	pgPool, queries, err := db.OpenDatabase()
-	if err != nil {
-		log.Fatal("Failed to open database", "error", err)
-	}
-	defer pgPool.Close()
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	service := NewSpeechmaticsService(cfg.SpeechmaticsAPIKey)
-	handler := NewTranscriptionHandler(queries, pgPool, service)
+	handler := NewTranscriptionHandler(db.DbQueries, db.DbPool, service)
 
-	err = streamAndTranscribe(ctx, pgPool, queries, handler)
+	err := streamAndTranscribe(ctx, db.DbPool, db.DbQueries, handler)
 	if err != nil {
 		log.Fatal("Error in streamAndTranscribe", "error", err)
 	}
@@ -117,12 +111,6 @@ func streamAndTranscribe(
 }
 
 func runStream(cmd *cobra.Command, args []string) {
-	pgPool, queries, err := db.OpenDatabase()
-	if err != nil {
-		log.Fatal("Failed to open database", "error", err)
-	}
-	defer pgPool.Close()
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -133,13 +121,13 @@ func runStream(cmd *cobra.Command, args []string) {
 	transcriptChan := make(chan TranscriptSegment, 100)
 
 	go func() {
-		p := tea.NewProgram(initialModel(transcriptChan, queries))
+		p := tea.NewProgram(initialModel(transcriptChan, db.DbQueries))
 		if _, err := p.Run(); err != nil {
 			log.Fatal("Error running program", "error", err)
 		}
 	}()
 
-	updates, err := snd.ListenForTranscriptionChanges(ctx, pgPool)
+	updates, err := snd.ListenForTranscriptionChanges(ctx, db.DbPool)
 	if err != nil {
 		log.Fatal(
 			"Failed to set up transcription change listener",
@@ -150,7 +138,12 @@ func runStream(cmd *cobra.Command, args []string) {
 
 	go func() {
 		for update := range updates {
-			handleTranscriptionUpdate(ctx, update, queries, transcriptChan)
+			handleTranscriptionUpdate(
+				ctx,
+				update,
+				db.DbQueries,
+				transcriptChan,
+			)
 		}
 	}()
 

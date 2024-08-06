@@ -60,3 +60,8 @@ func OpenDatabase(initDB bool) (*pgxpool.Pool, *Queries, error) {
 
 	return dbPool, dbQueries, nil
 }
+
+var (
+	DbPool    *pgxpool.Pool
+	DbQueries *Queries
+)

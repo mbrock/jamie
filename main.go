@@ -1,7 +1,6 @@
 package main
 
 import (
-	"github.com/jackc/pgx/v5/pgxpool"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -29,7 +28,6 @@ import (
 	"github.com/charmbracelet/log"
 	"github.com/google/generative-ai-go/genai"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/olekukonko/tablewriter"
 
 	_ "github.com/lib/pq"
@@ -39,11 +37,6 @@ import (
 	"node.town/db"
 	"node.town/gemini"
 	"node.town/speechmatics"
-)
-
-var (
-	pgPool  *pgxpool.Pool
-	queries *db.Queries
 )
 
 func initConfig() {
@@ -81,7 +74,7 @@ var listenCmd = &cobra.Command{
 
 		bot := &discord.Bot{
 			Discord: discordSession,
-			Queries: queries,
+			Queries: db.DbQueries,
 		}
 
 		discordSession.AddHandler(bot.HandleEvent)
@@ -131,8 +124,12 @@ var listenPacketsCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 
-		cache := snd.NewSSRCUserIDCache(queries)
-		streamer := snd.NewPostgresPacketStreamer(pgPool, cache, log.Default())
+		cache := snd.NewSSRCUserIDCache(db.DbQueries)
+		streamer := snd.NewPostgresPacketStreamer(
+			db.DbPool,
+			cache,
+			log.Default(),
+		)
 		packetChan, err := snd.StreamOpusPackets(ctx, streamer)
 		if err != nil {
 			log.Fatal("Error setting up opus packet stream", "error", err)
@@ -235,7 +232,7 @@ var packetInfoCmd = &cobra.Command{
 		startTime, endTime, err := parseTimeRange(startTimeStr, endTimeStr)
 		handleError(err, "Error parsing time range")
 
-		packets, err := fetchOpusPackets(queries, ssrc, startTime, endTime)
+		packets, err := fetchOpusPackets(db.DbQueries, ssrc, startTime, endTime)
 		handleError(err, "Error querying database")
 
 		file, err := os.Create(outputFile)
@@ -275,7 +272,7 @@ var packetInfoCmd = &cobra.Command{
 			GetString("transcription-service")
 		transcription, err := transcribeAudio(
 			ctx,
-			queries,
+			db.DbQueries,
 			mp3OutputFile,
 			transcriptionService,
 		)
@@ -302,7 +299,7 @@ func init() {
 		Short: "Start a Prolog REPL",
 		Long:  `This command starts a simple Prolog REPL using a bubble TUI.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			prolog.StartPrologREPL(queries)
+			prolog.StartPrologREPL(db.DbQueries)
 		},
 	}
 	rootCmd.AddCommand(prologCmd)
@@ -313,8 +310,8 @@ func init() {
 		Long:  `This command displays a live stream of incoming Discord events using a bubble tea UI.`,
 		Run: func(cmd *cobra.Command, args []string) {
 			streamer := snd.NewDiscordEventStreamer(
-				pgPool,
-				queries,
+				db.DbPool,
+				db.DbQueries,
 				log.Default(),
 			)
 			eventChan, err := snd.StreamDiscordEvents(
@@ -323,7 +320,7 @@ func init() {
 			)
 			handleError(err, "Failed to start Discord event stream")
 
-			existingEvents, err := queries.GetRecentDiscordEvents(
+			existingEvents, err := db.DbQueries.GetRecentDiscordEvents(
 				context.Background(),
 				100,
 			)
@@ -369,7 +366,7 @@ func runReport(cmd *cobra.Command, args []string) {
 	startTime, endTime, err := parseTimeRange(startTimeStr, endTimeStr)
 	handleError(err, "Error parsing time range")
 
-	report, err := queries.GetVoiceActivityReport(
+	report, err := db.DbQueries.GetVoiceActivityReport(
 		context.Background(),
 		db.GetVoiceActivityReportParams{
 			CreatedAt:   pgtype.Timestamptz{Time: startTime, Valid: true},
@@ -480,16 +477,15 @@ func convertOggToMp3(inputFile, outputFile string) error {
 func main() {
 	initConfig()
 
-	ctx := context.Background()
 	var err error
 	initDB, _ := rootCmd.PersistentFlags().GetBool("init-db")
-	pgPool, queries, err = db.OpenDatabase(initDB)
+	db.DbPool, db.DbQueries, err = db.OpenDatabase(initDB)
 	if err != nil {
 		log.Fatal("Failed to initialize connection pool", "error", err)
 	}
-	defer pgPool.Close()
+	defer db.DbPool.Close()
 
-	Routes(nt.Router, queries)
+	Routes(nt.Router, db.DbQueries)
 	aiderdoc.Routes(nt.Router)
 
 	if err := rootCmd.Execute(); err != nil {
