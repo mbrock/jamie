@@ -1,9 +1,31 @@
-:- dynamic log/2.
-:- dynamic run_command/2.
-:- dynamic open_database/1.
-:- dynamic set_config/2.
-:- dynamic ask/2.
-:- dynamic confirm/2.
+% Mock predicates for simulation
+
+log(Level, Message) :-
+    format('LOG (~w): ~w~n', [Level, Message]).
+
+run_command(Command, Result) :-
+    format('Would run command: ~w~n', [Command]),
+    format('Succeed or fail? (s/f): '),
+    read_line_to_string(user_input, Response),
+    (Response = "s" -> Result = success ; Result = fail).
+
+open_database(Result) :-
+    format('Simulating database opening.~n'),
+    format('Succeed or fail? (s/f): '),
+    read_line_to_string(user_input, Response),
+    (Response = "s" -> Result = success ; Result = fail).
+
+set_config(Key, Value) :-
+    format('Setting config: ~w = ~w~n', [Key, Value]).
+
+ask(Prompt, Answer) :-
+    format('~w', [Prompt]),
+    read_line_to_string(user_input, Answer).
+
+confirm(Prompt, Answer) :-
+    format('~w (y/n): ', [Prompt]),
+    read_line_to_string(user_input, Response),
+    (Response = "y" -> Answer = yes ; Answer = no).
 
 jamie_username('jamie').
 jamie_password('jamie').
