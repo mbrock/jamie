@@ -112,14 +112,17 @@ floor!
 ## Technologies and Tools (or "Jamie's Toolbox")
 
 - Go 1.20 or later (Because Jamie likes to go fast)
-- PostgreSQL for data storage (Jamie's got a thing for elephants)
+- PostgreSQL 16 for data storage (Jamie's got a thing for elephants, especially the latest and greatest)
 - sqlc for type-safe SQL in Go (Because typos are so last century)
 - FFmpeg for audio conversion (Jamie's universal translator for audio)
 - Discord API via discordgo library (Jamie's Discord phrasebook)
 - Google Cloud API for Gemini (Jamie's hotline to the AI overlords)
 - Speechmatics API (Jamie's ear-to-text converter)
+- Docker and Docker Compose (Jamie's containerization toolkit)
 
 ## Setup (or "Teaching Jamie to Sit and Stay")
+
+### Traditional Setup
 
 1. Clone the repository:
 
@@ -153,6 +156,74 @@ floor!
    ```
    make
    ```
+
+### Docker Compose Setup (or "Jamie's Containerized Adventure")
+
+For an easy and manageable deployment, we've provided a Docker Compose configuration. This setup includes PostgreSQL 16 database and all the necessary Jamie services.
+
+#### Prerequisites
+
+- Docker
+- Docker Compose
+
+#### Getting Started with Docker Compose
+
+1. Create a `.env` file in the root directory with the following content:
+
+   ```
+   POSTGRES_PASSWORD=your_secure_postgres_password
+   DISCORD_TOKEN=your_discord_bot_token
+   GEMINI_API_KEY=your_google_cloud_api_key
+   SPEECHMATICS_API_KEY=your_speechmatics_api_key
+   ```
+
+2. Build and start the services:
+
+   ```
+   docker-compose up -d
+   ```
+
+   This command will start the following services:
+   - PostgreSQL database
+   - Jamie Listen service (main bot functionality)
+   - Jamie Transcribe service
+   - Jamie Serve service (HTTP server)
+
+3. To view logs for a specific service:
+
+   ```
+   docker-compose logs -f jamie-listen
+   ```
+
+   Replace `jamie-listen` with `jamie-transcribe` or `jamie-serve` to view logs for other services.
+
+4. To stop the services:
+
+   ```
+   docker-compose down
+   ```
+
+#### Managing Services
+
+- To restart a specific service:
+
+  ```
+  docker-compose restart jamie-listen
+  ```
+
+- To stop a specific service:
+
+  ```
+  docker-compose stop jamie-transcribe
+  ```
+
+- To start a stopped service:
+
+  ```
+  docker-compose start jamie-serve
+  ```
+
+With this Docker Compose setup, you can easily manage and deploy Jamie on your server. Each service is isolated in its own container, making it simple to start, stop, and monitor individual components of the system.
 
 ## Usage (or "Taking Jamie for a Walk")
 

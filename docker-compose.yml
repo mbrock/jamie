@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: jamie
+      POSTGRES_USER: jamie
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./db/db_init.sql:/docker-entrypoint-initdb.d/db_init.sql
+    ports:
+      - "5432:5432"
+
+  jamie-listen:
+    build: .
+    command: ["./jamie", "listen"]
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgres://jamie:${POSTGRES_PASSWORD}@db:5432/jamie
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      SPEECHMATICS_API_KEY: ${SPEECHMATICS_API_KEY}
+
+  jamie-transcribe:
+    build: .
+    command: ["./jamie", "transcribe"]
+    depends_on:
+      - db
+    environment:
+      DATABASE_URL: postgres://jamie:${POSTGRES_PASSWORD}@db:5432/jamie
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      SPEECHMATICS_API_KEY: ${SPEECHMATICS_API_KEY}
+
+  jamie-serve:
+    build: .
+    command: ["./jamie", "serve"]
+    depends_on:
+      - db
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://jamie:${POSTGRES_PASSWORD}@db:5432/jamie
+      DISCORD_TOKEN: ${DISCORD_TOKEN}
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      SPEECHMATICS_API_KEY: ${SPEECHMATICS_API_KEY}
+
+volumes:
+  postgres_data:
