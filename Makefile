@@ -47,3 +47,6 @@ install-systemd:
 	@echo "Systemd service files installed. You can now enable and start the services with:"
 	@echo "sudo systemctl enable jamie-listen jamie-transcribe jamie-serve"
 	@echo "sudo systemctl start jamie-listen jamie-transcribe jamie-serve"
+
+install: build
+	sudo install -m 755 $(BINARY_NAME) /usr/local/bin/$(BINARY_NAME)
