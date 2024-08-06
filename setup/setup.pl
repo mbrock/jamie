@@ -1,138 +1,159 @@
-% Mock predicates for simulation
+#!/bin/bash
 
-:- module(setup,
-          [ run_setup/0
-	  ]).
+# Constants
+JAMIE_USERNAME="jamie"
+JAMIE_PASSWORD="jamie"
+DB_NAME="jamie"
 
-log(Level, Message) :-
-	format('LOG (~w): ~w~n', [Level, Message]).
+# Logging function
+log() {
+    echo "LOG ($1): $2"
+}
 
-run_command(Command, Result) :-
-	format('Would run command: ~w~n', [Command]),
-	format('Succeed or fail? (s/f): '),
-	read_line_to_string(user_input, Response),
-	(Response = 's' ->
-		Result = success;
-		Result = fail).
+# Run command with optional sudo
+run_command() {
+    echo "Would run command: $@"
+    read -p "Succeed or fail? (s/f): " response
+    if [[ $response == "s" ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
 
-open_database(Result) :-
-	format('Simulating database opening.~n'),
-	format('Succeed or fail? (s/f): '),
-	read_line_to_string(user_input, Response),
-	(Response = 's' ->
-		Result = success;
-		Result = fail).
+# Confirm function
+confirm() {
+    read -p "$1 (y/n): " response
+    if [[ $response == "y" ]]; then
+        return 0
+    else
+        return 1
+    fi
+}
 
-set_config(Key, Value) :-
-	format('Setting config: ~w = ~w~n', [Key, Value]).
+# Ensure system user exists
+ensure_system_user() {
+    if id "$JAMIE_USERNAME" &>/dev/null; then
+        log "info" "System user already exists"
+    else
+        log "info" "Creating system user"
+        if run_command useradd -r -s /bin/false "$JAMIE_USERNAME"; then
+            log "info" "System user created successfully"
+        else
+            if confirm "Use sudo?"; then
+                if run_command sudo useradd -r -s /bin/false "$JAMIE_USERNAME"; then
+                    log "info" "System user created successfully with sudo"
+                else
+                    log "error" "Failed to create system user"
+                    exit 1
+                fi
+            else
+                log "error" "Failed to create system user"
+                exit 1
+            fi
+        fi
+    fi
+}
 
-ask(Prompt, Answer) :-
-	format('~w', [Prompt]),
-	read_line_to_string(user_input, Answer).
+# Ensure database user exists
+ensure_database_user() {
+    if run_command psql -tAc "SELECT 1 FROM pg_roles WHERE rolname='$JAMIE_USERNAME'"; then
+        log "info" "Database user already exists"
+    else
+        log "info" "Creating database user"
+        if run_command createuser -s "$JAMIE_USERNAME"; then
+            if run_command psql -c "ALTER USER $JAMIE_USERNAME WITH PASSWORD '$JAMIE_PASSWORD';"; then
+                log "info" "Database user created successfully"
+            else
+                log "error" "Failed to set database user password"
+                exit 1
+            fi
+        else
+            if confirm "Use sudo?"; then
+                if run_command sudo -u postgres createuser -s "$JAMIE_USERNAME"; then
+                    if run_command sudo -u postgres psql -c "ALTER USER $JAMIE_USERNAME WITH PASSWORD '$JAMIE_PASSWORD';"; then
+                        log "info" "Database user created successfully with sudo"
+                    else
+                        log "error" "Failed to set database user password"
+                        exit 1
+                    fi
+                else
+                    log "error" "Failed to create database user"
+                    exit 1
+                fi
+            else
+                log "error" "Failed to create database user"
+                exit 1
+            fi
+        fi
+    fi
+}
 
-confirm(Prompt, Answer) :-
-	format('~w (y/n): ', [Prompt]),
-	read_line_to_string(user_input, Response),
-	(Response = "y" ->
-		Answer = yes;
-		Answer = no).
+# Ensure database exists
+ensure_database() {
+    if run_command psql -lqt | cut -d \| -f 1 | grep -cw "$DB_NAME"; then
+        log "info" "Database already exists"
+    else
+        log "info" "Creating database"
+        if run_command createdb -O "$JAMIE_USERNAME" "$DB_NAME"; then
+            log "info" "Database created successfully"
+            log "info" "Initializing database schema..."
+            if run_command psql -d "$DB_NAME" -f db/db_init.sql; then
+                log "info" "Database schema initialized successfully"
+            else
+                log "error" "Failed to initialize database schema"
+                exit 1
+            fi
+        else
+            if confirm "Use sudo?"; then
+                if run_command sudo -u postgres createdb -O "$JAMIE_USERNAME" "$DB_NAME"; then
+                    log "info" "Database created successfully with sudo"
+                    log "info" "Initializing database schema..."
+                    if run_command sudo -u "$JAMIE_USERNAME" psql -d "$DB_NAME" -f db/db_init.sql; then
+                        log "info" "Database schema initialized successfully"
+                    else
+                        log "error" "Failed to initialize database schema"
+                        exit 1
+                    fi
+                else
+                    log "error" "Failed to create database"
+                    exit 1
+                fi
+            else
+                log "error" "Failed to create database"
+                exit 1
+            fi
+        fi
+    fi
+}
 
-jamie_username('jamie').
-jamie_password('jamie').
-db_name('jamie').
+# Prompt for API keys
+prompt_for_api_keys() {
+    local services=("Discord" "Google Cloud (Gemini)" "Speechmatics")
+    local keys=("DISCORD_TOKEN" "GEMINI_API_KEY" "SPEECHMATICS_API_KEY")
 
-run_setup :-
-	log(info, 'Starting Jamie setup...'), ensure_system_user, !, ensure_database_user, !, ensure_database, !,
-	open_database(success), prompt_for_api_keys.
+    for i in "${!services[@]}"; do
+        read -p "Enter API key for ${services[$i]}: " value
+        echo "Setting config: ${keys[$i]} = $value"
+    done
+}
 
-ensure_system_user :-
-	jamie_username(Username),
-	system_user_exists(Username),
-	log(info, 'System user already exists'), !.
+# Main setup function
+run_setup() {
+    log "info" "Starting Jamie setup..."
+    ensure_system_user
+    ensure_database_user
+    ensure_database
+    log "info" "Simulating database opening."
+    read -p "Succeed or fail? (s/f): " response
+    if [[ $response == "s" ]]; then
+        prompt_for_api_keys
+        log "info" "Setup completed successfully!"
+    else
+        log "error" "Failed to open database"
+        exit 1
+    fi
+}
 
-ensure_system_user :-
-	jamie_username(Username),
-	log(info, 'Creating system user'),
-	create_system_user(Username),
-	system_user_exists(Username).
-
-create_system_user(Username) :-
-	run_command(['useradd', '-r', '-s', '/bin/false', Username]),
-	log(info, 'System user created successfully').
-
-ensure_database_user :-
-	jamie_username(Username),
-	database_user_exists(Username), !.
-
-ensure_database_user :-
-	jamie_username(Username),
-	jamie_password(Password),
-	log(info, 'Creating database user'),
-	create_database_user(Username, Password),
-	database_user_exists(Username), !.
-
-create_database_user(Username, Password) :-
-	run_command(['createuser', '-s', Username]),
-	set_database_user_password(Username, Password).
-
-set_database_user_password(Username, Password) :-
-	format(
-		atom(AlterCommand), 'ALTER USER ~w WITH PASSWORD \'~w\';', [Username, Password]),
-	run_command(['psql', '-c', AlterCommand]),
-	log(info, 'Database user created successfully').
-
-ensure_database :-
-	db_name(DbName),
-	database_exists(DbName), !,
-	log(info, 'Database already exists').
-
-ensure_database :-
-	db_name(DbName),
-	jamie_username(Owner),
-	log(info, 'Creating database'),
-	create_database(DbName, Owner),
-	database_exists(DbName).
-
-create_database(DbName, Owner) :-
-	run_command(['createdb', '-O', Owner, DbName]),
-	log(info, 'Database created successfully'),
-	initialize_database_schema(DbName, Owner).
-
-initialize_database_schema(DbName, Owner) :-
-	log(info, 'Initializing database schema...'),
-	run_command(['psql', '-d', DbName, '-f', 'db/db_init.sql']),
-	log(info, 'Database schema initialized successfully').
-
-% Helper predicates to check existence
-
-system_user_exists(Username) :-
-	run_command(['id', Username], success).
-
-database_user_exists(Username) :-
-	format(
-		atom(Query), 'SELECT 1 FROM pg_roles WHERE rolname=\'~w\'', [Username]),
-	run_command(['psql', '-tAc', Query], '1\n').
-
-database_exists(DbName) :-
-	run_command(['psql', '-lqt', '|', 'cut', '-d', '|', '-f', '1', '|', 'grep', '-cw', DbName], '1\n').
-
-% Run command with potential sudo
-
-run_command(Command) :-
-	run_command(Command, success), !.
-
-run_command(Command) :-
-	confirm('Use sudo?', yes),
-	append(['sudo'], Command, SudoCommand),
-	run_command(SudoCommand, success).
-
-prompt_for_api_keys :-
-	prompt_for_api_key('Discord', 'DISCORD_TOKEN'),
-	prompt_for_api_key('Google Cloud (Gemini)', 'GEMINI_API_KEY'),
-	prompt_for_api_key('Speechmatics', 'SPEECHMATICS_API_KEY').
-
-prompt_for_api_key(Service, Key) :-
-	format(
-		atom(Prompt), 'Enter API key for ~w: ', [Service]),
-	ask(Prompt, Value),
-	set_config(Key, Value).
+# Run the setup
+run_setup
