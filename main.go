@@ -38,7 +38,6 @@ import (
 	"node.town/db"
 	"node.town/gemini"
 	"node.town/speechmatics"
-	"node.town/setup"
 )
 
 var cfg *config.Config
@@ -352,7 +351,7 @@ func init() {
 		Short: "Set up Jamie configuration and database",
 		Long:  `This command guides you through setting up Jamie's configuration and database.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			setup.RunSetup()
+			RunSetup()
 		},
 	}
 	rootCmd.AddCommand(setupCmd)
