@@ -7,10 +7,7 @@ ExecStart=/usr/local/bin/jamie listen
 Restart=always
 User=jamie
 Group=jamie
-Environment=DATABASE_URL=postgres://jamie:${POSTGRES_PASSWORD}@localhost:5432/jamie
-Environment=DISCORD_TOKEN=${DISCORD_TOKEN}
-Environment=GEMINI_API_KEY=${GEMINI_API_KEY}
-Environment=SPEECHMATICS_API_KEY=${SPEECHMATICS_API_KEY}
+Environment=DATABASE_URL=postgres://jamie:jamie@localhost:5432/jamie
 
 [Install]
 WantedBy=multi-user.target
