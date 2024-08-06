@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/user"
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/log"
@@ -14,6 +15,47 @@ import (
 
 func RunSetup() {
 	log.Info("Starting Jamie setup...")
+
+	// Check if running as root
+	currentUser, err := user.Current()
+	if err != nil {
+		log.Fatal("Failed to get current user", "error", err)
+	}
+	isRoot := currentUser.Uid == "0"
+
+	// Prompt for database setup options
+	var createJamieUser, useSudo bool
+	var dbOwner string
+
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Do you want to create a 'jamie' system user?").
+				Value(&createJamieUser),
+			huh.NewConfirm().
+				Title("Do you want to use sudo for database operations?").
+				Value(&useSudo),
+			huh.NewInput().
+				Title("Enter the desired database owner (default: current user)").
+				Value(&dbOwner),
+		),
+	)
+
+	err = form.Run()
+	if err != nil {
+		log.Fatal("Error during setup", "error", err)
+	}
+
+	if dbOwner == "" {
+		dbOwner = currentUser.Username
+	}
+
+	// Create 'jamie' user if requested
+	if createJamieUser {
+		if err := createSystemUser("jamie", useSudo); err != nil {
+			log.Fatal("Failed to create 'jamie' user", "error", err)
+		}
+	}
 
 	// Initialize database connection
 	dbPool, dbQueries, err := db.OpenDatabase(false)
@@ -30,7 +72,7 @@ func RunSetup() {
 		}
 
 		if createDB {
-			if err := createDatabase(); err != nil {
+			if err := createDatabase(dbOwner, useSudo); err != nil {
 				log.Fatal("Failed to create database", "error", err)
 			}
 			// Try to open the database again after creation
@@ -56,7 +98,7 @@ func RunSetup() {
 	// Prompt for API keys and tokens
 	var discordToken, geminiAPIKey, speechmaticsAPIKey string
 
-	form := huh.NewForm(
+	form = huh.NewForm(
 		huh.NewGroup(
 			huh.NewInput().
 				Title("Enter your Discord Bot Token").
@@ -93,10 +135,37 @@ func RunSetup() {
 	log.Info("Setup completed successfully!")
 }
 
-func createDatabase() error {
+func createSystemUser(username string, useSudo bool) error {
+	log.Info("Creating system user", "username", username)
+
+	var cmd *exec.Cmd
+	if useSudo {
+		cmd = exec.Command("sudo", "useradd", "-r", "-s", "/bin/false", username)
+	} else {
+		cmd = exec.Command("useradd", "-r", "-s", "/bin/false", username)
+	}
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	err := cmd.Run()
+	if err != nil {
+		return fmt.Errorf("failed to create system user: %w", err)
+	}
+
+	log.Info("System user created successfully", "username", username)
+	return nil
+}
+
+func createDatabase(owner string, useSudo bool) error {
 	log.Info("Creating database...")
 
-	cmd := exec.Command("createdb", "jamie")
+	var cmd *exec.Cmd
+	if useSudo {
+		cmd = exec.Command("sudo", "-u", "postgres", "createdb", "-O", owner, "jamie")
+	} else {
+		cmd = exec.Command("createdb", "-O", owner, "jamie")
+	}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -110,7 +179,11 @@ func createDatabase() error {
 	// Initialize the database schema
 	log.Info("Initializing database schema...")
 
-	cmd = exec.Command("psql", "-d", "jamie", "-f", "db/db_init.sql")
+	if useSudo {
+		cmd = exec.Command("sudo", "-u", owner, "psql", "-d", "jamie", "-f", "db/db_init.sql")
+	} else {
+		cmd = exec.Command("psql", "-d", "jamie", "-f", "db/db_init.sql")
+	}
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
