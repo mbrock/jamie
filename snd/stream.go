@@ -141,7 +141,7 @@ func (s *PostgresPacketStreamer) Stream(
 		for {
 			notification, err := conn.Conn().WaitForNotification(ctx)
 			if err != nil {
-				if err == context.Canceled {
+				if errors.Is(err, context.Canceled) {
 					return
 				}
 				s.logger.Error("Error waiting for notification", "error", err)
@@ -277,7 +277,7 @@ func (s *DiscordEventStreamer) Stream(ctx context.Context) (<-chan DiscordEventN
 func ConvertDiscordEvent(event interface{}) interface{} {
 	switch e := event.(type) {
 	case db.DiscordEvent:
-		return snd.DiscordEventNotification{
+		return DiscordEventNotification{
 			ID:        e.ID,
 			Operation: e.Operation,
 			Sequence:  e.Sequence,
@@ -286,7 +286,7 @@ func ConvertDiscordEvent(event interface{}) interface{} {
 			BotToken:  e.BotToken,
 			CreatedAt: e.CreatedAt.Time,
 		}
-	case snd.DiscordEventNotification:
+	case DiscordEventNotification:
 		return db.DiscordEvent{
 			ID:        e.ID,
 			Operation: e.Operation,

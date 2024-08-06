@@ -1,9 +1,10 @@
-package tts
+package http
 
 import (
 	"bytes"
 	"fmt"
 	"net/http"
+	"node.town/tts"
 	"strconv"
 	"strings"
 	"time"
@@ -22,7 +23,7 @@ func Routes(r chi.Router, queries *db.Queries) {
 
 func handleTranscriptPage(queries *db.Queries) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		transcripts, err := LoadRecentTranscripts(queries)
+		transcripts, err := tts.LoadRecentTranscripts(queries)
 		if err != nil {
 			http.Error(
 				w,
@@ -32,7 +33,7 @@ func handleTranscriptPage(queries *db.Queries) http.HandlerFunc {
 			return
 		}
 
-		builder := NewTranscriptBuilder()
+		builder := tts.NewTranscriptBuilder()
 		for _, segment := range transcripts {
 			builder.AppendWords(segment.Words, false)
 		}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"node.town/db"
+	"node.town/ui"
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -14,9 +15,9 @@ import (
 )
 
 var (
-	titleStyle        = lipgloss.NewStyle().MarginLeft(2)
-	itemStyle         = lipgloss.NewStyle().PaddingLeft(4)
-	selectedItemStyle = lipgloss.NewStyle().PaddingLeft(2).Foreground(lipgloss.Color("170"))
+	titleStyle        = lipgloss.NewStyle().MarginLeft(2).Foreground(lipgloss.Color("205")).Bold(true)
+	itemStyle         = lipgloss.NewStyle().PaddingLeft(2)
+	selectedItemStyle = lipgloss.NewStyle().PaddingLeft(1).Foreground(lipgloss.Color("170")).Border(lipgloss.ThickBorder(), false, false, false, true)
 	paginationStyle   = list.DefaultStyles().PaginationStyle.PaddingLeft(4)
 	helpStyle         = list.DefaultStyles().HelpStyle.PaddingLeft(4).PaddingBottom(1)
 	quitTextStyle     = lipgloss.NewStyle().Margin(1, 0, 2, 4)
@@ -60,9 +61,9 @@ type ParsedEvent struct {
 }
 
 var (
-	parsedEventTitleStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Bold(true)
-	parsedEventTypeStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
-	parsedEventContentStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("248"))
+	parsedEventTitleStyle   = lipgloss.NewStyle().Underline(true)
+	parsedEventTypeStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+	parsedEventContentStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("248"))
 )
 
 type parsedEventItem struct {
@@ -72,7 +73,7 @@ type parsedEventItem struct {
 func (i parsedEventItem) Title() string {
 	timestamp := parsedEventTitleStyle.Render(i.event.Timestamp.Format("2006-01-02 15:04:05"))
 	eventType := parsedEventTypeStyle.Render(i.event.Type)
-	return fmt.Sprintf("[%s] %s", timestamp, eventType)
+	return fmt.Sprintf("%s %s", timestamp, eventType)
 }
 
 func (i parsedEventItem) Description() string {
@@ -182,7 +183,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if err != nil {
 					m.jsonViewport.SetContent(fmt.Sprintf("Error unmarshalling JSON: %v", err))
 				} else {
-					renderedJSON := RenderJSON(rawData)
+					renderedJSON := ui.RenderJSON(rawData)
 					m.jsonViewport.SetContent(renderedJSON)
 				}
 			} else {

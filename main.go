@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"node.town/aiderdoc"
-	"node.town/bot"
 	nt "node.town/http"
 	"node.town/prolog"
 	"node.town/snd"
@@ -81,7 +80,7 @@ var listenCmd = &cobra.Command{
 
 		discord.LogLevel = discordgo.LogInformational
 
-		bot := &bot.Bot{
+		bot := &discord.Bot{
 			Discord: discord,
 			Queries: queries,
 		}
@@ -515,7 +514,7 @@ func main() {
 
 	handleError(err, "Failed to open database")
 
-	tts.Routes(nt.Router, queries)
+	nt.Routes(nt.Router, queries)
 	aiderdoc.Routes(nt.Router)
 
 	if err := rootCmd.Execute(); err != nil {
