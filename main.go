@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/jackc/pgx/v5/pgxpool"
 	"context"
 	"crypto/sha256"
 	"database/sql"
@@ -40,6 +41,11 @@ import (
 	"node.town/speechmatics"
 )
 
+var (
+	pgPool  *pgxpool.Pool
+	queries *db.Queries
+)
+
 func initConfig() {
 	viper.SetConfigFile(".env")
 	viper.AutomaticEnv()
@@ -66,10 +72,6 @@ var listenCmd = &cobra.Command{
 	Short: "Start listening in Discord voice channels",
 	Long:  `This command starts the Jamie bot and makes it listen in Discord voice channels.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		sqlDB, queries, err := db.OpenDatabase()
-		handleError(err, "Failed to open database")
-		defer sqlDB.Close()
-
 		discordSession, err := discordgo.New(
 			fmt.Sprintf("Bot %s", viper.GetString("DISCORD_TOKEN")),
 		)
@@ -127,22 +129,10 @@ var listenPacketsCmd = &cobra.Command{
 	Short: "Listen for new opus packets",
 	Long:  `This command listens for new opus packets and prints information about each new packet.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		sqlDB, queries, err := db.OpenDatabase()
-		if err != nil {
-			log.Fatal("Failed to open database", "error", err)
-		}
-
 		ctx := context.Background()
-		defer sqlDB.Close()
-
-		pool, err := pgxpool.New(ctx, viper.GetString("DATABASE_URL"))
-		if err != nil {
-			log.Fatal("Failed to create connection pool", "error", err)
-		}
-		defer pool.Close()
 
 		cache := snd.NewSSRCUserIDCache(queries)
-		streamer := snd.NewPostgresPacketStreamer(pool, cache, log.Default())
+		streamer := snd.NewPostgresPacketStreamer(pgPool, cache, log.Default())
 		packetChan, err := snd.StreamOpusPackets(ctx, streamer)
 		if err != nil {
 			log.Fatal("Error setting up opus packet stream", "error", err)
@@ -245,10 +235,6 @@ var packetInfoCmd = &cobra.Command{
 		startTime, endTime, err := parseTimeRange(startTimeStr, endTimeStr)
 		handleError(err, "Error parsing time range")
 
-		sqlDB, queries, err := db.OpenDatabase()
-		handleError(err, "Failed to open database")
-		defer sqlDB.Close()
-
 		packets, err := fetchOpusPackets(queries, ssrc, startTime, endTime)
 		handleError(err, "Error querying database")
 
@@ -316,10 +302,6 @@ func init() {
 		Short: "Start a Prolog REPL",
 		Long:  `This command starts a simple Prolog REPL using a bubble TUI.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			sqlDB, queries, err := db.OpenDatabase()
-			handleError(err, "Failed to open database")
-			defer sqlDB.Close()
-
 			prolog.StartPrologREPL(queries)
 		},
 	}
@@ -330,19 +312,8 @@ func init() {
 		Short: "Show incoming Discord events",
 		Long:  `This command displays a live stream of incoming Discord events using a bubble tea UI.`,
 		Run: func(cmd *cobra.Command, args []string) {
-			sqlDB, queries, err := db.OpenDatabase()
-			handleError(err, "Failed to open database")
-			defer sqlDB.Close()
-
-			pool, err := pgxpool.New(
-				context.Background(),
-				viper.GetString("DATABASE_URL"),
-			)
-			handleError(err, "Failed to create connection pool")
-			defer pool.Close()
-
 			streamer := snd.NewDiscordEventStreamer(
-				pool,
+				pgPool,
 				queries,
 				log.Default(),
 			)
@@ -397,10 +368,6 @@ func runReport(cmd *cobra.Command, args []string) {
 
 	startTime, endTime, err := parseTimeRange(startTimeStr, endTimeStr)
 	handleError(err, "Error parsing time range")
-
-	sqlDB, queries, err := db.OpenDatabase()
-	handleError(err, "Failed to open database")
-	defer sqlDB.Close()
 
 	report, err := queries.GetVoiceActivityReport(
 		context.Background(),
@@ -515,17 +482,12 @@ func main() {
 
 	ctx := context.Background()
 	var err error
-	pgPool, queries, err := func() (*pgxpool.Pool, *db.Queries, error) {
-		var _ context.Context = ctx
-		initDB, _ := rootCmd.PersistentFlags().GetBool("init-db")
-		return db.OpenDatabase(initDB)
-	}()
+	initDB, _ := rootCmd.PersistentFlags().GetBool("init-db")
+	pgPool, queries, err = db.OpenDatabase(initDB)
 	if err != nil {
 		log.Fatal("Failed to initialize connection pool", "error", err)
 	}
 	defer pgPool.Close()
-
-	handleError(err, "Failed to open database")
 
 	Routes(nt.Router, queries)
 	aiderdoc.Routes(nt.Router)
