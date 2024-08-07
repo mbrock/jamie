@@ -19,7 +19,7 @@ func generateSineWave(
 	pcm := make([]int16, samplesPerFrame*2) // *2 for stereo
 	for j := 0; j < samplesPerFrame; j++ {
 		sample := int16(
-			32767 * math.Sin(
+			26214 * math.Sin( // 26214 is approximately 0.8 * 32767
 				2*math.Pi*frequency*float64(j)/float64(sampleRate),
 			),
 		)
@@ -229,7 +229,7 @@ func issilentPacket(packet MockRTPPacket) bool {
 }
 
 func TestOggWriteSilentPacketsToFile(t *testing.T) {
-	tempFile, err := os.CreateTemp("", "test_ogg_*.ogg")
+	tempFile, err := os.CreateTemp("./tmp", "sine.ogg")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
@@ -294,7 +294,7 @@ func TestOggWriteSilentPacketsToFile(t *testing.T) {
 }
 
 func TestOggWriteSineWave(t *testing.T) {
-	tempFile, err := os.CreateTemp("", "test_sine_ogg_*.ogg")
+	tempFile, err := os.CreateTemp("./tmp", "sine_wave.ogg")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
@@ -391,11 +391,11 @@ func TestOggWriteSineWave(t *testing.T) {
 }
 
 func TestOggFrequencyAnalysis(t *testing.T) {
-	tempFile, err := os.CreateTemp("", "test_freq_analysis_ogg_*.ogg")
+	tempFile, err := os.CreateTemp("./tmp", "freq_analysis.ogg")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	//	defer os.Remove(tempFile.Name())
+	// Note: File is not removed for easy inspection
 	defer tempFile.Close()
 
 	oggWriter, err := NewOggFile(tempFile.Name())
