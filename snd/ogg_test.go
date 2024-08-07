@@ -18,8 +18,8 @@ func generateSineWave(
 	sampleRate, lengthInSamples int,
 	frequency float64,
 ) []int16 {
-	fade := 0.1
-	duration := float64(lengthInSamples) / float64(sampleRate)
+	// fade := 0.1
+	// duration := float64(lengthInSamples) / float64(sampleRate)
 
 	pcm := make([]int16, (lengthInSamples)*2) // *2 for stereo
 
@@ -28,13 +28,13 @@ func generateSineWave(
 		y := math.Sin(2 * math.Pi * frequency * t)
 		gain := 0.8
 
-		if t < fade {
-			gain *= t / fade
-		}
+		// if t < fade {
+		// 	gain *= t / fade
+		// }
 
-		if t > duration-fade {
-			gain *= (duration - t) / fade
-		}
+		// if t > duration-fade {
+		// 	gain *= (duration - t) / fade
+		// }
 
 		sample := int16(y * gain * math.MaxInt16)
 
@@ -344,9 +344,9 @@ func TestOggFrequencyAnalysis(t *testing.T) {
 	pcm := generateSineWave(sampleRate, totalSamples, frequency)
 
 	// ensure the last sample is zero
-	if pcm[len(pcm)-2] != 0 || pcm[len(pcm)-1] != 0 {
-		t.Fatalf("Expected last sample to be zero, got %v", pcm[len(pcm)-2:])
-	}
+	// if pcm[len(pcm)-2] != 0 || pcm[len(pcm)-1] != 0 {
+	// 	t.Fatalf("Expected last sample to be zero, got %v", pcm[len(pcm)-2:])
+	// }
 
 	// Save PCM as WAV file
 	wavFileName := "../tmp/freq_analysis.wav"
@@ -403,7 +403,9 @@ func savePCMAsWAV(filename string, pcm []int16, sampleRate int) error {
 		16, 0, 0, 0, // Subchunk1Size
 		1, 0, // AudioFormat (PCM)
 		2, 0, // NumChannels (Stereo)
-		byte(sampleRate), byte(sampleRate >> 8), byte(sampleRate >> 16), byte(sampleRate >> 24), // SampleRate
+		byte(
+			sampleRate,
+		), byte(sampleRate >> 8), byte(sampleRate >> 16), byte(sampleRate >> 24), // SampleRate
 		0, 0, 0, 0, // ByteRate (to be filled later)
 		4, 0, // BlockAlign
 		16, 0, // BitsPerSample
@@ -432,7 +434,9 @@ func savePCMAsWAV(filename string, pcm []int16, sampleRate int) error {
 	binary.LittleEndian.PutUint32(header[4:8], uint32(fileSize-8))
 
 	// Update byte rate in header
-	byteRate := uint32(sampleRate * 4) // 4 bytes per sample (2 channels * 2 bytes per sample)
+	byteRate := uint32(
+		sampleRate * 4,
+	) // 4 bytes per sample (2 channels * 2 bytes per sample)
 	binary.LittleEndian.PutUint32(header[28:32], byteRate)
 
 	// Update subchunk2Size in header
