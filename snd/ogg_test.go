@@ -296,7 +296,7 @@ func TestOggWriteSilentPacketsToFile(t *testing.T) {
 
 func TestOggFrequencyAnalysis(t *testing.T) {
 	fileName := "../tmp/freq_analysis.ogg"
-	oggWriter, err := NewOggFile(fileName)
+	oggWriter, err := NewOggFileWithDefaultPreSkip(fileName)
 	if err != nil {
 		t.Fatalf("Failed to create OggFile: %v", err)
 	}
