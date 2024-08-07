@@ -1,7 +1,11 @@
 package snd
 
 import (
+	"encoding/binary"
+	"fmt"
+	"io"
 	"math"
+	"os"
 	"os/exec"
 	"testing"
 	"time"
@@ -344,6 +348,12 @@ func TestOggFrequencyAnalysis(t *testing.T) {
 		t.Fatalf("Expected last sample to be zero, got %v", pcm[len(pcm)-2:])
 	}
 
+	// Save PCM as WAV file
+	wavFileName := "../tmp/freq_analysis.wav"
+	if err := savePCMAsWAV(wavFileName, pcm, sampleRate); err != nil {
+		t.Fatalf("Failed to save PCM as WAV: %v", err)
+	}
+
 	// Encode and write Opus packets
 	for i := 0; i < totalFrames; i++ {
 		frameStart := i * samplesPerFrame * 2 // *2 for stereo
@@ -375,6 +385,65 @@ func TestOggFrequencyAnalysis(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to close Ogg: %v", err)
 	}
+}
+
+func savePCMAsWAV(filename string, pcm []int16, sampleRate int) error {
+	file, err := os.Create(filename)
+	if err != nil {
+		return fmt.Errorf("failed to create file: %w", err)
+	}
+	defer file.Close()
+
+	// WAV header
+	header := []byte{
+		'R', 'I', 'F', 'F',
+		0, 0, 0, 0, // File size (to be filled later)
+		'W', 'A', 'V', 'E',
+		'f', 'm', 't', ' ',
+		16, 0, 0, 0, // Subchunk1Size
+		1, 0, // AudioFormat (PCM)
+		2, 0, // NumChannels (Stereo)
+		byte(sampleRate), byte(sampleRate >> 8), byte(sampleRate >> 16), byte(sampleRate >> 24), // SampleRate
+		0, 0, 0, 0, // ByteRate (to be filled later)
+		4, 0, // BlockAlign
+		16, 0, // BitsPerSample
+		'd', 'a', 't', 'a',
+		0, 0, 0, 0, // Subchunk2Size (to be filled later)
+	}
+
+	if _, err := file.Write(header); err != nil {
+		return fmt.Errorf("failed to write header: %w", err)
+	}
+
+	// Write PCM data
+	for _, sample := range pcm {
+		if err := binary.Write(file, binary.LittleEndian, sample); err != nil {
+			return fmt.Errorf("failed to write sample: %w", err)
+		}
+	}
+
+	// Get file size and update header
+	fileSize, err := file.Seek(0, io.SeekEnd)
+	if err != nil {
+		return fmt.Errorf("failed to get file size: %w", err)
+	}
+
+	// Update file size in header
+	binary.LittleEndian.PutUint32(header[4:8], uint32(fileSize-8))
+
+	// Update byte rate in header
+	byteRate := uint32(sampleRate * 4) // 4 bytes per sample (2 channels * 2 bytes per sample)
+	binary.LittleEndian.PutUint32(header[28:32], byteRate)
+
+	// Update subchunk2Size in header
+	binary.LittleEndian.PutUint32(header[40:44], uint32(fileSize-44))
+
+	// Write updated header
+	if _, err := file.WriteAt(header, 0); err != nil {
+		return fmt.Errorf("failed to update header: %w", err)
+	}
+
+	return nil
 }
 
 //
