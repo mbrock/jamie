@@ -47,7 +47,7 @@ type OggWriterWrapper struct {
 }
 
 func NewOggWriter(w io.Writer) (*OggWriterWrapper, error) {
-	writer, err := ogg.NewWith(w, SampleRate, Channels)
+	writer, err := ogg.NewWith(w, SampleRate, Channels, 3840) // Using 3840 as default preSkip value
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OggWriter: %w", err)
 	}
@@ -55,7 +55,7 @@ func NewOggWriter(w io.Writer) (*OggWriterWrapper, error) {
 }
 
 func NewOggFile(filename string) (*OggWriterWrapper, error) {
-	writer, err := ogg.New(filename, SampleRate, Channels)
+	writer, err := ogg.New(filename, SampleRate, Channels, 3840) // Using 3840 as default preSkip value
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OggFile: %w", err)
 	}
