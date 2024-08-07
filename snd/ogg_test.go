@@ -3,7 +3,6 @@ package snd
 import (
 	"fmt"
 	"math"
-	"os"
 	"os/exec"
 	"testing"
 	"time"
@@ -351,7 +350,7 @@ func TestOggWriteSineWave(t *testing.T) {
 	}
 
 	// Use opusinfo to verify the Ogg file
-	cmd := exec.Command("opusinfo", tempFile.Name())
+	cmd := exec.Command("opusinfo", fileName)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("opusinfo failed: %v\nOutput: %s", err, output)
@@ -462,7 +461,7 @@ func TestOggFrequencyAnalysis(t *testing.T) {
 	spectrogramData := fileName + ".spectrogram.dat"
 	cmd := exec.Command(
 		"ffmpeg",
-		"-i", tempFile.Name(),
+		"-i", fileName,
 		"-lavfi", "showspectrumpic=s=640x480",
 		"-frames:v", "1",
 		spectrogramData,
