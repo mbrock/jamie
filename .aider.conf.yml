@@ -1,0 +1,5 @@
+auto-lint: false
+llm-history-file: .aider.llm.history
+test-cmd: make test
+auto-test: true
+gitignore: false

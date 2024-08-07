@@ -178,6 +178,8 @@ func (h *TranscriptionHandler) ProcessAudioStream(
 	stream <-chan snd.OpusPacketNotification,
 	sessionID int64,
 ) error {
+	lastPacketTime := time.Now()
+
 	config := speechmatics.TranscriptionConfig{
 		Language:       "en",
 		EnablePartials: true,
@@ -203,7 +205,6 @@ func (h *TranscriptionHandler) ProcessAudioStream(
 	defer oggWriter.Close()
 
 	seqNo := 0
-	lastPacketTime := time.Now()
 	silenceTimer := time.NewTicker(100 * time.Millisecond)
 	defer silenceTimer.Stop()
 

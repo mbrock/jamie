@@ -165,7 +165,7 @@ RETURNING id;
 INSERT INTO word_alternatives (word_id, content, confidence)
 VALUES ($1, $2, $3);
 
--- name: GetTranscripts :many
+-- name: GetTranscripts :many   
 SELECT ts.id,
     ts.session_id,
     ts.is_final,
@@ -191,9 +191,11 @@ WHERE (
         sqlc.narg(created_at)::TIMESTAMPTZ IS NULL
         OR (s.created_at + tw.start_time)::TIMESTAMPTZ > sqlc.narg(created_at)::TIMESTAMPTZ
     )
-ORDER BY real_start_time,
-    tw.id,
+    AND ts.version = tw.version
+ORDER BY real_start_time ASC,
+    tw.id ASC,
     wa.confidence DESC;
+    
 -- name: GetRecentDiscordEvents :many
 SELECT id, operation, sequence, type, raw_data, bot_token, created_at
 FROM discord_events

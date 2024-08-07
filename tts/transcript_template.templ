@@ -38,7 +38,7 @@ templ TranscriptTemplate(lines []Line) {
 			for _, line := range lines {
 				<div class="line">
 					<span class="timestamp">
-						<a href={ templ.SafeURL(fmt.Sprintf("/audio/%d/%s/%s", line.SessionID, line.StartTime.Format(time.RFC3339), line.EndTime.Format(time.RFC3339))) }>
+						<a href={ templ.SafeURL(fmt.Sprintf("/tts/audio/%d/%s/%s", line.SessionID, line.StartTime.Format(time.RFC3339), line.EndTime.Format(time.RFC3339))) }>
 							{ line.StartTime.Format("15:04:05") }
 						</a>
 					</span>

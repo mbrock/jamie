@@ -43,13 +43,6 @@ import (
 var cfg *config.Config
 
 func initConfig() {
-	viper.SetConfigFile(".env")
-	viper.AutomaticEnv()
-
-	if err := viper.ReadInConfig(); err != nil {
-		log.Warn("Error reading config file", "error", err)
-	}
-
 	cfg = config.New(db.DbQueries)
 	if err := cfg.Load(context.Background()); err != nil {
 		log.Fatal("Error loading config from database", "error", err)
@@ -346,7 +339,6 @@ func init() {
 	configCmd.AddCommand(configSetCmd)
 	rootCmd.AddCommand(configCmd)
 
-
 	prologCmd := &cobra.Command{
 		Use:   "prolog",
 		Short: "Start a Prolog REPL",
@@ -529,12 +521,22 @@ func convertOggToMp3(inputFile, outputFile string) error {
 
 func main() {
 	var err error
+
+	viper.SetConfigFile(".env")
+	viper.AutomaticEnv()
+
+	if err := viper.ReadInConfig(); err != nil {
+		log.Warn("Error reading config file", "error", err)
+	}
+
 	initDB, _ := rootCmd.PersistentFlags().GetBool("init-db")
 	db.DbPool, db.DbQueries, err = db.OpenDatabase(initDB)
 	if err != nil {
 		log.Fatal("Failed to initialize connection pool", "error", err)
 	}
 	defer db.DbPool.Close()
+
+	log.Info("database", "status", "connected")
 
 	initConfig()
 

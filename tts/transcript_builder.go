@@ -3,9 +3,10 @@ package tts
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
+
+	"github.com/charmbracelet/log"
 )
 
 type SpanStyle int
@@ -57,7 +58,8 @@ func (tb *TranscriptBuilder) WriteWord(word TranscriptWord, isPartial bool) {
 	}
 
 	content := word.Content
-	if !tb.lastWasEOS && word.AttachesTo != "previous" && len(tb.currentLine) > 0 {
+	if !tb.lastWasEOS && word.AttachesTo != "previous" &&
+		len(tb.currentLine) > 0 {
 		content = " " + content
 	}
 
@@ -127,9 +129,12 @@ func (tb *TranscriptBuilder) RenderLines() string {
 
 func (tb *TranscriptBuilder) RenderHTML() (string, error) {
 	lines := tb.GetLines()
-	sort.Slice(lines, func(i, j int) bool {
-		return lines[i].StartTime.Before(lines[j].StartTime)
-	})
+	// sort.Slice(lines, func(i, j int) bool {
+	// 	return lines[i].StartTime.Before(lines[j].StartTime)
+	// })
+	for _, line := range lines {
+		log.Info("line", "start", line.StartTime, "text", line.Spans)
+	}
 	var buf strings.Builder
 	err := TranscriptTemplate(lines).Render(context.Background(), &buf)
 	if err != nil {

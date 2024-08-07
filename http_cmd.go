@@ -39,7 +39,11 @@ func handleTranscriptPage(queries *db.Queries) http.HandlerFunc {
 
 		builder := tts.NewTranscriptBuilder()
 		for _, segment := range transcripts {
-			builder.AppendWords(segment.Words, false)
+			if segment.IsFinal {
+				builder.AppendWords(segment.Words, false)
+			} else {
+				builder.AppendWords(segment.Words, true)
+			}
 		}
 
 		html, err := builder.RenderHTML()
@@ -60,24 +64,24 @@ func handleTranscriptPage(queries *db.Queries) http.HandlerFunc {
 func handleAudioRequest(queries *db.Queries) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		parts := strings.Split(r.URL.Path, "/")
-		if len(parts) != 5 {
+		if len(parts) != 6 {
 			http.Error(w, "Invalid URL format", http.StatusBadRequest)
 			return
 		}
 
-		sessionID, err := strconv.ParseInt(parts[2], 10, 64)
+		sessionID, err := strconv.ParseInt(parts[3], 10, 64)
 		if err != nil {
 			http.Error(w, "Invalid session ID", http.StatusBadRequest)
 			return
 		}
 
-		startTime, err := time.Parse(time.RFC3339, parts[3])
+		startTime, err := time.Parse(time.RFC3339, parts[4])
 		if err != nil {
 			http.Error(w, "Invalid start time", http.StatusBadRequest)
 			return
 		}
 
-		endTime, err := time.Parse(time.RFC3339, parts[4])
+		endTime, err := time.Parse(time.RFC3339, parts[5])
 		if err != nil {
 			http.Error(w, "Invalid end time", http.StatusBadRequest)
 			return

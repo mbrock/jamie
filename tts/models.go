@@ -2,6 +2,7 @@ package tts
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -72,6 +73,12 @@ func ConvertDBRowsToTranscriptSegments(
 	for _, segment := range segmentMap {
 		segments = append(segments, segment)
 	}
+
+	sort.Slice(segments, func(i, j int) bool {
+		return segments[i].Words[0].AbsoluteStartTime.Before(
+			segments[j].Words[0].AbsoluteStartTime,
+		)
+	})
 
 	return segments
 }

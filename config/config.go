@@ -2,9 +2,9 @@ package config
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/spf13/viper"
 	"node.town/db"
 )
@@ -33,7 +33,7 @@ func (c *Config) Load(ctx context.Context) error {
 func (c *Config) Get(ctx context.Context, key string) (string, error) {
 	value, err := c.queries.GetConfigValue(ctx, key)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if err == pgx.ErrNoRows {
 			return "", fmt.Errorf("config key not found: %s", key)
 		}
 		return "", fmt.Errorf("failed to get config value: %w", err)
