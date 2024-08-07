@@ -16,7 +16,8 @@ func generateSineWave(
 ) []int16 {
 	fade := 0.1
 	duration := float64(lengthInSamples) / float64(sampleRate)
-	pcm := make([]int16, lengthInSamples*2) // *2 for stereo
+
+	pcm := make([]int16, (lengthInSamples)*2) // *2 for stereo
 
 	for i := 0; i < lengthInSamples; i++ {
 		t := float64(i) / float64(sampleRate)
@@ -338,10 +339,9 @@ func TestOggFrequencyAnalysis(t *testing.T) {
 	// Generate the entire sine wave
 	pcm := generateSineWave(sampleRate, totalSamples, frequency)
 
-	// Verify that the last sample is zero (or very close to zero)
-	lastSample := pcm[len(pcm)-1]
-	if math.Abs(float64(lastSample)) > 1e-10 {
-		t.Errorf("Expected last sample to be zero, got %v", lastSample)
+	// ensure the last sample is zero
+	if pcm[len(pcm)-2] != 0 || pcm[len(pcm)-1] != 0 {
+		t.Fatalf("Expected last sample to be zero, got %v", pcm[len(pcm)-2:])
 	}
 
 	// Encode and write Opus packets
@@ -376,3 +376,5 @@ func TestOggFrequencyAnalysis(t *testing.T) {
 		t.Fatalf("Failed to close Ogg: %v", err)
 	}
 }
+
+//
