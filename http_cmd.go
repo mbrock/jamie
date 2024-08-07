@@ -128,8 +128,15 @@ func handleAudioRequest(queries *db.Queries) http.HandlerFunc {
 		}
 
 		w.Header().Set("Content-Type", "audio/ogg")
-		w.Header().
-			Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"audio_%d_%s_%s.ogg\"", sessionID, startTime.Format(time.RFC3339), endTime.Format(time.RFC3339)))
+		w.Header().Set(
+			"Content-Disposition",
+			fmt.Sprintf(
+				"attachment; filename=\"audio_%d_%s_%s.ogg\"",
+				sessionID,
+				startTime.Format(time.RFC3339),
+				endTime.Format(time.RFC3339),
+			),
+		)
 		w.Write(oggData)
 	}
 }
