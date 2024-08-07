@@ -1,6 +1,7 @@
 package snd
 
 import (
+	"fmt"
 	"math"
 	"os"
 	"os/exec"
@@ -10,6 +11,21 @@ import (
 	"github.com/pion/rtp"
 	"gopkg.in/hraban/opus.v2"
 )
+
+func generateSineWave(sampleRate, samplesPerFrame int, frequency float64) []int16 {
+	pcm := make([]int16, samplesPerFrame*2) // *2 for stereo
+	for j := 0; j < samplesPerFrame; j++ {
+		sample := int16(
+			32767 * math.Sin(
+				2*math.Pi*frequency*float64(j)/float64(sampleRate),
+			),
+		)
+		// Write the same sample to both channels
+		pcm[j*2] = sample
+		pcm[j*2+1] = sample
+	}
+	return pcm
+}
 
 type MockTimeProvider struct {
 	currentTime time.Time
@@ -318,18 +334,7 @@ func TestOggWriteSineWave(t *testing.T) {
 	samplesPerFrame := 960 // 20ms at 48kHz
 
 	for i := 0; i < int(duration.Seconds()*float64(sampleRate)); i += samplesPerFrame {
-		pcm := make([]int16, samplesPerFrame*2) // *2 for stereo
-		for j := 0; j < samplesPerFrame; j++ {
-			sample := int16(
-				32767 * math.Sin(
-					2*math.Pi*frequency*float64(i+j)/float64(sampleRate),
-				),
-			)
-			// Write the same sample to both channels
-			pcm[j*2] = sample
-			pcm[j*2+1] = sample
-		}
-
+		pcm := generateSineWave(sampleRate, samplesPerFrame, frequency)
 		data := make([]byte, 1000)
 		n, err := enc.Encode(pcm, data)
 		if err != nil {
@@ -380,4 +385,109 @@ func TestOggWriteSineWave(t *testing.T) {
 		t.Fatalf("ffprobe failed: %v\nOutput: %s", err, output)
 	}
 	t.Logf("FFprobe output:\n%s", output)
+}
+
+func TestOggFrequencyAnalysis(t *testing.T) {
+	tempFile, err := os.CreateTemp("", "test_freq_analysis_ogg_*.ogg")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	oggWriter, err := NewOggFile(tempFile.Name())
+	if err != nil {
+		t.Fatalf("Failed to create OggFile: %v", err)
+	}
+
+	mockTime := &MockTimeProvider{currentTime: time.Unix(0, 0).UTC()}
+	mockLogger := &MockLogger{}
+
+	startTime := mockTime.Now()
+	endTime := startTime.Add(time.Second)
+
+	ogg, err := NewOgg(
+		12345,     // ssrc
+		startTime, // startTime
+		endTime,   // endTime
+		oggWriter,
+		mockTime,
+		mockLogger,
+	)
+	if err != nil {
+		t.Fatalf("Failed to create Ogg: %v", err)
+	}
+
+	// Create Opus encoder (stereo)
+	enc, err := opus.NewEncoder(48000, 2, opus.AppVoIP)
+	if err != nil {
+		t.Fatalf("Failed to create Opus encoder: %v", err)
+	}
+
+	// Generate sine wave and encode to Opus packets
+	sampleRate := 48000
+	duration := time.Second
+	frequency := 440.0     // A4 note
+	samplesPerFrame := 960 // 20ms at 48kHz
+
+	for i := 0; i < int(duration.Seconds()*float64(sampleRate)); i += samplesPerFrame {
+		pcm := generateSineWave(sampleRate, samplesPerFrame, frequency)
+		data := make([]byte, 1000)
+		n, err := enc.Encode(pcm, data)
+		if err != nil {
+			t.Fatalf("Failed to encode PCM to Opus: %v", err)
+		}
+		opusPacket := data[:n]
+
+		err = ogg.WritePacket(OpusPacket{
+			ID:        i/samplesPerFrame + 1,
+			Sequence:  uint16(i/samplesPerFrame + 1),
+			Timestamp: uint32(i + samplesPerFrame),
+			CreatedAt: startTime.Add(
+				time.Duration(i) * time.Second / time.Duration(sampleRate),
+			),
+			OpusData: opusPacket,
+		})
+		if err != nil {
+			t.Fatalf("Failed to write packet: %v", err)
+		}
+	}
+
+	err = ogg.Close()
+	if err != nil {
+		t.Fatalf("Failed to close Ogg: %v", err)
+	}
+
+	// Generate frequency analysis data
+	spectrogramData := tempFile.Name() + ".spectrogram.dat"
+	cmd := exec.Command(
+		"ffmpeg",
+		"-i", tempFile.Name(),
+		"-lavfi", "showspectrumpic=s=640x480",
+		"-frames:v", "1",
+		spectrogramData,
+	)
+	err = cmd.Run()
+	if err != nil {
+		t.Fatalf("Failed to generate spectrogram data: %v", err)
+	}
+
+	// Generate spectrogram image using gnuplot
+	spectrogramImage := tempFile.Name() + ".spectrogram.png"
+	gnuplotCmd := fmt.Sprintf(`
+	set terminal png size 640,480
+	set output '%s'
+	set xlabel 'Time'
+	set ylabel 'Frequency'
+	set title 'Spectrogram'
+	plot '%s' binary filetype=auto with image
+	`, spectrogramImage, spectrogramData)
+
+	cmd = exec.Command("gnuplot", "-e", gnuplotCmd)
+	err = cmd.Run()
+	if err != nil {
+		t.Fatalf("Failed to generate spectrogram image: %v", err)
+	}
+
+	t.Logf("Spectrogram generated: %s", spectrogramImage)
 }
