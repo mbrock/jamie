@@ -1,12 +1,14 @@
 package snd
 
 import (
+	"math"
 	"os"
 	"os/exec"
 	"testing"
 	"time"
 
 	"github.com/pion/rtp"
+	"gopkg.in/hraban/opus.v2"
 )
 
 type MockTimeProvider struct {
@@ -270,4 +272,110 @@ func TestOggWriteSilentPacketsToFile(t *testing.T) {
 		t.Fatalf("opusinfo failed: %v\nOutput: %s", err, output)
 	}
 	//	t.Logf("opusinfo output: %s", output)
+}
+
+func TestOggWriteSineWave(t *testing.T) {
+	tempFile, err := os.CreateTemp("", "test_sine_ogg_*.ogg")
+	if err != nil {
+		t.Fatalf("Failed to create temp file: %v", err)
+	}
+	defer os.Remove(tempFile.Name())
+	defer tempFile.Close()
+
+	oggWriter, err := NewOggFile(tempFile.Name())
+	if err != nil {
+		t.Fatalf("Failed to create OggFile: %v", err)
+	}
+
+	mockTime := &MockTimeProvider{currentTime: time.Unix(0, 0).UTC()}
+	mockLogger := &MockLogger{}
+
+	startTime := mockTime.Now()
+	endTime := startTime.Add(time.Second)
+
+	ogg, err := NewOgg(
+		12345,     // ssrc
+		startTime, // startTime
+		endTime,   // endTime
+		oggWriter,
+		mockTime,
+		mockLogger,
+	)
+	if err != nil {
+		t.Fatalf("Failed to create Ogg: %v", err)
+	}
+
+	// Create Opus encoder
+	enc, err := opus.NewEncoder(48000, 1, opus.AppVoIP)
+	if err != nil {
+		t.Fatalf("Failed to create Opus encoder: %v", err)
+	}
+
+	// Generate sine wave and encode to Opus packets
+	sampleRate := 48000
+	duration := time.Second
+	frequency := 440.0     // A4 note
+	samplesPerFrame := 960 // 20ms at 48kHz
+
+	for i := 0; i < int(duration.Seconds()*float64(sampleRate)); i += samplesPerFrame {
+		pcm := make([]int16, samplesPerFrame)
+		for j := 0; j < samplesPerFrame; j++ {
+			sample := int16(
+				32767 * math.Sin(
+					2*math.Pi*frequency*float64(i+j)/float64(sampleRate),
+				),
+			)
+			pcm[j] = sample
+		}
+
+		data := make([]byte, 1000)
+		n, err := enc.Encode(pcm, data)
+		if err != nil {
+			t.Fatalf("Failed to encode PCM to Opus: %v", err)
+		}
+		opusPacket := data[:n]
+
+		err = ogg.WritePacket(OpusPacket{
+			ID:        i/samplesPerFrame + 1,
+			Sequence:  uint16(i/samplesPerFrame + 1),
+			Timestamp: uint32(i + samplesPerFrame),
+			CreatedAt: startTime.Add(
+				time.Duration(i) * time.Second / time.Duration(sampleRate),
+			),
+			OpusData: opusPacket,
+		})
+		if err != nil {
+			t.Fatalf("Failed to write packet: %v", err)
+		}
+	}
+
+	err = ogg.Close()
+	if err != nil {
+		t.Fatalf("Failed to close Ogg: %v", err)
+	}
+
+	// Use opusinfo to verify the Ogg file
+	cmd := exec.Command("opusinfo", tempFile.Name())
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("opusinfo failed: %v\nOutput: %s", err, output)
+	}
+	t.Logf("opusinfo output:\n%s", output)
+
+	// Use ffprobe to analyze the audio content
+	cmd = exec.Command(
+		"ffprobe",
+		"-v",
+		"error",
+		"-show_entries",
+		"stream=codec_name,channels,sample_rate",
+		"-of",
+		"default=noprint_wrappers=1",
+		tempFile.Name(),
+	)
+	output, err = cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("ffprobe failed: %v\nOutput: %s", err, output)
+	}
+	t.Logf("FFprobe output:\n%s", output)
 }
