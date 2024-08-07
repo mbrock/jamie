@@ -354,7 +354,22 @@ func TestOggFrequencyAnalysis(t *testing.T) {
 		t.Fatalf("Failed to save PCM as WAV: %v", err)
 	}
 
-	// Encode and write Opus packets
+	// Write four frames of silence (80ms)
+	silentOpusPacket := []byte{0xF8, 0xFF, 0xFE}
+	for i := 0; i < 4; i++ {
+		err = ogg.WritePacket(OpusPacket{
+			ID:        i + 1,
+			Sequence:  uint16(i + 1),
+			Timestamp: uint32((i + 1) * samplesPerFrame),
+			CreatedAt: startTime.Add(time.Duration(i) * 20 * time.Millisecond),
+			OpusData:  silentOpusPacket,
+		})
+		if err != nil {
+			t.Fatalf("Failed to write silent packet: %v", err)
+		}
+	}
+
+	// Encode and write Opus packets for the sine wave
 	for i := 0; i < totalFrames; i++ {
 		frameStart := i * samplesPerFrame * 2 // *2 for stereo
 		frameEnd := frameStart + samplesPerFrame*2
@@ -368,13 +383,11 @@ func TestOggFrequencyAnalysis(t *testing.T) {
 		opusPacket := data[:n]
 
 		err = ogg.WritePacket(OpusPacket{
-			ID:        i + 1,
-			Sequence:  uint16(i + 1),
-			Timestamp: uint32((i + 1) * samplesPerFrame),
-			CreatedAt: startTime.Add(
-				time.Duration(i) * 20 * time.Millisecond,
-			),
-			OpusData: opusPacket,
+			ID:        i + 5, // Start from 5 because we've already written 4 silent packets
+			Sequence:  uint16(i + 5),
+			Timestamp: uint32((i + 5) * samplesPerFrame),
+			CreatedAt: startTime.Add(time.Duration(i+4) * 20 * time.Millisecond),
+			OpusData:  opusPacket,
 		})
 		if err != nil {
 			t.Fatalf("Failed to write packet: %v", err)
