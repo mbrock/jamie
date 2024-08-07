@@ -338,6 +338,12 @@ func TestOggFrequencyAnalysis(t *testing.T) {
 	// Generate the entire sine wave
 	pcm := generateSineWave(sampleRate, totalSamples, frequency)
 
+	// Verify that the last sample is zero (or very close to zero)
+	lastSample := pcm[len(pcm)-1]
+	if math.Abs(float64(lastSample)) > 1e-10 {
+		t.Errorf("Expected last sample to be zero, got %v", lastSample)
+	}
+
 	// Encode and write Opus packets
 	for i := 0; i < totalFrames; i++ {
 		frameStart := i * samplesPerFrame * 2 // *2 for stereo
