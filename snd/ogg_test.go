@@ -229,7 +229,7 @@ func issilentPacket(packet MockRTPPacket) bool {
 }
 
 func TestOggWriteSilentPacketsToFile(t *testing.T) {
-	tempFile, err := os.CreateTemp("./tmp", "sine.ogg")
+	tempFile, err := os.CreateTemp("../tmp", "sine.ogg")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
@@ -294,7 +294,7 @@ func TestOggWriteSilentPacketsToFile(t *testing.T) {
 }
 
 func TestOggWriteSineWave(t *testing.T) {
-	tempFile, err := os.CreateTemp("./tmp", "sine_wave.ogg")
+	tempFile, err := os.CreateTemp("../tmp", "sine_wave.ogg")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
@@ -391,7 +391,7 @@ func TestOggWriteSineWave(t *testing.T) {
 }
 
 func TestOggFrequencyAnalysis(t *testing.T) {
-	tempFile, err := os.CreateTemp("./tmp", "freq_analysis.ogg")
+	tempFile, err := os.CreateTemp("../tmp", "freq_analysis.ogg")
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
@@ -433,10 +433,14 @@ func TestOggFrequencyAnalysis(t *testing.T) {
 	frequency := 440.0 // A4 note
 	samplesPerFrame := 960
 	totalSamples := int(duration.Seconds() * float64(sampleRate))
-	
+
 	pcm := make([]int16, totalSamples*2) // *2 for stereo
 	for i := 0; i < totalSamples; i++ {
-		sample := int16(32767 * math.Sin(2*math.Pi*frequency*float64(i)/float64(sampleRate)))
+		sample := int16(
+			32767 * math.Sin(
+				2*math.Pi*frequency*float64(i)/float64(sampleRate),
+			),
+		)
 		pcm[i*2] = sample
 		pcm[i*2+1] = sample
 	}
@@ -447,7 +451,7 @@ func TestOggFrequencyAnalysis(t *testing.T) {
 		if end > totalSamples {
 			end = totalSamples
 		}
-		
+
 		data := make([]byte, 1000)
 		n, err := enc.Encode(pcm[i*2:end*2], data)
 		if err != nil {
@@ -459,8 +463,10 @@ func TestOggFrequencyAnalysis(t *testing.T) {
 			ID:        i/samplesPerFrame + 1,
 			Sequence:  uint16(i/samplesPerFrame + 1),
 			Timestamp: uint32(i + samplesPerFrame),
-			CreatedAt: startTime.Add(time.Duration(i) * time.Second / time.Duration(sampleRate)),
-			OpusData:  opusPacket,
+			CreatedAt: startTime.Add(
+				time.Duration(i) * time.Second / time.Duration(sampleRate),
+			),
+			OpusData: opusPacket,
 		})
 		if err != nil {
 			t.Fatalf("Failed to write packet: %v", err)
