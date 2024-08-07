@@ -16,12 +16,25 @@ func generateSineWave(
 	frequency float64,
 ) []int16 {
 	pcm := make([]int16, length*2) // *2 for stereo
+	fadeSamples := int(0.1 * float64(sampleRate)) // 0.1s fade
+
 	for j := 0; j < length; j++ {
 		sample := int16(
 			26214 * math.Sin( // 26214 is approximately 0.8 * 32767
 				2*math.Pi*frequency*float64(j)/float64(sampleRate),
 			),
 		)
+
+		// Apply fade in
+		if j < fadeSamples {
+			sample = int16(float64(sample) * float64(j) / float64(fadeSamples))
+		}
+
+		// Apply fade out
+		if j >= length-fadeSamples {
+			sample = int16(float64(sample) * float64(length-j) / float64(fadeSamples))
+		}
+
 		// Write the same sample to both channels
 		pcm[j*2] = sample
 		pcm[j*2+1] = sample
