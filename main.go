@@ -280,7 +280,7 @@ var packetInfoCmd = &cobra.Command{
 		handleError(err, "Error creating output file")
 		defer file.Close()
 
-		oggWriter, err := snd.NewOggWriter(file)
+		oggWriter, err := snd.NewOggWriterWithDefaultPreSkip(file)
 		handleError(err, "Error creating Ogg writer")
 
 		ogg, err := snd.NewOgg(
