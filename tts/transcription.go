@@ -341,7 +341,7 @@ func setupOggWriter(sessionID int64) (*snd.Ogg, *bytes.Buffer, error) {
 
 	var buffer bytes.Buffer
 	multiWriter := io.MultiWriter(oggFile, &buffer)
-	oggWriterWrapper, err := snd.NewOggWriter(multiWriter)
+	oggWriterWrapper, err := snd.NewOggWriterWithDefaultPreSkip(multiWriter)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create Ogg writer: %w", err)
 	}
