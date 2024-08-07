@@ -229,16 +229,8 @@ func issilentPacket(packet MockRTPPacket) bool {
 }
 
 func TestOggWriteSilentPacketsToFile(t *testing.T) {
-	tempFile, err := os.CreateTemp("../tmp", "sine.ogg")
-	if err != nil {
-		t.Fatalf("Failed to create temp file: %v", err)
-	}
-	//  t.Logf("Created temp file: %s", tempFile.Name())
-
-	defer os.Remove(tempFile.Name())
-	defer tempFile.Close()
-
-	oggWriter, err := NewOggFile(tempFile.Name())
+	fileName := "../tmp/sine.ogg"
+	oggWriter, err := NewOggFile(fileName)
 	if err != nil {
 		t.Fatalf("Failed to create OggFile: %v", err)
 	}
@@ -285,7 +277,7 @@ func TestOggWriteSilentPacketsToFile(t *testing.T) {
 	}
 
 	// Use opusinfo to verify the Ogg file
-	cmd := exec.Command("opusinfo", tempFile.Name())
+	cmd := exec.Command("opusinfo", fileName)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("opusinfo failed: %v\nOutput: %s", err, output)
@@ -294,14 +286,8 @@ func TestOggWriteSilentPacketsToFile(t *testing.T) {
 }
 
 func TestOggWriteSineWave(t *testing.T) {
-	tempFile, err := os.CreateTemp("../tmp", "sine_wave.ogg")
-	if err != nil {
-		t.Fatalf("Failed to create temp file: %v", err)
-	}
-	defer os.Remove(tempFile.Name())
-	defer tempFile.Close()
-
-	oggWriter, err := NewOggFile(tempFile.Name())
+	fileName := "../tmp/sine_wave.ogg"
+	oggWriter, err := NewOggFile(fileName)
 	if err != nil {
 		t.Fatalf("Failed to create OggFile: %v", err)
 	}
@@ -381,7 +367,7 @@ func TestOggWriteSineWave(t *testing.T) {
 		"stream=codec_name,channels,sample_rate",
 		"-of",
 		"default=noprint_wrappers=1",
-		tempFile.Name(),
+		fileName,
 	)
 	output, err = cmd.CombinedOutput()
 	if err != nil {
@@ -391,14 +377,8 @@ func TestOggWriteSineWave(t *testing.T) {
 }
 
 func TestOggFrequencyAnalysis(t *testing.T) {
-	tempFile, err := os.CreateTemp("../tmp", "freq_analysis.ogg")
-	if err != nil {
-		t.Fatalf("Failed to create temp file: %v", err)
-	}
-	// Note: File is not removed for easy inspection
-	defer tempFile.Close()
-
-	oggWriter, err := NewOggFile(tempFile.Name())
+	fileName := "../tmp/freq_analysis.ogg"
+	oggWriter, err := NewOggFile(fileName)
 	if err != nil {
 		t.Fatalf("Failed to create OggFile: %v", err)
 	}
@@ -479,7 +459,7 @@ func TestOggFrequencyAnalysis(t *testing.T) {
 	}
 
 	// Generate frequency analysis data
-	spectrogramData := tempFile.Name() + ".spectrogram.dat"
+	spectrogramData := fileName + ".spectrogram.dat"
 	cmd := exec.Command(
 		"ffmpeg",
 		"-i", tempFile.Name(),
@@ -493,7 +473,7 @@ func TestOggFrequencyAnalysis(t *testing.T) {
 	}
 
 	// Generate spectrogram image using gnuplot
-	spectrogramImage := tempFile.Name() + ".spectrogram.png"
+	spectrogramImage := fileName + ".spectrogram.png"
 	gnuplotCmd := fmt.Sprintf(`
 	set terminal png size 640,480
 	set output '%s'
