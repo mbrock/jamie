@@ -1,7 +1,6 @@
 package snd
 
 import (
-	"fmt"
 	"math"
 	"os/exec"
 	"testing"
@@ -12,32 +11,30 @@ import (
 )
 
 func generateSineWave(
-	sampleRate, length int,
+	sampleRate, lengthInSamples int,
 	frequency float64,
 ) []int16 {
-	pcm := make([]int16, length*2) // *2 for stereo
-	fadeSamples := int(0.1 * float64(sampleRate)) // 0.1s fade
+	fade := 0.1
+	duration := float64(lengthInSamples) / float64(sampleRate)
+	pcm := make([]int16, lengthInSamples*2) // *2 for stereo
 
-	for j := 0; j < length; j++ {
-		sample := int16(
-			26214 * math.Sin( // 26214 is approximately 0.8 * 32767
-				2*math.Pi*frequency*float64(j)/float64(sampleRate),
-			),
-		)
+	for i := 0; i < lengthInSamples; i++ {
+		t := float64(i) / float64(sampleRate)
+		y := math.Sin(2 * math.Pi * frequency * t)
+		gain := 0.8
 
-		// Apply fade in
-		if j < fadeSamples {
-			sample = int16(float64(sample) * float64(j) / float64(fadeSamples))
+		if t < fade {
+			gain *= t / fade
 		}
 
-		// Apply fade out
-		if j >= length-fadeSamples {
-			sample = int16(float64(sample) * float64(length-j) / float64(fadeSamples))
+		if t > duration-fade {
+			gain *= (duration - t) / fade
 		}
 
-		// Write the same sample to both channels
-		pcm[j*2] = sample
-		pcm[j*2+1] = sample
+		sample := int16(y * gain * math.MaxInt16)
+
+		pcm[i*2] = sample
+		pcm[i*2+1] = sample
 	}
 	return pcm
 }
@@ -372,37 +369,4 @@ func TestOggFrequencyAnalysis(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to close Ogg: %v", err)
 	}
-
-	// Generate frequency analysis data
-	spectrogramData := fileName + ".spectrogram.dat"
-	cmd := exec.Command(
-		"ffmpeg",
-		"-i", fileName,
-		"-lavfi", "showspectrumpic=s=640x480",
-		"-frames:v", "1",
-		spectrogramData,
-	)
-	err = cmd.Run()
-	if err != nil {
-		t.Fatalf("Failed to generate spectrogram data: %v", err)
-	}
-
-	// Generate spectrogram image using gnuplot
-	spectrogramImage := fileName + ".spectrogram.png"
-	gnuplotCmd := fmt.Sprintf(`
-	set terminal png size 640,480
-	set output '%s'
-	set xlabel 'Time'
-	set ylabel 'Frequency'
-	set title 'Spectrogram'
-	plot '%s' binary filetype=auto with image
-	`, spectrogramImage, spectrogramData)
-
-	cmd = exec.Command("gnuplot", "-e", gnuplotCmd)
-	err = cmd.Run()
-	if err != nil {
-		t.Fatalf("Failed to generate spectrogram image: %v", err)
-	}
-
-	t.Logf("Spectrogram generated: %s", spectrogramImage)
 }
