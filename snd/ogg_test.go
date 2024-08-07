@@ -427,16 +427,29 @@ func TestOggFrequencyAnalysis(t *testing.T) {
 		t.Fatalf("Failed to create Opus encoder: %v", err)
 	}
 
-	// Generate sine wave and encode to Opus packets
+	// Generate continuous sine wave PCM
 	sampleRate := 48000
 	duration := time.Second
-	frequency := 20.0
+	frequency := 440.0 // A4 note
 	samplesPerFrame := 960
+	totalSamples := int(duration.Seconds() * float64(sampleRate))
+	
+	pcm := make([]int16, totalSamples*2) // *2 for stereo
+	for i := 0; i < totalSamples; i++ {
+		sample := int16(32767 * math.Sin(2*math.Pi*frequency*float64(i)/float64(sampleRate)))
+		pcm[i*2] = sample
+		pcm[i*2+1] = sample
+	}
 
-	for i := 0; i < int(duration.Seconds()*float64(sampleRate)); i += samplesPerFrame {
-		pcm := generateSineWave(sampleRate, samplesPerFrame, frequency)
+	// Encode PCM to Opus packets
+	for i := 0; i < totalSamples; i += samplesPerFrame {
+		end := i + samplesPerFrame
+		if end > totalSamples {
+			end = totalSamples
+		}
+		
 		data := make([]byte, 1000)
-		n, err := enc.Encode(pcm, data)
+		n, err := enc.Encode(pcm[i*2:end*2], data)
 		if err != nil {
 			t.Fatalf("Failed to encode PCM to Opus: %v", err)
 		}
@@ -446,10 +459,8 @@ func TestOggFrequencyAnalysis(t *testing.T) {
 			ID:        i/samplesPerFrame + 1,
 			Sequence:  uint16(i/samplesPerFrame + 1),
 			Timestamp: uint32(i + samplesPerFrame),
-			CreatedAt: startTime.Add(
-				time.Duration(i) * time.Second / time.Duration(sampleRate),
-			),
-			OpusData: opusPacket,
+			CreatedAt: startTime.Add(time.Duration(i) * time.Second / time.Duration(sampleRate)),
+			OpusData:  opusPacket,
 		})
 		if err != nil {
 			t.Fatalf("Failed to write packet: %v", err)
