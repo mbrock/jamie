@@ -239,7 +239,7 @@ func issilentPacket(packet MockRTPPacket) bool {
 
 func TestOggWriteSilentPacketsToFile(t *testing.T) {
 	fileName := "../tmp/sine.ogg"
-	oggWriter, err := NewOggFile(fileName)
+	oggWriter, err := NewOggFileWithDefaultPreSkip(fileName)
 	if err != nil {
 		t.Fatalf("Failed to create OggFile: %v", err)
 	}

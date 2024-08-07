@@ -15,6 +15,7 @@ const (
 	OpusFrameDuration = 20 * time.Millisecond
 	SampleRate        = 48000
 	Channels          = 2
+	DefaultPreSkip    = 3840
 )
 
 // Interfaces
@@ -46,20 +47,30 @@ type OggWriterWrapper struct {
 	writer *ogg.OggWriter
 }
 
-func NewOggWriter(w io.Writer) (*OggWriterWrapper, error) {
-	writer, err := ogg.NewWith(w, SampleRate, Channels, 3840) // Using 3840 as default preSkip value
+func NewOggWriter(w io.Writer, preSkip uint16) (*OggWriterWrapper, error) {
+	writer, err := ogg.NewWith(w, SampleRate, Channels, preSkip)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OggWriter: %w", err)
 	}
 	return &OggWriterWrapper{writer: writer}, nil
 }
 
-func NewOggFile(filename string) (*OggWriterWrapper, error) {
-	writer, err := ogg.New(filename, SampleRate, Channels, 3840) // Using 3840 as default preSkip value
+func NewOggFile(filename string, preSkip uint16) (*OggWriterWrapper, error) {
+	writer, err := ogg.New(filename, SampleRate, Channels, preSkip)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OggFile: %w", err)
 	}
 	return &OggWriterWrapper{writer: writer}, nil
+}
+
+// NewOggWriterWithDefaultPreSkip creates a new OggWriter with the default preSkip value
+func NewOggWriterWithDefaultPreSkip(w io.Writer) (*OggWriterWrapper, error) {
+	return NewOggWriter(w, DefaultPreSkip)
+}
+
+// NewOggFileWithDefaultPreSkip creates a new OggFile with the default preSkip value
+func NewOggFileWithDefaultPreSkip(filename string) (*OggWriterWrapper, error) {
+	return NewOggFile(filename, DefaultPreSkip)
 }
 
 func (o *OggWriterWrapper) WriteRTP(packet *rtp.Packet) error {
