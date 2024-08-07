@@ -20,7 +20,6 @@ const (
 	pageHeaderTypeContinuationOfStream = 0x00
 	pageHeaderTypeBeginningOfStream    = 0x02
 	pageHeaderTypeEndOfStream          = 0x04
-	defaultPreSkip                     = 3840 // 3840 recommended in the RFC
 	idPageSignature                    = "OpusHead"
 	commentPageSignature               = "OpusTags"
 	pageHeaderSignature                = "OggS"
@@ -43,6 +42,7 @@ type OggWriter struct {
 	previousGranulePosition uint64
 	previousTimestamp       uint32
 	lastPayloadSize         int
+	preSkip                 uint16
 }
 
 // New builds a new OGG Opus writer
@@ -50,12 +50,13 @@ func New(
 	fileName string,
 	sampleRate uint32,
 	channelCount uint16,
+	preSkip uint16,
 ) (*OggWriter, error) {
 	f, err := os.Create(fileName) //nolint:gosec
 	if err != nil {
 		return nil, err
 	}
-	writer, err := NewWith(f, sampleRate, channelCount)
+	writer, err := NewWith(f, sampleRate, channelCount, preSkip)
 	if err != nil {
 		return nil, f.Close()
 	}
@@ -68,6 +69,7 @@ func NewWith(
 	out io.Writer,
 	sampleRate uint32,
 	channelCount uint16,
+	preSkip uint16,
 ) (*OggWriter, error) {
 	if out == nil {
 		return nil, errFileNotOpened
@@ -79,6 +81,7 @@ func NewWith(
 		channelCount:  channelCount,
 		serial:        randutil.NewMathRandomGenerator().Uint32(),
 		checksumTable: generateChecksumTable(),
+		preSkip:       preSkip,
 
 		// Timestamp and Granule MUST start from 1
 		// Only headers can have 0 values
@@ -129,7 +132,7 @@ func (i *OggWriter) writeHeaders() error {
 	) // Channel count
 	binary.LittleEndian.PutUint16(
 		oggIDHeader[10:],
-		defaultPreSkip,
+		i.preSkip,
 	) // pre-skip
 	binary.LittleEndian.PutUint32(
 		oggIDHeader[12:],
