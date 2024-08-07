@@ -69,7 +69,9 @@ func NewOggWriterWithDefaultPreSkip(w io.Writer) (*OggWriterWrapper, error) {
 }
 
 // NewOggFileWithDefaultPreSkip creates a new OggFile with the default preSkip value
-func NewOggFileWithDefaultPreSkip(filename string) (*OggWriterWrapper, error) {
+func NewOggFileWithDefaultPreSkip(
+	filename string,
+) (*OggWriterWrapper, error) {
 	return NewOggFile(filename, DefaultPreSkip)
 }
 
@@ -150,10 +152,6 @@ func (o *Ogg) isFirstPacket() bool {
 }
 
 func (o *Ogg) updateTimestamps(packetTime time.Time) {
-	if o.isFirstPacket() {
-		o.firstTimestamp = packetTime
-		o.expectedTimestamp = o.startTime
-	}
 	o.lastTimestamp = packetTime
 	o.expectedTimestamp = o.lastTimestamp.Add(OpusFrameDuration)
 }
@@ -283,7 +281,7 @@ func (o *Ogg) insertSilenceIfNeeded(packetTimestamp time.Time) time.Duration {
 
 // writeSilentFrames writes a number of silent frames to the Ogg container
 func (o *Ogg) writeSilentFrames(frames int) error {
-	silentOpusPacket := []byte{0xFC, 0xFD, 0xFE}
+	silentOpusPacket := []byte{0xF8, 0xFF, 0xFE}
 
 	for i := 0; i < frames; i++ {
 		if err := o.writeRTPPacket(silentOpusPacket); err != nil {

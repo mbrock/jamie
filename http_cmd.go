@@ -143,7 +143,7 @@ func handleAudioRequest(queries *db.Queries) http.HandlerFunc {
 
 func generateOggFile(packets []db.OpusPacket) ([]byte, error) {
 	var buf bytes.Buffer
-	oggWriter, err := snd.NewOggWriter(&buf)
+	oggWriter, err := snd.NewOggWriterWithDefaultPreSkip(&buf)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create OGG writer: %w", err)
 	}

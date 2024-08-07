@@ -14,7 +14,7 @@ build: sqlc templ
 	$(GOBUILD) -o $(BINARY_NAME) -v
 
 test: sqlc templ
-	$(GOTEST) -v -count=1 ./...
+	$(GOTEST) -count=1 ./...
 
 serve:
 	templ generate --watch --cmd="go run main.go serve -p 4445"

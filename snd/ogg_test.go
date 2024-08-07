@@ -237,8 +237,8 @@ func TestOggSilenceAndGapInsertion(t *testing.T) {
 }
 
 func issilentPacket(packet MockRTPPacket) bool {
-	return len(packet.Payload) == 3 && packet.Payload[0] == 0xFC &&
-		packet.Payload[1] == 0xFD &&
+	return len(packet.Payload) == 3 && packet.Payload[0] == 0xF8 &&
+		packet.Payload[1] == 0xFF &&
 		packet.Payload[2] == 0xFE
 }
 
@@ -301,21 +301,21 @@ func TestOggWriteSilentPacketsToFile(t *testing.T) {
 
 func TestOggFrequencyAnalysis(t *testing.T) {
 	fileName := "../tmp/freq_analysis.ogg"
-	oggWriter, err := NewOggFile(fileName, 0) // Use preskip 0
+	oggWriter, err := NewOggFile(fileName, 4*960)
 	if err != nil {
 		t.Fatalf("Failed to create OggFile: %v", err)
 	}
 
-	mockTime := &MockTimeProvider{currentTime: time.Unix(0, 0).UTC()}
+	mockTime := &MockTimeProvider{currentTime: time.Unix(10, 0).UTC()}
 	mockLogger := &MockLogger{}
 
 	startTime := mockTime.Now()
 	endTime := startTime.Add(time.Second)
 
 	ogg, err := NewOgg(
-		12345,     // ssrc
-		startTime, // startTime
-		endTime,   // endTime
+		12345,                         // ssrc
+		startTime.Add(-1*time.Second), // startTime
+		endTime,                       // endTime
 		oggWriter,
 		mockTime,
 		mockLogger,
@@ -361,8 +361,10 @@ func TestOggFrequencyAnalysis(t *testing.T) {
 			ID:        i + 1,
 			Sequence:  uint16(i + 1),
 			Timestamp: uint32((i + 1) * samplesPerFrame),
-			CreatedAt: startTime.Add(time.Duration(i) * 20 * time.Millisecond),
-			OpusData:  silentOpusPacket,
+			CreatedAt: startTime.Add(
+				time.Duration(i) * 20 * time.Millisecond,
+			),
+			OpusData: silentOpusPacket,
 		})
 		if err != nil {
 			t.Fatalf("Failed to write silent packet: %v", err)
@@ -386,8 +388,10 @@ func TestOggFrequencyAnalysis(t *testing.T) {
 			ID:        i + 5, // Start from 5 because we've already written 4 silent packets
 			Sequence:  uint16(i + 5),
 			Timestamp: uint32((i + 5) * samplesPerFrame),
-			CreatedAt: startTime.Add(time.Duration(i+4) * 20 * time.Millisecond),
-			OpusData:  opusPacket,
+			CreatedAt: startTime.Add(
+				time.Duration(i+4) * 20 * time.Millisecond,
+			),
+			OpusData: opusPacket,
 		})
 		if err != nil {
 			t.Fatalf("Failed to write packet: %v", err)
