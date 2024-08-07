@@ -305,8 +305,8 @@ func TestOggWriteSineWave(t *testing.T) {
 		t.Fatalf("Failed to create Ogg: %v", err)
 	}
 
-	// Create Opus encoder
-	enc, err := opus.NewEncoder(48000, 1, opus.AppVoIP)
+	// Create Opus encoder (stereo)
+	enc, err := opus.NewEncoder(48000, 2, opus.AppVoIP)
 	if err != nil {
 		t.Fatalf("Failed to create Opus encoder: %v", err)
 	}
@@ -318,14 +318,16 @@ func TestOggWriteSineWave(t *testing.T) {
 	samplesPerFrame := 960 // 20ms at 48kHz
 
 	for i := 0; i < int(duration.Seconds()*float64(sampleRate)); i += samplesPerFrame {
-		pcm := make([]int16, samplesPerFrame)
+		pcm := make([]int16, samplesPerFrame*2) // *2 for stereo
 		for j := 0; j < samplesPerFrame; j++ {
 			sample := int16(
 				32767 * math.Sin(
 					2*math.Pi*frequency*float64(i+j)/float64(sampleRate),
 				),
 			)
-			pcm[j] = sample
+			// Write the same sample to both channels
+			pcm[j*2] = sample
+			pcm[j*2+1] = sample
 		}
 
 		data := make([]byte, 1000)
