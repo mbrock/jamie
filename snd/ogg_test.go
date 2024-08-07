@@ -12,7 +12,10 @@ import (
 	"gopkg.in/hraban/opus.v2"
 )
 
-func generateSineWave(sampleRate, samplesPerFrame int, frequency float64) []int16 {
+func generateSineWave(
+	sampleRate, samplesPerFrame int,
+	frequency float64,
+) []int16 {
 	pcm := make([]int16, samplesPerFrame*2) // *2 for stereo
 	for j := 0; j < samplesPerFrame; j++ {
 		sample := int16(
@@ -392,7 +395,7 @@ func TestOggFrequencyAnalysis(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp file: %v", err)
 	}
-	defer os.Remove(tempFile.Name())
+	//	defer os.Remove(tempFile.Name())
 	defer tempFile.Close()
 
 	oggWriter, err := NewOggFile(tempFile.Name())
@@ -427,8 +430,8 @@ func TestOggFrequencyAnalysis(t *testing.T) {
 	// Generate sine wave and encode to Opus packets
 	sampleRate := 48000
 	duration := time.Second
-	frequency := 440.0     // A4 note
-	samplesPerFrame := 960 // 20ms at 48kHz
+	frequency := 20.0
+	samplesPerFrame := 960
 
 	for i := 0; i < int(duration.Seconds()*float64(sampleRate)); i += samplesPerFrame {
 		pcm := generateSineWave(sampleRate, samplesPerFrame, frequency)
